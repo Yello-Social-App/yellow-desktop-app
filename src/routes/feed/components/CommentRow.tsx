@@ -149,7 +149,7 @@ export const CommentRow = memo(function CommentRow({
               <RichText text={comment.content} />
             </p>
             {firstLink !== undefined && (
-              <div className="mt-2 max-w-md">
+              <div className="mt-2 max-w-dialog-md">
                 <LinkPreviewCard url={firstLink} compact />
               </div>
             )}

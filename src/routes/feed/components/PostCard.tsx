@@ -83,6 +83,10 @@ export const PostCard = memo(function PostCard({
   const author = displayName(post.author);
   // Media wins: a post with photos gets no link card, the way a timeline does.
   const [firstLink] = post.images.length === 0 ? extractLinks(post.content) : [];
+  const original = post.originalPost ?? null;
+  // The quoted original gets its own card by the same rule.
+  const [originalLink] =
+    original !== null && original.images.length === 0 ? extractLinks(original.content) : [];
   const isOwn = canEdit(post, viewerId);
   const isBusy = actions.pendingPostId === post.id;
   const visibility = visibilityOf(post);
@@ -257,9 +261,26 @@ export const PostCard = memo(function PostCard({
               </span>
             )}
             {post.originalPost.images.length > 0 && (
-              <span className="text-on-surface-variant text-[12px]">
-                {post.originalPost.images.length} photo
-                {post.originalPost.images.length === 1 ? '' : 's'}
+              <span
+                className={cn(
+                  'border-outline-variant mt-1 grid gap-0.5 overflow-hidden rounded-xl border',
+                  post.originalPost.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2',
+                )}
+              >
+                {post.originalPost.images.slice(0, 4).map((image) => (
+                  <img
+                    key={image.id ?? image.url}
+                    src={image.url}
+                    alt=""
+                    loading="lazy"
+                    className="bg-surface-container h-40 w-full object-cover"
+                  />
+                ))}
+              </span>
+            )}
+            {originalLink !== undefined && (
+              <span className="mt-1 block">
+                <LinkPreviewCard url={originalLink} compact />
               </span>
             )}
           </blockquote>
