@@ -15,10 +15,17 @@ Settings; the tokens live in `src/styles/globals.css`.
 
 ## Installing it
 
-Every tagged release carries installers for all three platforms — Linux
-(`.AppImage`, `.deb`), macOS (`.dmg`, `.zip`; Apple Silicon and Intel) and
-Windows (`.exe`) — on the
-[releases page](https://github.com/hushstack/yellow-desktop-app/releases).
+Every tagged release carries installers for all three platforms on the
+[releases page](https://github.com/Yello-Social-App/yellow-desktop-app/releases):
+
+| Platform                                | File                          |
+| --------------------------------------- | ----------------------------- |
+| Ubuntu, Debian, Mint                    | `.deb`                        |
+| Fedora, openSUSE, RHEL                  | `.rpm`                        |
+| Arch, Manjaro, EndeavourOS              | `.pacman`                     |
+| Any other Linux                         | `.AppImage`                   |
+| macOS (Apple Silicon and Intel)         | `.dmg`, `.zip`                |
+| Windows                                 | `.exe` (NSIS installer)       |
 
 They are unsigned, so macOS Gatekeeper and Windows SmartScreen will both warn on
 first launch until signing certificates are added to the release workflow.

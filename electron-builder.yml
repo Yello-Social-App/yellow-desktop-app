@@ -32,10 +32,17 @@ win:
     - nsis
   icon: build/icons/icon.png
 
+# One installer per packaging family, so every mainstream distribution has a
+# native package: deb (Debian, Ubuntu, Mint), rpm (Fedora, openSUSE, RHEL),
+# pacman (Arch, Manjaro, EndeavourOS), and AppImage for everything else.
+# rpm needs `rpmbuild` and pacman needs `bsdtar` on the build host — the
+# release workflow installs both.
 linux:
   target:
     - AppImage
     - deb
+    - rpm
+    - pacman
   category: Network
   icon: build/icons/icon.png
   # Ties a running window to the .desktop entry, so the launcher shows the app
@@ -58,6 +65,6 @@ nsis:
 # finished — see .github/workflows/release.yml.
 publish:
   provider: github
-  owner: hushstack
+  owner: Yello-Social-App
   repo: yellow-desktop-app
   releaseType: draft

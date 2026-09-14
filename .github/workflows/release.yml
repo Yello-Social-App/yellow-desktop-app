@@ -34,7 +34,7 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux
-            # AppImage and deb, per electron-builder.yml.
+            # AppImage, deb, rpm and pacman, per electron-builder.yml.
             args: --linux
           - os: macos-latest
             platform: macos
@@ -56,6 +56,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # rpm and pacman are produced with the host's own packaging tools:
+      # rpmbuild for Fedora-family packages, bsdtar (libarchive) for Arch's.
+      - name: Install Linux packaging tools
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm libarchive-tools
 
       - name: Lint
         run: npm run lint
