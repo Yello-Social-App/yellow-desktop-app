@@ -9,9 +9,6 @@ export const SESSION_EXPIRY_CHECK_MS = 30 * 1000;
 /** The API sends at most one code per account per minute; the button waits as long. */
 export const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 
-/** Latency the mock API simulates, so loading states are exercised for real. */
-export const MOCK_LATENCY_MS = 600;
-
 /** Search inputs wait this long after the last keystroke before filtering. */
 export const SEARCH_DEBOUNCE_MS = 250;
 
@@ -23,3 +20,10 @@ export const PROFILE_POSTS_PAGE_SIZE = 10;
 
 /** Above this many rows the list should be handed to a windowing renderer. */
 export const VIRTUALIZATION_THRESHOLD = 100;
+
+/** Page sizes for the chat service (keyset-paged; the server clamps higher). */
+export const CONVERSATIONS_PAGE_SIZE = 30;
+export const MESSAGES_PAGE_SIZE = 40;
+
+/** How long after the last keystroke a typing indicator is withdrawn. */
+export const TYPING_IDLE_MS = 3000;

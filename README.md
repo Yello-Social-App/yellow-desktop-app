@@ -1,15 +1,17 @@
 # Yello — desktop client
 
-An Electron + React desktop client for the Yello social API: a home feed you can
-post to, comments and replies, reactions, reposts, friends, notifications,
-profiles you can browse and edit, and account creation with email verification.
+An Electron + React desktop client for the Yello social API and its chat
+service: a home feed you can post to, comments and replies, reactions, reposts,
+friends and blocks, profiles, real-time direct and group messages, and account
+creation with email verification.
 
-Every endpoint the API exposes is reachable from the interface — see
+Every endpoint the two services expose is reachable from the interface — see
 [API coverage](#api-coverage).
 
-The interface is built from the design system attached to Stitch project
-`5967079738026567667` ("Luminous Minimalist"), and the tokens in
-`src/styles/globals.css` are that system's values verbatim.
+The interface is a dark-first timeline layout — a slim frosted top bar, a
+navigation rail, a centred column with hairline dividers, and a context rail —
+with Yello yellow as its one accent. A light palette is available from
+Settings; the tokens live in `src/styles/globals.css`.
 
 ## Installing it
 
@@ -43,11 +45,10 @@ Other scripts:
 The base URL is a **main-process** setting, not a `VITE_*` one. The known
 servers are named in `API_TARGETS` in `electron/config.ts`:
 
-| Target  | Command                                       |
-| ------- | --------------------------------------------- |
-| `local` | `npm run dev:local`                           |
-| `dev`   | `npm run dev` (default)                       |
-| `prod`  | `npm run dev:prod`, or `npm run package:prod` |
+| Target  | Server                              | Command                            |
+| ------- | ----------------------------------- | ---------------------------------- |
+| `prod`  | `https://api.yello.cachewraith.com` | `npm run dev` (default), `package` |
+| `local` | `http://localhost:8080`             | `npm run dev:local`                |
 
 Any other server can be given as a full URL, which wins over the target name:
 
@@ -55,8 +56,12 @@ Any other server can be given as a full URL, which wins over the target name:
 YELLO_API_BASE_URL=https://staging.example.com npm run dev
 ```
 
+The chat service (yello-chat) sits behind the same origin under `/ws` in every
+deployment. Only a bare local run of the two services on different ports needs
+`YELLO_CHAT_BASE_URL=http://localhost:3000`.
+
 HTTPS is required unless the host is loopback. A packaged build bakes in the
-target that was set when it was built (`YELLO_API_TARGET`), defaulting to `dev`.
+target that was set when it was built (`YELLO_API_TARGET`), defaulting to `prod`.
 
 ### Signing in
 
@@ -69,8 +74,10 @@ app, then enter the six-digit code emailed to you. The account stays
 
 Two reasons, and the second is the important one:
 
-1. The API's CORS allowlist is `http://localhost:3000`. A renderer request from
-   `app://bundle` is refused before it leaves the machine.
+1. The API's CORS allowlist names browser origins only. A renderer request from
+   `app://bundle` is refused before it leaves the machine — and the chat
+   socket's origin allowlist would refuse it the same way, while a native
+   client that sends no `Origin` is admitted.
 2. Keeping the client in main means the renderer is never handed an access or
    refresh token. There is no IPC channel that returns one, so an XSS payload in
    the renderer has no credential to exfiltrate.
@@ -81,16 +88,36 @@ The renderer asks for _data_; the main process decides what a request needs.
 
 ```
 electron/
-  api/          HTTP client, token store, endpoints, response envelope
+  api/          HTTP client (both services), token store, endpoints, envelope
+  chat/         the live WebSocket: auth, re-auth, reconnect, request/reply
   ipc/          channel allowlist, the guarded registrar, one handler per area
   security/     CSP, permission + navigation policy, trusted origins
 src/
-  features/     auth, feed, comments, friends, notifications, profile
-                (all API-backed); messages (local sample data)
-  routes/       auth, feed, friends, messages, notifications, profile, settings
+  features/     auth, feed, comments, friends, messages, profile, users
+  routes/       auth, feed, friends, messages, profile, settings
   components/   ui/ (presentational only), layout/
 shared/         ipc-types.ts — the main <-> renderer contract; logger.ts
 ```
+
+### Real-time chat
+
+The chat service (`/ws/*` over HTTP, `wss://…/ws` for live frames) is a
+separate service with its own conventions — bare JSON, `{ code, message }`
+errors, keyset paging — so `apiRequest` takes a `service` option that decides
+the origin and the unwrapping, and everything else (auth, refresh, retry) is
+shared.
+
+The socket is owned by the main process (`electron/chat/socket.ts`): it
+authenticates with the access token by sending an `auth` frame first, re-sends
+one shortly before the token expires so a thread never blinks, reconnects with
+backoff, and correlates `message.send` with its `message.sent` by `ref`. Frames
+are parsed against `chatEventSchema` before being pushed to the renderer over
+the one main → renderer channel (`chat:event`); the renderer parses them again.
+
+Sends go over the socket when it is up and fall back to `POST …/messages` when
+it is not; `clientId` is the idempotency key on both, so a retry after a
+timeout yields the original message, not a duplicate. Chat rows carry user ids
+only, so `src/features/users` resolves and caches them via `GET /users/{id}`.
 
 ### Where post actions live
 
@@ -124,31 +151,31 @@ resolution inside the bundle directory.
 
 ## The profile tab
 
-`/profile` is the signed-in user's own page, in the shape X and Substack use: a
-banner strip, the avatar overlapping it, display name, `@handle`, bio, joined
-date and post count, then their timeline below.
+`/profile` is the signed-in user's own page: a banner strip, the avatar
+overlapping it, display name, `@handle`, bio, joined date, post and friend
+counts, then their timeline below. The API has no profile edit or avatar
+upload, so nothing on it is editable.
 
-Everything on it is live:
+Someone else's profile lives at `/users/:userId` and adds `GET /v1/users/{id}` —
+which carries the viewer's `friendStatus` — plus the relationship controls
+(add, cancel, accept/decline, unfriend, block/unblock) and a Message button.
+Author names and avatars link to it from posts, comments and the friends list.
 
-| Action                           | Endpoint                       |
-| -------------------------------- | ------------------------------ |
-| Edit display name, username, bio | `PUT /api/v1/users/me`         |
-| Change profile photo             | `PUT /api/v1/users/me/avatar`  |
-| Own timeline, paged              | `GET /api/v1/users/{id}/posts` |
+## Links in posts and comments
 
-Someone else's profile lives at `/users/:userId` and adds `GET /api/v1/users/{id}`
-plus the friendship controls. Author names and avatars link to it from posts,
-comments, notifications and the friends list.
+Web links (`http(s)://…`) in posts, comments and chat are clickable. The
+renderer never navigates: an anchor opens with `target="_blank"`, and the
+window-open handler in `electron/security/permissions.ts` turns that into
+`shell.openExternal` for web URLs and refuses everything else.
 
-The edit form sends only the fields that actually changed, since every field on
-that endpoint is optional.
-
-**Avatar upload is driven from the main process.** The renderer cannot name a
-file: it asks for an upload, and main opens the OS picker, reads the bytes and
-checks type and size (JPEG/PNG/GIF, 5 MB cap) before anything is sent. A
-renderer-supplied path never reaches the filesystem. WebP is rejected on
-purpose — the server decodes uploads to validate them and the JVM has no WebP
-decoder, so it would fail server-side anyway.
+A post's first link (when it carries no photos) and a comment's first link get
+a preview card. `electron/links/unfurl.ts` reads the page's Open Graph tags —
+or YouTube's oEmbed — from the main process, treating the fetch as the SSRF
+risk it is: web URLs only, hosts must resolve to public addresses (checked
+again on every redirect), bodies are capped and time-limited, and the image is
+decoded and re-encoded by `nativeImage` into a small JPEG `data:` URL, so the
+strict CSP `img-src` stays closed and the renderer never loads from an
+arbitrary host. Answers are cached for an hour.
 
 ## Attaching photos to a post
 
@@ -171,42 +198,32 @@ ten and **refuses** past it rather than evicting: everything in it is something
 the composer is showing, so dropping the oldest would invalidate a photo the
 user can still see attached and fail the post at publish time.
 
-A successful edit writes the fresh profile back into the auth store, so the
-sidebar, top bar and composer all repaint from one source.
-
 ## API coverage
 
-All 36 endpoints are wired through the main process and reachable from a screen.
+Every endpoint of the Yello API (`/v1`, 34) and the chat service (`/ws`, 6) is
+wired through the main process and reachable from a screen.
 
-| Area          | Endpoints                                                                                 | Where                                                                   |
-| ------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Auth          | register, verify-otp, resend-otp, login, refresh, logout, forgot-password, reset-password | `/login`, `/register`, `/verify`, `/forgot-password`, `/reset-password` |
-| Users         | `GET`/`PUT /users/me`, `PUT /users/me/avatar`, `GET /users/{id}`, `GET /users/{id}/posts` | `/profile`, `/users/:userId`                                            |
-| Posts         | create (text, visibility, images), get, update (incl. images), delete, repost, share-link | composer, post card, `/posts/:postId`                                   |
-| Feed          | `GET /feed` (cursor-paged)                                                                | `/feed`                                                                 |
-| Comments      | create (incl. replies via `parentCommentId`), list (replies nested), delete               | the thread under a post card                                            |
-| Reactions     | toggle, summary, who-reacted — for both `POST` and `COMMENT` targets                      | like buttons; the reactions dialog                                      |
-| Friends       | send request, accept, decline, list, pending requests, unfriend                           | `/friends`, and the button on a profile                                 |
-| Notifications | list (incl. `unreadOnly`), unread-count, mark read, mark all read                         | `/notifications`, sidebar badge                                         |
+| Area      | Endpoints                                                                                     | Where                                                                   |
+| --------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Auth      | register, verify-otp, resend-otp, login, refresh, logout, forgot-password, reset-password     | `/login`, `/register`, `/verify`, `/forgot-password`, `/reset-password` |
+| Users     | `GET /users/me`, `GET /users/{id}`, `GET /users/{id}/posts`, block / unblock                 | `/profile`, `/users/:userId`                                            |
+| Posts     | create (text, visibility, images), get, update (incl. images), delete, repost                 | composer, post card, `/posts/:postId`                                   |
+| Feed      | `GET /feed` (cursor-paged)                                                                    | `/feed`                                                                 |
+| Comments  | create (incl. replies via `parentCommentId`), list (replies nested), update, delete           | the thread under a post card                                            |
+| Reactions | toggle, summary, who-reacted — for both `POST` and `COMMENT` targets                          | like buttons; the reactions dialog                                      |
+| Friends   | send, cancel, accept, decline, unfriend; friends, requests (received / sent), blocked          | `/friends`, the right rail, and the buttons on a profile                |
+| Chat      | conversations (list, create, get), messages (history, send), read marker; live socket frames  | `/messages`, `/messages/:conversationId`, the right rail                |
 
-Two things the API cannot answer, and how the client copes:
-
-- **Outgoing friend requests** are not listable, and there is no
-  "relationship with user X" endpoint. A request sent in this session is
-  remembered locally, and a `FRIENDSHIP_EXISTS` rejection is read as the same
-  state — enough to keep the button honest, with the server still deciding.
-- **A comment id cannot be resolved back to its post**, so a `COMMENT`
-  notification stays on the notifications list rather than deep-linking. A
-  `REPOST` notification does link, because its target is a post.
+A post's share link is the `shareUrl` on the post itself; copying it goes
+through the main process, which re-reads the post so the clipboard only ever
+receives a URL the server produced.
 
 ## Known gaps
 
-- **Messages are sample data.** The API has no messaging endpoints; the screen
-  is labelled accordingly.
+- **No notifications.** The API has no notification endpoints; the sidebar
+  counts requests waiting and unread messages instead.
 - **Search is client-side**, over what is already loaded. The API has no search
   endpoint, so there is no way to find a user you have not seen in a post.
-- **WebP avatars and post images are rejected** on purpose — the server decodes
-  uploads to validate them and the JVM has no WebP decoder.
 - **Virtualization**: the timeline is windowing-ready — uniform keyed rows, a
   fixed `FEED_ROW_HEIGHT_PX`, and `content-visibility` for off-screen rows — but
   does not use `react-window`. That library sets inline `style` attributes on

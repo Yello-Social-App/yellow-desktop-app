@@ -1,60 +1,61 @@
 /**
- * Chat shapes: conversations, messages and the composer contract.
+ * Chat shapes: what the renderer adds on top of the wire records.
  */
+import {
+  CHAT_MESSAGE_MAX_LENGTH,
+  type Author,
+  type ChatMessage,
+  type ConversationSummary,
+} from '@shared/ipc-types';
 import { z } from 'zod';
 
-export const MESSAGE_MAX_LENGTH = 2000;
+import { displayName } from '@/lib/user-display';
 
-/** The signed-in user's own messages are seeded under this sentinel author id. */
-export const SELF_AUTHOR_ID = 'me';
+export const MESSAGE_MAX_LENGTH = CHAT_MESSAGE_MAX_LENGTH;
 
-/**
- * Chat is the one mocked surface: the Yello API has no messaging endpoints yet,
- * so conversations are seeded locally and carry their own participant rather
- * than resolving one against the real user directory.
- */
-export const CHAT_IS_MOCKED = true;
+/** Where an outgoing line stands: still in flight, confirmed, or refused. */
+export type DeliveryState = 'sending' | 'sent' | 'failed';
 
-export const messageStatusSchema = z.enum(['sending', 'sent', 'delivered', 'read']);
-
-export const messageSchema = z.object({
-  id: z.string().min(1).max(64),
-  conversationId: z.string().min(1).max(64),
-  authorId: z.string().min(1).max(64),
-  body: z.string().min(1).max(MESSAGE_MAX_LENGTH),
-  sentAt: z.iso.datetime(),
-  status: messageStatusSchema,
-});
-
-export const conversationSchema = z.object({
-  id: z.string().min(1).max(64),
-  participantName: z.string().min(1).max(120),
-  participantUsername: z.string().min(1).max(64),
-  lastMessageAt: z.iso.datetime(),
-  unreadCount: z.number().int().min(0).max(999),
-  isOnline: z.boolean(),
-});
-
-export const messageListSchema = z.array(messageSchema);
-export const conversationListSchema = z.array(conversationSchema);
+/** A message as the thread holds it: the wire record plus its delivery state. */
+export interface ThreadMessage extends ChatMessage {
+  delivery: DeliveryState;
+}
 
 export const composeMessageSchema = z.object({
   body: z
     .string()
     .trim()
     .min(1, 'Type a message before sending.')
-    .max(MESSAGE_MAX_LENGTH, `Keep it under ${MESSAGE_MAX_LENGTH} characters.`),
+    .max(MESSAGE_MAX_LENGTH, `Keep it under ${String(MESSAGE_MAX_LENGTH)} characters.`),
 });
 
-export type Message = z.infer<typeof messageSchema>;
-export type MessageStatus = z.infer<typeof messageStatusSchema>;
-export type Conversation = z.infer<typeof conversationSchema>;
 export type ComposeMessageInput = z.infer<typeof composeMessageSchema>;
 
-/** A conversation with the last line of its thread, ready to render. */
-export interface ConversationSummary {
-  conversation: Conversation;
-  participantName: string;
-  participantInitials: string;
-  preview: string;
+/** Ids of everyone in a conversation other than the viewer. */
+export function peerIdsOf(conversation: ConversationSummary, viewerId: string): string[] {
+  return conversation.participants
+    .map((participant) => participant.userId)
+    .filter((id) => id !== viewerId);
+}
+
+/**
+ * A direct conversation is named after the other person; a group after its
+ * title, or its members while it has none.
+ */
+export function conversationTitle(
+  conversation: ConversationSummary,
+  viewerId: string,
+  people: Record<string, Author>,
+): string {
+  if (conversation.type === 'GROUP' && conversation.title !== undefined) {
+    return conversation.title;
+  }
+  const names = peerIdsOf(conversation, viewerId).map((id) => {
+    const person = people[id];
+    return person === undefined ? '…' : displayName(person);
+  });
+  if (names.length === 0) {
+    return 'Just you';
+  }
+  return names.join(', ');
 }

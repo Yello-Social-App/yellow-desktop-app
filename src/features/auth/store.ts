@@ -8,6 +8,7 @@
 import type { Session, User } from '@shared/ipc-types';
 import { create } from 'zustand';
 
+import { useUsersStore } from '@/features/users/store';
 import { onUnauthenticated } from '@/lib/ipc';
 import { createLogger } from '@/lib/logger';
 
@@ -42,6 +43,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set(signedOutState);
       return;
     }
+    useUsersStore.getState().prime([session.user]);
     set({ status: 'authenticated', user: session.user, expiresAt: session.expiresAt });
   },
 
@@ -63,6 +65,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
 
+    useUsersStore.getState().prime([result.data.user]);
     set({ status: 'authenticated', user: result.data.user, expiresAt: result.data.expiresAt });
     log.info('session_restored', {});
   },

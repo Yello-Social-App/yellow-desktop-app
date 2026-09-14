@@ -1,38 +1,67 @@
-import { Heart, Reply, Trash2 } from 'lucide-react';
-import { memo } from 'react';
+import { Check, Pencil, Reply, Trash2, X } from 'lucide-react';
+import { memo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
+import { RichText } from '@/components/content/RichText';
 import { Avatar } from '@/components/ui/Avatar';
-import type { Comment } from '@/features/comments/types';
+import { Button } from '@/components/ui/Button';
+import { COMMENT_MAX_LENGTH, type Comment } from '@/features/comments/types';
+import type { ReactionType } from '@shared/ipc-types';
 import { cn } from '@/lib/cn';
+import { extractLinks } from '@/lib/links';
 import { relativeTime } from '@/lib/relative-time';
 import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+
+import { ReactionButton } from './ReactionButton';
 
 interface CommentRowProps {
   comment: Comment;
   /** Draws the vertical line from this row's avatar down to its replies. */
   hasReplies?: boolean;
+  canEdit: boolean;
   canDelete: boolean;
   isPending: boolean;
   onReply: (commentId: string) => void;
-  onToggleReaction: (commentId: string) => void;
+  onToggleReaction: (commentId: string, type?: ReactionType) => void;
+  onEdit: (commentId: string, content: string) => Promise<boolean>;
   onDelete: (commentId: string) => void;
 }
 
 const ACTION_CLASS =
-  'font-small text-small gap-xs inline-flex items-center rounded-md px-1.5 py-0.5 transition-tone disabled:opacity-40';
+  'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold transition-tone disabled:opacity-40';
 
 export const CommentRow = memo(function CommentRow({
   comment,
   hasReplies = false,
+  canEdit,
   canDelete,
   isPending,
   onReply,
   onToggleReaction,
+  onEdit,
   onDelete,
 }: CommentRowProps) {
   const author = displayName(comment.author);
-  const hasReacted = comment.viewerReaction !== null && comment.viewerReaction !== undefined;
+  const [draft, setDraft] = useState<string | null>(null);
+  const isEditing = draft !== null;
+  const [firstLink] = extractLinks(comment.content);
+
+  const save = (): void => {
+    if (draft === null) {
+      return;
+    }
+    const content = draft.trim();
+    if (content === '' || content === comment.content) {
+      setDraft(null);
+      return;
+    }
+    void onEdit(comment.id, content).then((saved) => {
+      if (saved) {
+        setDraft(null);
+      }
+    });
+  };
 
   return (
     <article className="gap-sm animate-fade-up flex">
@@ -52,75 +81,143 @@ export const CommentRow = memo(function CommentRow({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="bg-surface-container-low px-md py-sm rounded-xl">
-          <div className="gap-xs flex flex-wrap items-baseline">
-            <Link
-              to={`/users/${comment.author.id}`}
-              className="font-label text-label text-on-surface hover:text-primary transition-tone"
-            >
-              {author}
-            </Link>
-            <span className="font-small text-small text-on-surface-variant">
-              {handleOf(comment.author)}
-            </span>
-          </div>
-          <p className="font-body-sm text-body-sm text-on-surface whitespace-pre-wrap">
-            {comment.content}
-          </p>
+        <div className="flex flex-wrap items-baseline gap-x-1.5 text-[13px]">
+          <Link
+            to={`/users/${comment.author.id}`}
+            className="text-on-surface text-[14px] font-bold hover:underline"
+          >
+            {author}
+          </Link>
+          <span className="text-on-surface-variant">{handleOf(comment.author)}</span>
+          <span aria-hidden className="text-on-surface-variant">
+            ·
+          </span>
+          <span className="text-on-surface-variant">{relativeTime(comment.createdAt)}</span>
         </div>
 
-        <div className="gap-sm mt-1 flex items-center">
-          <button
-            type="button"
-            aria-pressed={hasReacted}
-            disabled={isPending}
-            onClick={() => {
-              onToggleReaction(comment.id);
-            }}
-            className={cn(
-              ACTION_CLASS,
-              hasReacted
-                ? 'text-secondary'
-                : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface',
+        {isEditing ? (
+          <div className="mt-1 flex flex-col gap-2">
+            <label className="sr-only" htmlFor={`edit-comment-${comment.id}`}>
+              Edit comment
+            </label>
+            <textarea
+              id={`edit-comment-${comment.id}`}
+              value={draft}
+              rows={2}
+              maxLength={COMMENT_MAX_LENGTH}
+              autoFocus
+              onChange={(event) => {
+                setDraft(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setDraft(null);
+                }
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  save();
+                }
+              }}
+              className="bg-surface-container-low border-outline-variant focus:border-primary-container focus:ring-primary-container/20 text-on-surface w-full resize-none rounded-xl border px-3 py-2 text-[14px] focus:ring-2 focus:outline-none"
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                leadingIcon={<X className="size-3.5" />}
+                disabled={isPending}
+                onClick={() => {
+                  setDraft(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                leadingIcon={<Check className="size-3.5" />}
+                isLoading={isPending}
+                disabled={draft.trim() === ''}
+                onClick={save}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-on-surface mt-0.5 text-[14px] leading-relaxed whitespace-pre-wrap">
+              <RichText text={comment.content} />
+            </p>
+            {firstLink !== undefined && (
+              <div className="mt-2 max-w-md">
+                <LinkPreviewCard url={firstLink} compact />
+              </div>
             )}
-          >
-            <Heart aria-hidden className={cn('size-3.5', hasReacted && 'fill-current')} />
-            {comment.reactionCount > 0 ? comment.reactionCount : 'Like'}
-          </button>
+          </>
+        )}
 
-          <button
-            type="button"
-            disabled={isPending}
-            onClick={() => {
-              onReply(comment.id);
-            }}
-            className={cn(
-              ACTION_CLASS,
-              'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface',
-            )}
-          >
-            <Reply aria-hidden className="size-3.5" />
-            Reply
-          </button>
+        {!isEditing && (
+          <div className="mt-0.5 -ml-2 flex items-center gap-0.5">
+            <ReactionButton
+              size="sm"
+              current={comment.viewerReaction}
+              count={comment.reactionCount}
+              disabled={isPending}
+              onReact={(type) => {
+                onToggleReaction(comment.id, type);
+              }}
+            />
 
-          {canDelete && (
             <button
               type="button"
               disabled={isPending}
               onClick={() => {
-                onDelete(comment.id);
+                onReply(comment.id);
               }}
-              className={cn(ACTION_CLASS, 'text-on-surface-variant hover:text-error')}
+              className={cn(
+                ACTION_CLASS,
+                'text-on-surface-variant hover:bg-primary-fixed hover:text-primary',
+              )}
             >
-              <Trash2 aria-hidden className="size-3.5" />
-              Delete
+              <Reply aria-hidden className="size-3.5" />
+              Reply
             </button>
-          )}
 
-          <span className="font-small text-small text-on-surface-variant ml-auto">
-            {relativeTime(comment.createdAt)}
-          </span>
-        </div>
+            {canEdit && (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => {
+                  setDraft(comment.content);
+                }}
+                className={cn(
+                  ACTION_CLASS,
+                  'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface',
+                )}
+              >
+                <Pencil aria-hidden className="size-3.5" />
+                Edit
+              </button>
+            )}
+
+            {canDelete && (
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => {
+                  onDelete(comment.id);
+                }}
+                className={cn(
+                  ACTION_CLASS,
+                  'text-on-surface-variant hover:bg-error-container hover:text-on-error-container',
+                )}
+              >
+                <Trash2 aria-hidden className="size-3.5" />
+                Delete
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </article>
   );

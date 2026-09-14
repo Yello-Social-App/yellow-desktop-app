@@ -45,6 +45,15 @@ export async function addComment(
   return result.ok ? ok(result.data.comment) : fail(result.error);
 }
 
+/** Only the comment's author may edit; the server answers ACCESS_DENIED otherwise. */
+export async function editComment(
+  commentId: string,
+  content: string,
+): Promise<Result<Comment, CommentsError>> {
+  const result = await ipc.updateComment({ commentId, content });
+  return result.ok ? ok(result.data.comment) : fail(result.error);
+}
+
 /** Allowed for the comment's author and for the post's author. */
 export async function deleteComment(commentId: string): Promise<Result<true, CommentsError>> {
   const result = await ipc.deleteComment({ commentId });

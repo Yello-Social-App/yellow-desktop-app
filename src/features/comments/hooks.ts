@@ -2,6 +2,7 @@
  * Comment hooks: one thread's state and the actions that change it, so the
  * components stay presentational.
  */
+import type { ReactionType } from '@shared/ipc-types';
 import { useCallback, useEffect, useMemo } from 'react';
 
 import { useCommentsStore, EMPTY_THREAD, type ThreadState } from './store';
@@ -33,8 +34,9 @@ export function useCommentThread(postId: string, enabled: boolean): CommentThrea
 
 export interface CommentActions {
   submit: (content: string) => Promise<boolean>;
+  edit: (commentId: string, content: string) => Promise<boolean>;
   remove: (commentId: string) => Promise<boolean>;
-  toggleReaction: (commentId: string) => void;
+  toggleReaction: (commentId: string, type?: ReactionType) => void;
   setReplyTo: (commentId: string | null) => void;
   loadMore: () => void;
   clearError: () => void;
@@ -53,6 +55,7 @@ export function useCommentActions(
   // identities are stable, so these callbacks are not rebuilt every time any
   // thread anywhere changes.
   const submitComment = useCommentsStore((state) => state.submit);
+  const editStoredComment = useCommentsStore((state) => state.edit);
   const removeComment = useCommentsStore((state) => state.remove);
   const toggleCommentReaction = useCommentsStore((state) => state.toggleReaction);
   const setThreadReplyTo = useCommentsStore((state) => state.setReplyTo);
@@ -69,6 +72,11 @@ export function useCommentActions(
       return true;
     },
     [submitComment, postId, onCountChange],
+  );
+
+  const edit = useCallback(
+    (commentId: string, content: string) => editStoredComment(postId, commentId, content),
+    [editStoredComment, postId],
   );
 
   const remove = useCallback(
@@ -88,8 +96,8 @@ export function useCommentActions(
   );
 
   const toggleReaction = useCallback(
-    (commentId: string) => {
-      void toggleCommentReaction(postId, commentId);
+    (commentId: string, type?: ReactionType) => {
+      void toggleCommentReaction(postId, commentId, type);
     },
     [toggleCommentReaction, postId],
   );
@@ -112,5 +120,5 @@ export function useCommentActions(
     clearThreadError(postId);
   }, [clearThreadError, postId]);
 
-  return { submit, remove, toggleReaction, setReplyTo, loadMore, clearError };
+  return { submit, edit, remove, toggleReaction, setReplyTo, loadMore, clearError };
 }

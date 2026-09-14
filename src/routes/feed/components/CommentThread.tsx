@@ -6,7 +6,12 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useCommentActions, useCommentThread } from '@/features/comments/hooks';
-import { canDelete, composeCommentSchema, COMMENT_MAX_LENGTH } from '@/features/comments/types';
+import {
+  canDelete,
+  canEdit,
+  composeCommentSchema,
+  COMMENT_MAX_LENGTH,
+} from '@/features/comments/types';
 import { useCommentsStore } from '@/features/comments/store';
 import { cn } from '@/lib/cn';
 import { handleOf } from '@/lib/user-display';
@@ -127,10 +132,12 @@ export function CommentThread({ post, onCommentCountChange, loadAll = false }: C
               <CommentRow
                 comment={node.comment}
                 hasReplies={node.replies.length > 0}
+                canEdit={canEdit(node.comment, viewer?.id)}
                 canDelete={canDelete(node.comment, viewer?.id, post.author.id)}
                 isPending={thread.pendingIds.has(node.comment.id)}
                 onReply={startReply}
                 onToggleReaction={actions.toggleReaction}
+                onEdit={actions.edit}
                 onDelete={(commentId) => {
                   void actions.remove(commentId);
                 }}
@@ -154,10 +161,12 @@ export function CommentThread({ post, onCommentCountChange, loadAll = false }: C
                     >
                       <CommentRow
                         comment={reply}
+                        canEdit={canEdit(reply, viewer?.id)}
                         canDelete={canDelete(reply, viewer?.id, post.author.id)}
                         isPending={thread.pendingIds.has(reply.id)}
                         onReply={startReply}
                         onToggleReaction={actions.toggleReaction}
+                        onEdit={actions.edit}
                         onDelete={(commentId) => {
                           void actions.remove(commentId);
                         }}

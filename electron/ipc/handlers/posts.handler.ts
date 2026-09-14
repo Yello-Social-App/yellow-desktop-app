@@ -1,5 +1,5 @@
 /**
- * Single-post reads and writes: fetch, edit, delete, repost, share link.
+ * Single-post reads and writes: fetch, edit, delete, repost, copy share link.
  *
  * Authorisation is not re-implemented here and must not be: the server decides
  * whether the caller may see or edit a post, and answers `POST_NOT_VISIBLE` or
@@ -22,19 +22,18 @@ import { discardStagedImages, resolveStagedImages } from '../staged-images';
 
 import {
   deletedResponseSchema,
+  ipcFail,
   ipcOk,
   postIdRequestSchema,
   postResponseSchema,
   postSchema,
   repostRequestSchema,
   shareLinkCopiedResponseSchema,
-  shareLinkResponseSchema,
   updatePostRequestSchema,
   type DeletedResponse,
   type IpcResult,
   type PostResponse,
   type ShareLinkCopiedResponse,
-  type ShareLinkResponse,
 } from '../../../shared/ipc-types';
 
 const log = createLogger('ipc.posts');
@@ -92,12 +91,12 @@ export function registerPostHandlers(): void {
         if (visibility !== undefined) {
           form.append('visibility', visibility);
         }
-        // Repeated keys, not `[]` suffixes: that is how the server reads a list.
+        // `[]`-suffixed keys, repeated per item: that is how this server reads a list.
         for (const imageId of removeImageIds) {
-          form.append('removeImageIds', imageId);
+          form.append('removeImageIds[]', imageId);
         }
         for (const part of parts.data) {
-          form.append('images', part.blob, part.fileName);
+          form.append('images[]', part.blob, part.fileName);
         }
         body = form;
       }
@@ -163,26 +162,15 @@ export function registerPostHandlers(): void {
     },
   );
 
-  // Reading the link is what the share dialog shows; it also answers
-  // POST_NOT_VISIBLE for a non-public post, which is the check that decides
-  // whether sharing is offered at all.
-  registerIpcHandler(
-    IPC_CHANNELS.POSTS_SHARE_LINK,
-    postIdRequestSchema,
-    async ({ postId }): Promise<IpcResult<ShareLinkResponse>> =>
-      apiRequest({
-        method: 'get',
-        url: ENDPOINTS.posts.shareLink(postId),
-        schema: shareLinkResponseSchema,
-      }),
-  );
-
   /**
    * Copying is its own channel because the clipboard write has to happen here:
-   * the page holds no clipboard permission under the default-deny policy. It
-   * re-reads the link rather than accepting one from the renderer, so what
-   * lands on the clipboard is always a URL the server just produced for this
-   * post id — the renderer never says what gets written (OWASP A01).
+   * the page holds no clipboard permission under the default-deny policy. The
+   * link is the `shareUrl` the server returns on the post, re-read here rather
+   * than accepted from the renderer, so what lands on the clipboard is always
+   * a URL the server just produced for this post id — the renderer never says
+   * what gets written (OWASP A01). A non-public post fails here with
+   * POST_NOT_VISIBLE for anyone but its author, which is the check that
+   * decides whether sharing is offered at all.
    */
   registerIpcHandler(
     IPC_CHANNELS.POSTS_COPY_SHARE_LINK,
@@ -190,26 +178,31 @@ export function registerPostHandlers(): void {
     async ({ postId }): Promise<IpcResult<ShareLinkCopiedResponse>> => {
       const result = await apiRequest({
         method: 'get',
-        url: ENDPOINTS.posts.shareLink(postId),
-        schema: shareLinkResponseSchema,
+        url: ENDPOINTS.posts.byId(postId),
+        schema: postSchema,
       });
 
       if (!result.ok) {
         return result;
       }
 
+      const url = result.data.shareUrl;
+      if (url === undefined) {
+        return ipcFail('API', 'This post has no share link.');
+      }
+
       // A clipboard the OS refuses is not worth failing the whole call over:
       // the URL still comes back, and the UI can show it (A10).
       let copied = true;
       try {
-        await clipboard.writeText(result.data.url);
+        await clipboard.writeText(url);
       } catch (error) {
         copied = false;
         log.warn('share_link_copy_failed', { error });
       }
 
       log.info('share_link_copied', { copied });
-      return ipcOk(shareLinkCopiedResponseSchema.parse({ url: result.data.url, copied }));
+      return ipcOk(shareLinkCopiedResponseSchema.parse({ url, copied }));
     },
   );
 }

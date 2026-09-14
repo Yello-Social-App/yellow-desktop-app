@@ -1,78 +1,77 @@
 /**
- * Mock chat API: seeded conversations and threads behind a simulated round
- * trip, each parsed through its schema before use (OWASP A08).
+ * Chat operations, as seen by the renderer: one allowlisted IPC call each.
+ * Which transport the main process used — the socket or the HTTP fallback —
+ * is its business; both answer the same shapes.
  */
-import { MOCK_LATENCY_MS } from '@/lib/constants';
-import { delay } from '@/lib/delay';
-import { createLogger } from '@/lib/logger';
+import type {
+  ChatMessage,
+  ConversationPage,
+  ConversationSummary,
+  CreateConversationRequest,
+  IpcError,
+  MessagePage,
+} from '@shared/ipc-types';
+
+import { CONVERSATIONS_PAGE_SIZE, MESSAGES_PAGE_SIZE } from '@/lib/constants';
+import { ipc } from '@/lib/ipc';
 import { fail, ok, type Result } from '@/lib/result';
-import seedConversations from '@/mocks/data/conversations.json';
-import seedMessages from '@/mocks/data/messages.json';
 
-import {
-  conversationListSchema,
-  messageListSchema,
-  messageSchema,
-  SELF_AUTHOR_ID,
-  type ComposeMessageInput,
-  type Conversation,
-  type Message,
-} from './types';
+export type MessagesError = IpcError;
 
-const log = createLogger('messages.api');
-
-export interface MessagesError {
-  message: string;
+export async function fetchConversations(
+  cursor?: string,
+): Promise<Result<ConversationPage, MessagesError>> {
+  const result = await ipc.listConversations({
+    limit: CONVERSATIONS_PAGE_SIZE,
+    ...(cursor === undefined ? {} : { cursor }),
+  });
+  return result.ok ? ok(result.data) : fail(result.error);
 }
 
-export async function fetchConversations(): Promise<Result<Conversation[], MessagesError>> {
-  await delay(MOCK_LATENCY_MS);
-
-  const parsed = conversationListSchema.safeParse(seedConversations);
-  if (!parsed.success) {
-    log.error('conversation_seed_rejected', { issues: parsed.error.issues.length });
-    return fail({ message: 'Conversations could not be loaded.' });
-  }
-
-  const conversations = [...parsed.data].sort((a, b) =>
-    b.lastMessageAt.localeCompare(a.lastMessageAt),
-  );
-  return ok(conversations);
+export async function fetchConversation(
+  conversationId: string,
+): Promise<Result<ConversationSummary, MessagesError>> {
+  const result = await ipc.getConversation({ conversationId });
+  return result.ok ? ok(result.data.conversation) : fail(result.error);
 }
 
-export async function fetchMessages(): Promise<Result<Message[], MessagesError>> {
-  await delay(MOCK_LATENCY_MS);
-
-  const parsed = messageListSchema.safeParse(seedMessages);
-  if (!parsed.success) {
-    log.error('message_seed_rejected', { issues: parsed.error.issues.length });
-    return fail({ message: 'Messages could not be loaded.' });
-  }
-
-  return ok(parsed.data);
+export async function createConversation(
+  request: CreateConversationRequest,
+): Promise<Result<ConversationSummary, MessagesError>> {
+  const result = await ipc.createConversation(request);
+  return result.ok ? ok(result.data.conversation) : fail(result.error);
 }
 
-/** Stands in for POST /v1/conversations/:id/messages. */
+/** Newest first on the wire; pass `cursor` for the next (older) page. */
+export async function fetchMessages(
+  conversationId: string,
+  cursor?: string,
+): Promise<Result<MessagePage, MessagesError>> {
+  const result = await ipc.listMessages({
+    conversationId,
+    limit: MESSAGES_PAGE_SIZE,
+    ...(cursor === undefined ? {} : { cursor }),
+  });
+  return result.ok ? ok(result.data) : fail(result.error);
+}
+
 export async function sendMessage(
   conversationId: string,
-  input: ComposeMessageInput,
-): Promise<Result<Message, MessagesError>> {
-  await delay(MOCK_LATENCY_MS);
+  clientId: string,
+  body: string,
+): Promise<Result<ChatMessage, MessagesError>> {
+  const result = await ipc.sendChatMessage({ conversationId, clientId, body });
+  return result.ok ? ok(result.data.message) : fail(result.error);
+}
 
-  const parsed = messageSchema.safeParse({
-    id: `msg_local_${Date.now().toString(36)}`,
-    conversationId,
-    authorId: SELF_AUTHOR_ID,
-    body: input.body,
-    sentAt: new Date().toISOString(),
-    status: 'sent',
-  });
+export async function markRead(
+  conversationId: string,
+  messageId: string,
+): Promise<Result<true, MessagesError>> {
+  const result = await ipc.markConversationRead({ conversationId, messageId });
+  return result.ok ? ok(true) : fail(result.error);
+}
 
-  if (!parsed.success) {
-    log.error('message_rejected', { issues: parsed.error.issues.length });
-    return fail({ message: 'That message could not be sent.' });
-  }
-
-  log.info('message_sent', { conversationId });
-  return ok(parsed.data);
+export function sendTyping(conversationId: string, typing: boolean): void {
+  void ipc.sendTyping({ conversationId, typing });
 }

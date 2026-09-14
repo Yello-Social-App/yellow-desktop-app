@@ -20,17 +20,19 @@ import path from 'node:path';
 import { app, BrowserWindow, protocol } from 'electron';
 
 import { configureHttpClient } from './api/http-client';
-import { apiBaseUrlFromEnvironment } from './config';
+import { apiBaseUrlFromEnvironment, chatBaseUrlFromEnvironment } from './config';
 import { registerAuthHandlers } from './ipc/handlers/auth.handler';
+import { registerChatHandlers } from './ipc/handlers/chat.handler';
 import { registerCommentHandlers } from './ipc/handlers/comments.handler';
 import { registerFeedHandlers } from './ipc/handlers/feed.handler';
 import { registerFriendHandlers } from './ipc/handlers/friends.handler';
 import { registerFsHandlers } from './ipc/handlers/fs.handler';
-import { registerNotificationHandlers } from './ipc/handlers/notifications.handler';
+import { registerLinkHandlers } from './ipc/handlers/links.handler';
 import { registerPostHandlers } from './ipc/handlers/posts.handler';
 import { registerProfileHandlers } from './ipc/handlers/profile.handler';
 import { registerReactionHandlers } from './ipc/handlers/reactions.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
+import { chatSocket } from './chat/socket';
 import { createLogger } from '../shared/logger';
 import { buildApplicationMenu } from './menu';
 import { initialiseAutoUpdater } from './autoUpdater';
@@ -50,8 +52,8 @@ const WINDOW_DEFAULT_WIDTH = 1280;
 const WINDOW_DEFAULT_HEIGHT = 832;
 const WINDOW_MIN_WIDTH = 960;
 const WINDOW_MIN_HEIGHT = 640;
-/** Matches --color-background so the frame never flashes white. */
-const WINDOW_BACKGROUND_COLOUR = '#faf9fd';
+/** Matches the dark --color-background so the frame never flashes white. */
+const WINDOW_BACKGROUND_COLOUR = '#0b0d10';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'dist');
 const INDEX_FILE = 'index.html';
@@ -131,7 +133,7 @@ function createMainWindow(): BrowserWindow {
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
     backgroundColor: WINDOW_BACKGROUND_COLOUR,
-    // The renderer draws its own 72px title bar, per the design system.
+    // The renderer draws its own 56px title bar.
     frame: false,
     // Nothing is painted until React has rendered its first frame.
     show: false,
@@ -155,8 +157,9 @@ function createMainWindow(): BrowserWindow {
     window.show();
     log.info('window_shown', {});
 
-    // Deferred until the window is interactive: neither is needed to first paint.
+    // Deferred until the window is interactive: none are needed to first paint.
     registerFsHandlers();
+    registerLinkHandlers();
     initialiseAutoUpdater();
   });
 
@@ -231,6 +234,11 @@ function bootstrap(): void {
     }
   });
 
+  app.on('before-quit', () => {
+    // A clean close beats the server waiting out a heartbeat.
+    chatSocket.disconnect();
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       mainWindow = createMainWindow();
@@ -243,7 +251,7 @@ function bootstrap(): void {
     .then(async () => {
       // The HTTP client lives in this process, so it is ready before any
       // renderer can ask for data.
-      configureHttpClient(apiBaseUrlFromEnvironment());
+      configureHttpClient(apiBaseUrlFromEnvironment(), chatBaseUrlFromEnvironment());
 
       applyContentSecurityPolicy();
       applyPermissionPolicy();
@@ -256,7 +264,7 @@ function bootstrap(): void {
       registerCommentHandlers();
       registerReactionHandlers();
       registerFriendHandlers();
-      registerNotificationHandlers();
+      registerChatHandlers();
       registerProfileHandlers();
       registerWindowHandlers();
 

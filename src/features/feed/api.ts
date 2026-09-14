@@ -14,7 +14,6 @@ import type {
   ReactionType,
   ReactorPage,
   ShareLinkCopiedResponse,
-  ShareLinkResponse,
   StagedImage,
   UpdatePostRequest,
 } from '@shared/ipc-types';
@@ -104,17 +103,6 @@ export async function deletePost(postId: string): Promise<Result<true, FeedError
 export async function repost(postId: string, content?: string): Promise<Result<Post, FeedError>> {
   const result = await ipc.repost({ postId, ...(content === undefined ? {} : { content }) });
   return result.ok ? ok(result.data.post) : fail(result.error);
-}
-
-/**
- * The shareable URL, for the dialog to show. Only PUBLIC posts can be shared;
- * anything else comes back POST_NOT_VISIBLE.
- */
-export async function fetchShareLink(
-  postId: string,
-): Promise<Result<ShareLinkResponse, FeedError>> {
-  const result = await ipc.postShareLink({ postId });
-  return result.ok ? ok(result.data) : fail(result.error);
 }
 
 /**

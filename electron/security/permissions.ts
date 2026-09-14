@@ -18,8 +18,13 @@ const log = createLogger('security.permissions');
 /** No permission is granted today. Adding one is a reviewed, deliberate act. */
 const GRANTED_PERMISSIONS: readonly string[] = [];
 
-/** External links open in the user's browser, but only over HTTPS. */
-const EXTERNAL_LINK_PROTOCOL = 'https:';
+/**
+ * External links open in the user's browser — web URLs only. Anything else
+ * (`file:`, `javascript:`, custom schemes) is refused: the browser is the
+ * right place to judge a web page, but nothing else should be launched from
+ * text a stranger wrote in a post (A01).
+ */
+const EXTERNAL_LINK_PROTOCOLS: ReadonlySet<string> = new Set(['https:', 'http:']);
 
 function isGranted(permission: string): boolean {
   return GRANTED_PERMISSIONS.includes(permission);
@@ -74,7 +79,7 @@ export function applyNavigationPolicy(): void {
         return { action: 'deny' };
       }
 
-      if (parsed.protocol === EXTERNAL_LINK_PROTOCOL) {
+      if (EXTERNAL_LINK_PROTOCOLS.has(parsed.protocol)) {
         void shell.openExternal(parsed.toString());
         log.info('external_link_opened', { host: parsed.host });
       } else {

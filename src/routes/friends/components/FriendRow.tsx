@@ -1,93 +1,69 @@
-import { Check, UserMinus, X } from 'lucide-react';
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import type { Friendship } from '@/features/friends/types';
+import { useRelationship } from '@/features/friends/hooks';
+import type { FriendEntry } from '@/features/friends/types';
+import { useIsOnline, useStartConversation } from '@/features/messages/hooks';
+import { FriendshipControls } from '@/routes/profile/components/FriendshipControls';
 import { relativeTime } from '@/lib/relative-time';
 import { displayName, handleOf, initialsOf } from '@/lib/user-display';
 
 interface FriendRowProps {
-  friendship: Friendship;
-  isPending: boolean;
-  /** Requests get accept/decline; accepted friendships get unfriend. */
-  variant: 'friend' | 'request';
-  onAccept: (friendshipId: string) => void;
-  onDecline: (friendshipId: string) => void;
-  onRemove: (userId: string) => void;
+  entry: FriendEntry;
+  /** What the timestamp means on this list. */
+  sinceLabel: string;
 }
 
 /**
- * One person. `friendship.user` is always the *other* party, never the caller,
- * so the same row works for a sent request, a received one and a friendship.
+ * One person. `entry.user` is always the *other* party, never the caller, and
+ * the controls read from the server's `friendStatus` — so the same row
+ * serves every tab.
  */
-export const FriendRow = memo(function FriendRow({
-  friendship,
-  isPending,
-  variant,
-  onAccept,
-  onDecline,
-  onRemove,
-}: FriendRowProps) {
-  const person = friendship.user;
+export const FriendRow = memo(function FriendRow({ entry, sinceLabel }: FriendRowProps) {
+  const person = entry.user;
   const name = displayName(person);
+  const control = useRelationship(person.id, entry.friendStatus);
+  const isOnline = useIsOnline(person.id);
+  const { direct, isStarting } = useStartConversation();
 
   return (
-    <Card as="article" className="gap-md p-md flex items-center">
+    <article className="gap-md px-lg py-md hover:bg-surface-container-lowest/60 transition-tone flex items-center">
       <Link to={`/users/${person.id}`} className="shrink-0">
-        <Avatar initials={initialsOf(person)} name={name} imageUrl={person.avatarUrl} />
+        <Avatar
+          initials={initialsOf(person)}
+          name={name}
+          imageUrl={person.avatarUrl}
+          isOnline={isOnline || undefined}
+        />
       </Link>
 
       <div className="min-w-0 flex-1">
         <Link
           to={`/users/${person.id}`}
-          className="font-heading text-h3 text-on-surface hover:text-primary transition-tone block truncate"
+          className="text-on-surface block truncate text-[15px] font-bold hover:underline"
         >
           {name}
         </Link>
-        <p className="font-small text-small text-on-surface-variant truncate">
+        <p className="text-on-surface-variant truncate text-[13px]">
           {handleOf(person)}
-          {friendship.createdAt !== '' && ` · ${relativeTime(friendship.createdAt)}`}
+          {entry.since !== undefined && ` · ${sinceLabel} ${relativeTime(entry.since)}`}
         </p>
       </div>
 
-      {variant === 'request' ? (
-        <div className="gap-sm flex shrink-0">
-          <Button
-            leadingIcon={<Check className="size-4" />}
-            isLoading={isPending}
-            onClick={() => {
-              onAccept(friendship.id);
-            }}
-          >
-            Accept
-          </Button>
-          <Button
-            variant="secondary"
-            leadingIcon={<X className="size-4" />}
-            disabled={isPending}
-            onClick={() => {
-              onDecline(friendship.id);
-            }}
-          >
-            Decline
-          </Button>
-        </div>
-      ) : (
-        <Button
-          variant="secondary"
-          leadingIcon={<UserMinus className="size-4" />}
-          isLoading={isPending}
-          onClick={() => {
-            onRemove(person.id);
-          }}
-          className="shrink-0"
-        >
-          Unfriend
-        </Button>
-      )}
-    </Card>
+      <div className="shrink-0">
+        <FriendshipControls
+          control={control}
+          isMessaging={isStarting}
+          onMessage={
+            control.relationship === 'friends'
+              ? () => {
+                  void direct(person.id);
+                }
+              : undefined
+          }
+        />
+      </div>
+    </article>
   );
 });

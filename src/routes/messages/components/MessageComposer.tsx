@@ -1,70 +1,82 @@
-import { Paperclip, Send } from 'lucide-react';
-import { useState } from 'react';
+import { Send } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 import { IconButton } from '@/components/ui/IconButton';
-import { useMessageComposer } from '@/features/messages/hooks';
+import { useComposer } from '@/features/messages/hooks';
 import { composeMessageSchema, MESSAGE_MAX_LENGTH } from '@/features/messages/types';
 
-/** The chat composer pinned to the bottom of the thread. */
+/** The composer pinned to the bottom of the thread. Enter sends; Shift+Enter breaks. */
 export function MessageComposer() {
-  const { send, isSending, hasConversation } = useMessageComposer();
+  const { send, isSending, hasConversation, onInput } = useComposer();
   const [body, setBody] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
-    event.preventDefault();
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea === null) {
+      return;
+    }
+    textarea.style.height = 'auto';
+    textarea.style.height = `${String(Math.min(textarea.scrollHeight, 160))}px`;
+  }, [body]);
 
+  const submit = (): void => {
     const parsed = composeMessageSchema.safeParse({ body });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? 'That message is not valid.');
       return;
     }
-
     setError(null);
-    void send(parsed.data).then((sent) => {
-      if (sent) {
-        setBody('');
-      }
-    });
+    // Cleared at once: the line is already drawn in the thread, optimistically.
+    setBody('');
+    void send(parsed.data.body);
+    textareaRef.current?.focus();
   };
 
   return (
     <form
-      onSubmit={handleSubmit}
-      className="border-outline-variant bg-surface-container-lowest gap-sm px-md py-sm shrink-0 border-t"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+      className="border-outline-variant px-lg shrink-0 border-t py-3"
     >
-      <div className="gap-sm flex items-center">
-        <IconButton
-          label="Attach a file"
-          icon={<Paperclip className="size-5" />}
-          disabled
-          title="Attachments need the live API"
-        />
+      <div className="bg-surface-container-low border-outline-variant focus-within:border-primary-container focus-within:ring-primary-container/20 transition-tone flex items-end gap-2 rounded-3xl border py-1.5 pr-1.5 pl-4 focus-within:ring-2">
         <label className="sr-only" htmlFor="message-composer">
           Write a message
         </label>
-        <input
+        <textarea
           id="message-composer"
+          ref={textareaRef}
           value={body}
+          rows={1}
           maxLength={MESSAGE_MAX_LENGTH}
           disabled={!hasConversation}
-          placeholder="Write a message…"
+          placeholder="Start a new message"
           onChange={(event) => {
             setBody(event.target.value);
             setError(null);
+            onInput();
           }}
-          className="bg-surface-container-low border-outline-variant font-body text-body text-on-surface placeholder:text-outline-variant focus:border-primary-container focus:ring-primary-container/20 px-md transition-tone w-full flex-1 rounded-full border py-2 focus:ring-2 focus:outline-none"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              submit();
+            }
+          }}
+          className="text-on-surface placeholder:text-outline max-h-40 min-h-8 w-full flex-1 resize-none bg-transparent py-1.5 text-[15px] leading-relaxed focus:outline-none"
         />
         <IconButton
           label="Send message"
           type="submit"
-          icon={<Send className="size-5" />}
+          icon={<Send className="size-4" />}
           disabled={isSending || body.trim() === ''}
-          className="bg-primary-container text-on-primary-container hover:bg-primary hover:text-on-primary disabled:opacity-40"
+          className="bg-primary-container text-on-primary-container disabled:bg-surface-container-high disabled:text-on-surface-variant hover:brightness-110 disabled:opacity-100"
         />
       </div>
       {error !== null && (
-        <p role="alert" className="font-small text-small text-error mt-xs ml-xs">
+        <p role="alert" className="text-error mt-xs ml-md text-[13px]">
           {error}
         </p>
       )}

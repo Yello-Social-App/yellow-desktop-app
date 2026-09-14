@@ -1,10 +1,11 @@
-import { ImagePlus, X } from 'lucide-react';
+import { Globe, ImagePlus, Lock, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
-import { Select } from '@/components/ui/Select';
+import { IconButton } from '@/components/ui/IconButton';
+import { cn } from '@/lib/cn';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { discardPostImages, stagePostImages } from '@/features/feed/api';
 import { usePostComposer } from '@/features/feed/hooks';
@@ -25,19 +26,50 @@ function formatSize(bytes: number): string {
     : `${String(Math.max(1, Math.round(bytes / 1024)))} KB`;
 }
 
-/** The "What's on your mind?" composer that opens the home feed. */
+const VISIBILITY_ICONS = {
+  PUBLIC: Globe,
+  FRIENDS: Users,
+  PRIVATE: Lock,
+} as const;
+
+/** Past this share of the limit the counter turns from quiet to warning. */
+const COUNTER_WARN_RATIO = 0.9;
+
+/** The "What's happening?" composer that opens the home feed. */
 export function PostComposer() {
   const user = useCurrentUser();
   const { publish, isPublishing } = usePostComposer();
+  const location = useLocation();
   const [body, setBody] = useState('');
   const [visibility, setVisibility] = useState<PostVisibility>('PUBLIC');
   const [images, setImages] = useState<StagedImage[]>([]);
   const [isPicking, setIsPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const remaining = POST_MAX_LENGTH - body.trim().length;
   const visibilityHint = VISIBILITY_OPTIONS.find((option) => option.value === visibility)?.hint;
   const canAttachMore = images.length < POST_MAX_IMAGES;
+  const isEmpty = body.trim() === '' && images.length === 0;
+  const VisibilityIcon = VISIBILITY_ICONS[visibility];
+
+  // The sidebar's Post button lands here asking for focus.
+  useEffect(() => {
+    const state = location.state as { compose?: boolean } | null;
+    if (state?.compose === true) {
+      textareaRef.current?.focus();
+    }
+  }, [location.state]);
+
+  // Grows with its text rather than scrolling inside a two-line box.
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea === null) {
+      return;
+    }
+    textarea.style.height = 'auto';
+    textarea.style.height = `${String(textarea.scrollHeight)}px`;
+  }, [body]);
 
   // Bytes staged in the main process outlive this component, so a composer
   // abandoned mid-draft frees what it was holding. The ref exists only so the
@@ -118,44 +150,45 @@ export function PostComposer() {
   };
 
   return (
-    <Card elevation="floating" className="p-md md:p-lg">
-      <form className="gap-md flex flex-col" onSubmit={handleSubmit}>
-        <div className="gap-md flex items-start">
-          {user !== null && (
-            <Avatar
-              initials={initialsOf(user)}
-              name={displayName(user)}
-              imageUrl={user.avatarUrl}
-            />
-          )}
-          <label className="sr-only" htmlFor="post-composer">
-            Write a post
-          </label>
-          <textarea
-            id="post-composer"
-            value={body}
-            rows={2}
-            maxLength={POST_MAX_LENGTH}
-            placeholder="What's on your mind?"
-            onChange={(event) => {
-              setBody(event.target.value);
-              setError(null);
-            }}
-            className="font-body text-body text-on-surface placeholder:text-on-surface-variant min-h-10 w-full resize-none border-none bg-transparent p-0 focus:outline-none"
-          />
-        </div>
+    <form className="gap-md px-lg py-md flex" onSubmit={handleSubmit}>
+      {user !== null && (
+        <Avatar
+          initials={initialsOf(user)}
+          name={displayName(user)}
+          imageUrl={user.avatarUrl}
+          className="self-start"
+        />
+      )}
+
+      <div className="gap-sm flex min-w-0 flex-1 flex-col">
+        <label className="sr-only" htmlFor="post-composer">
+          Write a post
+        </label>
+        <textarea
+          id="post-composer"
+          ref={textareaRef}
+          value={body}
+          rows={1}
+          maxLength={POST_MAX_LENGTH}
+          placeholder="What's happening?"
+          onChange={(event) => {
+            setBody(event.target.value);
+            setError(null);
+          }}
+          className="text-on-surface placeholder:text-on-surface-variant min-h-10 w-full resize-none border-none bg-transparent py-2 text-[18px] leading-relaxed focus:outline-none"
+        />
 
         {images.length > 0 && (
           <ul aria-label="Photos attached to this post" className="gap-sm flex flex-wrap">
             {images.map((image) => (
               <li key={image.token} className="relative">
-                <figure className="border-outline-variant w-28 overflow-hidden rounded-lg border">
+                <figure className="border-outline-variant w-28 overflow-hidden rounded-xl border">
                   <img
                     src={image.previewDataUrl}
                     alt={image.fileName}
                     className="h-24 w-full object-cover"
                   />
-                  <figcaption className="px-xs text-on-surface-variant font-small text-small truncate py-1">
+                  <figcaption className="px-xs text-on-surface-variant truncate py-1 text-[11px]">
                     {formatSize(image.byteSize)}
                   </figcaption>
                 </figure>
@@ -177,57 +210,90 @@ export function PostComposer() {
         )}
 
         {error !== null && (
-          <p role="alert" className="font-small text-small text-error">
+          <p role="alert" className="text-error text-[13px]">
             {error}
           </p>
         )}
 
-        <div className="border-outline-variant/50 gap-md pt-md flex flex-wrap items-center justify-between border-t">
-          <div className="gap-sm flex items-center">
-            <div className="w-40">
-              <label className="sr-only" htmlFor="post-visibility">
-                Who can see this post
-              </label>
-              <Select
-                id="post-visibility"
-                options={VISIBILITY_OPTIONS}
-                value={visibility}
-                onValueChange={setVisibility}
-              />
-            </div>
+        {/* Visibility as a row of chips: one tap, and the choice stays visible. */}
+        <div
+          role="radiogroup"
+          aria-label="Who can see this post"
+          className="-ml-1 flex flex-wrap items-center gap-1"
+        >
+          {VISIBILITY_OPTIONS.map((option) => {
+            const Icon = VISIBILITY_ICONS[option.value];
+            const isSelected = option.value === visibility;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                title={option.hint}
+                onClick={() => {
+                  setVisibility(option.value);
+                }}
+                className={cn(
+                  'transition-tone flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold',
+                  isSelected
+                    ? 'bg-primary-fixed text-on-primary-fixed'
+                    : 'text-on-surface-variant hover:bg-surface-container-high',
+                )}
+              >
+                <Icon aria-hidden className="size-3.5" />
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
 
-            <Button
-              variant="secondary"
-              leadingIcon={<ImagePlus className="size-4" />}
-              isLoading={isPicking}
-              disabled={isPublishing || !canAttachMore}
-              title={
+        <div className="border-outline-variant gap-md pt-sm flex items-center justify-between border-t">
+          <div className="-ml-2 flex items-center gap-1">
+            <IconButton
+              label={
                 canAttachMore
-                  ? `Attach up to ${String(POST_MAX_IMAGES)} photos (JPEG, PNG or GIF, 5 MB each)`
+                  ? `Attach up to ${String(POST_MAX_IMAGES)} photos (JPEG, PNG, GIF or WebP, 5 MB each)`
                   : `That is the limit of ${String(POST_MAX_IMAGES)} photos`
               }
+              tone="brand"
+              icon={<ImagePlus className="size-5" />}
+              disabled={isPublishing || isPicking || !canAttachMore}
               onClick={attach}
-            >
-              {images.length === 0 ? 'Photos' : `Add more (${String(images.length)})`}
-            </Button>
+            />
+            {images.length > 0 && (
+              <span className="text-on-surface-variant text-[12px] tabular-nums">
+                {images.length}/{POST_MAX_IMAGES}
+              </span>
+            )}
           </div>
 
           <div className="gap-md flex items-center">
-            <span className="font-small text-small text-on-surface-variant">{remaining}</span>
+            {body.trim().length > 0 && (
+              <span
+                className={cn(
+                  'text-[12px] tabular-nums',
+                  remaining < POST_MAX_LENGTH * (1 - COUNTER_WARN_RATIO)
+                    ? 'text-error'
+                    : 'text-on-surface-variant',
+                )}
+                aria-live="polite"
+              >
+                {remaining}
+              </span>
+            )}
+            <span className="text-on-surface-variant sr-only">{visibilityHint}</span>
             <Button
               type="submit"
               isLoading={isPublishing}
-              disabled={body.trim() === '' && images.length === 0}
+              disabled={isEmpty}
+              leadingIcon={<VisibilityIcon aria-hidden className="size-3.5" />}
             >
               Post
             </Button>
           </div>
         </div>
-
-        {visibilityHint !== undefined && (
-          <p className="font-small text-small text-on-surface-variant">{visibilityHint}</p>
-        )}
-      </form>
-    </Card>
+      </div>
+    </form>
   );
 }

@@ -16,16 +16,19 @@ type CardElement = 'div' | 'article' | 'section';
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   elevation?: CardElevation;
   as?: CardElement;
+  /** Lifts the tone on hover, for cards that are also a link. */
+  interactive?: boolean;
   children: ReactNode;
 }
 
 /**
- * Level 1 surface: white on the off-white base with a 1px hairline. Depth comes
- * from tone and outline, not from heavy shadows.
+ * Level 1 surface: one tone above the canvas with a hairline. Depth comes
+ * from tone and outline; shadows are reserved for things that float.
  */
 export function Card({
   elevation = 'flat',
   as: Element = 'div',
+  interactive = false,
   className,
   children,
   ...rest
@@ -33,7 +36,8 @@ export function Card({
   return (
     <Element
       className={cn(
-        'bg-surface-container-lowest border-outline-variant rounded-xl border',
+        'bg-surface-container-lowest border-outline-variant rounded-2xl border',
+        interactive && 'transition-tone hover:border-outline/40 hover:bg-surface-container-low',
         ELEVATION_CLASSES[elevation],
         className,
       )}

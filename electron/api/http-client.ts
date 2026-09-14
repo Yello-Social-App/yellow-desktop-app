@@ -16,6 +16,14 @@
  *     parallel exchanges of the same token would have the loser fail — and
  *     then clear the pair the winner had just stored.
  *
+ * Two services answer on this client. The Yello API wraps success in an
+ * envelope and failure in `{ success:false, code, message, fieldErrors }`; the
+ * chat service answers bare JSON and `{ code, message, details }`. Which one a
+ * call is for is a per-request option (`service`), and the only thing it
+ * changes is how the body is unwrapped — auth, refresh, retry and logging are
+ * shared. A Strategy in its smallest spelling: two variants exist today, so
+ * the branch is named rather than duplicated into a second client.
+ *
  * Request and response bodies are never logged: that is where tokens and PII
  * live (A09).
  */
@@ -34,6 +42,7 @@ import { apiEnvelopeSchema, apiErrorEnvelopeSchema } from './envelope';
 import { ENDPOINTS } from './endpoints';
 import {
   accessToken,
+  accessTokenExpiresAt,
   clearTokens,
   refreshToken as storedRefreshToken,
   setTokens,
@@ -81,14 +90,26 @@ function assertTransportIsSafe(baseUrl: string): void {
 
 let client: AxiosInstance | null = null;
 let baseUrl = '';
+let chatBase = '';
+
+export type ApiService = 'api' | 'chat';
 
 export function apiBaseUrl(): string {
   return baseUrl;
 }
 
-export function configureHttpClient(apiBase: string): void {
+export function chatBaseUrl(): string {
+  return chatBase;
+}
+
+export function configureHttpClient(apiBase: string, chatBaseOverride?: string): void {
   assertTransportIsSafe(apiBase);
   baseUrl = apiBase;
+
+  chatBase = chatBaseOverride ?? apiBase;
+  if (chatBase !== apiBase) {
+    assertTransportIsSafe(chatBase);
+  }
 
   const instance = axios.create({
     baseURL: apiBase,
@@ -125,6 +146,25 @@ function refreshAccessToken(): Promise<boolean> {
     refreshInFlight = null;
   });
   return refreshInFlight;
+}
+
+/** How close to expiry a token is treated as already stale. */
+const TOKEN_FRESHNESS_MARGIN_MS = 60 * 1000;
+
+/**
+ * An access token good for at least the margin, refreshing first if the held
+ * one is closer to expiry than that. The socket authenticates with this: a
+ * token that dies seconds after the upgrade would just bounce it straight
+ * back into a reconnect.
+ */
+export async function ensureFreshAccessToken(): Promise<string | null> {
+  const expiresAt = accessTokenExpiresAt();
+  const token = accessToken();
+  if (token !== null && expiresAt !== null && expiresAt - Date.now() > TOKEN_FRESHNESS_MARGIN_MS) {
+    return token;
+  }
+  const refreshed = await refreshAccessToken();
+  return refreshed ? accessToken() : null;
 }
 
 async function exchangeRefreshToken(): Promise<boolean> {
@@ -196,6 +236,8 @@ interface RequestOptions<TSchema extends z.ZodType> {
   params?: Record<string, string | number | boolean | undefined>;
   /** Skip the refresh-and-retry dance for the auth endpoints themselves. */
   allowRefresh?: boolean;
+  /** Which service the path belongs to; decides the origin and the unwrapping. */
+  service?: ApiService;
 }
 
 /**
@@ -205,11 +247,12 @@ interface RequestOptions<TSchema extends z.ZodType> {
 export async function apiRequest<TSchema extends z.ZodType>(
   options: RequestOptions<TSchema>,
 ): Promise<IpcResult<z.infer<TSchema>>> {
-  const { method, url, schema, body, params, allowRefresh = true } = options;
+  const { method, url, schema, body, params, allowRefresh = true, service = 'api' } = options;
 
   const config: AxiosRequestConfig = {
     method,
     url,
+    baseURL: service === 'chat' ? chatBase : baseUrl,
     ...(body === undefined ? {} : { data: body }),
     ...(params === undefined ? {} : { params }),
   };
@@ -244,13 +287,18 @@ export async function apiRequest<TSchema extends z.ZodType>(
     return ipcOk(empty.data);
   }
 
-  const envelope = apiEnvelopeSchema.safeParse(response.data);
-  if (!envelope.success) {
-    log.error('api_envelope_rejected', { url });
-    return ipcFail('API', 'The server returned an unexpected response.');
+  // The chat service answers its payload bare; the API wraps it.
+  let raw: unknown = response.data;
+  if (service === 'api') {
+    const envelope = apiEnvelopeSchema.safeParse(response.data);
+    if (!envelope.success) {
+      log.error('api_envelope_rejected', { url });
+      return ipcFail('API', 'The server returned an unexpected response.');
+    }
+    raw = envelope.data.data;
   }
 
-  const payload = schema.safeParse(envelope.data.data);
+  const payload = schema.safeParse(raw);
   if (!payload.success) {
     log.error('api_payload_rejected', { url, issues: payload.error.issues.length });
     return ipcFail('API', 'The server returned an unexpected response.');

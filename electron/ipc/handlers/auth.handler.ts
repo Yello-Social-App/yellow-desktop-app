@@ -22,6 +22,7 @@ import {
   loadPersistedRefreshToken,
   persistRefreshToken,
 } from '../../api/token-store';
+import { chatSocket } from '../../chat/socket';
 import { IPC_CHANNELS } from '../channels';
 import { registerIpcHandler } from '../register';
 
@@ -109,6 +110,9 @@ async function currentSession(): Promise<IpcResult<SessionResponse>> {
     // An unusable credential is "signed out", not an error to show the user.
     return profile.error.code === 'UNAUTHENTICATED' ? ipcOk(EMPTY_SESSION) : profile;
   }
+
+  // A usable session is what the live socket needs; it fetches its own token.
+  chatSocket.connect();
 
   return ipcOk(
     sessionResponseSchema.parse({
@@ -215,6 +219,9 @@ export function registerAuthHandlers(): void {
     IPC_CHANNELS.AUTH_LOGOUT,
     emptyRequestSchema,
     async (): Promise<IpcResult<SessionResponse>> => {
+      // Before the tokens go: a socket re-auth racing a logout has no token to find.
+      chatSocket.disconnect();
+
       if (accessToken() !== null) {
         // Revoke server-side, but a failure here still signs the user out locally.
         await apiRequest({

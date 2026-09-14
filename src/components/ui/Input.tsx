@@ -10,8 +10,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 /**
- * Focus state matches the design system: a 1px yellow border plus a 2px soft
- * outer glow.
+ * A tonal field: one step above the canvas, a hairline that turns yellow on
+ * focus with a soft outer glow.
  */
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { leadingIcon, trailingSlot, isInvalid = false, className, ...rest },
@@ -31,11 +31,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         ref={ref}
         aria-invalid={isInvalid}
         className={cn(
-          'font-body text-body text-on-surface transition-tone w-full rounded-lg border py-3',
-          'bg-surface-container-low placeholder:text-outline-variant',
-          'focus:ring-2 focus:outline-none',
+          'font-body text-body text-on-surface transition-tone h-11 w-full rounded-xl border',
+          'bg-surface-container-low placeholder:text-outline',
+          'focus:bg-surface-container-lowest focus:ring-2 focus:outline-none',
           isInvalid
-            ? 'border-error bg-error-container/20 focus:border-error focus:ring-error/20'
+            ? 'border-error focus:border-error focus:ring-error/20'
             : 'border-outline-variant focus:border-primary-container focus:ring-primary-container/20',
           leadingIcon === undefined ? 'pl-md' : 'pl-11',
           trailingSlot === undefined ? 'pr-md' : 'pr-11',

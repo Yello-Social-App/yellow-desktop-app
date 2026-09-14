@@ -1,5 +1,5 @@
 import { TriangleAlert } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { fetchReactionSummary, fetchReactors } from '@/features/feed/api';
 import { REACTION_LABELS, type Post } from '@/features/feed/types';
-import { useReportedRelationship } from '@/features/friends/hooks';
+import { useRelationship } from '@/features/friends/hooks';
 import { REACTION_TYPES, type ReactionType, type Reactor } from '@shared/ipc-types';
 import { cn } from '@/lib/cn';
 import { relativeTime } from '@/lib/relative-time';
@@ -113,19 +113,6 @@ export function ReactorsDialog({ post, isOpen, onClose }: ReactorsDialogProps) {
     });
   };
 
-  /**
-   * After a friend action the server's `friendStatus` for that row is stale;
-   * re-reading the first page is simpler than patching one row, and the list
-   * is short.
-   */
-  const refresh = useCallback(() => {
-    void fetchReactors(post.id, 0, selected).then((result) => {
-      if (result.ok) {
-        setLoaded({ tab, items: result.data.content, page: 0, hasMore: !result.data.last });
-      }
-    });
-  }, [post.id, selected, tab]);
-
   const tabs = [
     { type: undefined, label: 'All', count: counts?.total ?? null },
     ...REACTION_TYPES.map((type) => ({
@@ -186,7 +173,7 @@ export function ReactorsDialog({ post, isOpen, onClose }: ReactorsDialogProps) {
       {page !== null && page.items.length > 0 && (
         <ul className="stagger gap-md flex max-h-96 flex-col overflow-y-auto">
           {page.items.map((reactor) => (
-            <ReactorRow key={reactor.user.id} reactor={reactor} onChanged={refresh} />
+            <ReactorRow key={reactor.user.id} reactor={reactor} />
           ))}
         </ul>
       )}
@@ -202,14 +189,17 @@ export function ReactorsDialog({ post, isOpen, onClose }: ReactorsDialogProps) {
 
 interface ReactorRowProps {
   reactor: Reactor;
-  onChanged: () => void;
 }
 
-/** One person: who, what they sent, when, and where the viewer stands with them. */
-function ReactorRow({ reactor, onChanged }: ReactorRowProps) {
+/**
+ * One person: who, what they sent, when, and where the viewer stands with
+ * them. The row's `friendStatus` is the server's fresh answer; a mutation
+ * made here is answered with the next status, so nothing needs re-reading.
+ */
+function ReactorRow({ reactor }: ReactorRowProps) {
   const name = displayName(reactor.user);
   const reaction = REACTION_LABELS[reactor.type];
-  const control = useReportedRelationship(reactor.user.id, reactor.friendStatus, onChanged);
+  const control = useRelationship(reactor.user.id, reactor.friendStatus);
 
   return (
     <li className="gap-md animate-fade-up flex items-center">

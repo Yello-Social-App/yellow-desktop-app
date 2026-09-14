@@ -13,12 +13,18 @@
  * whichever list holds the post, so `submit` and `remove` report what changed
  * and the caller applies it.
  */
-import type { Comment } from '@shared/ipc-types';
+import type { Comment, ReactionType } from '@shared/ipc-types';
 import { create } from 'zustand';
 
 import { createLogger } from '@/lib/logger';
 
-import { addComment, deleteComment, fetchComments, toggleCommentReaction } from './api';
+import {
+  addComment,
+  deleteComment,
+  editComment,
+  fetchComments,
+  toggleCommentReaction,
+} from './api';
 import { flattenThread, replyRootOf } from './types';
 import { PRIMARY_REACTION } from '@/features/feed/types';
 
@@ -65,9 +71,11 @@ interface CommentsState {
   setReplyTo: (postId: string, comment: Comment | null) => void;
   /** Resolves to the new comment, or null when the post rejected it. */
   submit: (postId: string, content: string) => Promise<Comment | null>;
+  /** Resolves true when the server took the new text. */
+  edit: (postId: string, commentId: string, content: string) => Promise<boolean>;
   /** Resolves true when the comment (and any replies shown under it) went. */
   remove: (postId: string, commentId: string) => Promise<boolean>;
-  toggleReaction: (postId: string, commentId: string) => Promise<void>;
+  toggleReaction: (postId: string, commentId: string, type?: ReactionType) => Promise<void>;
   clearError: (postId: string) => void;
 }
 
@@ -178,6 +186,34 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
       return result.data;
     },
 
+    edit: async (postId, commentId, content) => {
+      if (threadOf(postId).pendingIds.has(commentId)) {
+        return false;
+      }
+
+      patch(postId, { pendingIds: withPending(threadOf(postId).pendingIds, commentId, true) });
+      const result = await editComment(commentId, content);
+
+      if (!result.ok) {
+        patch(postId, {
+          pendingIds: withPending(threadOf(postId).pendingIds, commentId, false),
+          error: result.error.message,
+        });
+        return false;
+      }
+
+      // The server's record replaces ours, minus the nested replies the plain
+      // comment shape drops — those are already rows of their own here.
+      patch(postId, {
+        items: threadOf(postId).items.map((item) =>
+          item.id === commentId ? { ...item, content: result.data.content } : item,
+        ),
+        pendingIds: withPending(threadOf(postId).pendingIds, commentId, false),
+      });
+      log.info('comment_edited', {});
+      return true;
+    },
+
     remove: async (postId, commentId) => {
       if (threadOf(postId).pendingIds.has(commentId)) {
         return false;
@@ -206,13 +242,18 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
       return true;
     },
 
-    toggleReaction: async (postId, commentId) => {
+    toggleReaction: async (postId, commentId, type) => {
       const existing = threadOf(postId).items.find((item) => item.id === commentId);
       if (existing === undefined || threadOf(postId).pendingIds.has(commentId)) {
         return;
       }
 
-      const hadReacted = existing.viewerReaction !== null && existing.viewerReaction !== undefined;
+      const current = existing.viewerReaction ?? null;
+      // The server removes when sent the type already held and sets it
+      // otherwise, so clearing means sending back whatever the viewer had.
+      const sent = type ?? current ?? PRIMARY_REACTION;
+      const next = sent === current ? null : sent;
+      const countDelta = next === null ? -1 : current === null ? 1 : 0;
 
       // Optimistic: repaint now, reconcile with the server's summary below.
       patch(postId, {
@@ -220,20 +261,15 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
           item.id === commentId
             ? {
                 ...item,
-                viewerReaction: hadReacted ? null : PRIMARY_REACTION,
-                reactionCount: Math.max(0, item.reactionCount + (hadReacted ? -1 : 1)),
+                viewerReaction: next,
+                reactionCount: Math.max(0, item.reactionCount + countDelta),
               }
             : item,
         ),
         pendingIds: withPending(threadOf(postId).pendingIds, commentId, true),
       });
 
-      // The toggle removes when sent the type already held, so clearing means
-      // sending back whatever the viewer had — not always LIKE.
-      const result = await toggleCommentReaction(
-        commentId,
-        existing.viewerReaction ?? PRIMARY_REACTION,
-      );
+      const result = await toggleCommentReaction(commentId, sent);
 
       if (!result.ok) {
         // Roll back to the last state the server confirmed.

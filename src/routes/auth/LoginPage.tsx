@@ -35,7 +35,7 @@ export function LoginPage() {
   return (
     <AuthLayout>
       <main className="max-w-auth-canvas flex w-full flex-col">
-        <AuthBrand tagline="Welcome back to your sanctuary." />
+        <AuthBrand tagline="Sign in to catch up with your friends." />
 
         <Card elevation="floating" className="p-lg md:p-xl rounded-3xl">
           <form className="gap-lg flex flex-col" onSubmit={handleSubmit} noValidate>

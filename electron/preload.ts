@@ -10,19 +10,25 @@
  *
  * This file stays deliberately thin: it forwards, it does not decide. Request
  * validation happens in the main process, response validation in the renderer.
+ * The one inbound channel (`chat:event`) hands the renderer a value it parses
+ * itself before use.
  */
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 import { IPC_CHANNELS } from './ipc/channels';
 
 import type {
   AcknowledgedResponse,
   AppInfoResponse,
-  AvatarCommitRequest,
-  AvatarPickResponse,
+  ChatMessageResponse,
+  ChatSocketState,
   CommentPage,
   CommentResponse,
+  ConversationIdRequest,
+  ConversationPage,
+  ConversationResponse,
   CreateCommentRequest,
+  CreateConversationRequest,
   CreatePostRequest,
   DiscardImagesRequest,
   DeleteCommentRequest,
@@ -32,18 +38,20 @@ import type {
   FeedRequest,
   FeedResponse,
   ForgotPasswordRequest,
+  FriendEntryPage,
+  FriendEntryResponse,
   FriendUserRequest,
-  ListReactorsRequest,
-  FriendshipIdRequest,
-  FriendshipPage,
-  FriendshipResponse,
   IpcResult,
   ListCommentsRequest,
-  ListNotificationsRequest,
+  ListConversationsRequest,
+  ListFriendRequestsRequest,
+  ListMessagesRequest,
+  LinkPreviewRequest,
+  LinkPreviewResponse,
+  ListReactorsRequest,
   LoginRequest,
-  NotificationIdRequest,
-  NotificationPage,
-  NotificationResponse,
+  MarkReadRequest,
+  MessagePage,
   PageRequest,
   PostIdRequest,
   PostResponse,
@@ -57,15 +65,15 @@ import type {
   RepostRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
+  SendChatMessageRequest,
   SessionResponse,
   ShareLinkCopiedResponse,
-  ShareLinkResponse,
   StageImagesRequest,
   StageImagesResponse,
   ToggleReactionRequest,
-  UnreadCount,
+  TypingRequest,
+  UpdateCommentRequest,
   UpdatePostRequest,
-  UpdateProfileRequest,
   UserPostsRequest,
   UserPostsResponse,
   VerifyOtpRequest,
@@ -113,8 +121,6 @@ const bridge: YelloBridge = {
       invoke<PostResponse>(IPC_CHANNELS.POSTS_UPDATE, request),
     remove: (request: PostIdRequest) => invoke<DeletedResponse>(IPC_CHANNELS.POSTS_DELETE, request),
     repost: (request: RepostRequest) => invoke<PostResponse>(IPC_CHANNELS.POSTS_REPOST, request),
-    shareLink: (request: PostIdRequest) =>
-      invoke<ShareLinkResponse>(IPC_CHANNELS.POSTS_SHARE_LINK, request),
     copyShareLink: (request: PostIdRequest) =>
       invoke<ShareLinkCopiedResponse>(IPC_CHANNELS.POSTS_COPY_SHARE_LINK, request),
   },
@@ -123,6 +129,8 @@ const bridge: YelloBridge = {
       invoke<CommentResponse>(IPC_CHANNELS.COMMENTS_CREATE, request),
     list: (request: ListCommentsRequest) =>
       invoke<CommentPage>(IPC_CHANNELS.COMMENTS_LIST, request),
+    update: (request: UpdateCommentRequest) =>
+      invoke<CommentResponse>(IPC_CHANNELS.COMMENTS_UPDATE, request),
     remove: (request: DeleteCommentRequest) =>
       invoke<DeletedResponse>(IPC_CHANNELS.COMMENTS_DELETE, request),
   },
@@ -135,36 +143,63 @@ const bridge: YelloBridge = {
       invoke<ReactorPage>(IPC_CHANNELS.REACTIONS_LIST, request),
   },
   friends: {
-    list: (request: PageRequest) => invoke<FriendshipPage>(IPC_CHANNELS.FRIENDS_LIST, request),
-    pendingRequests: (request: PageRequest) =>
-      invoke<FriendshipPage>(IPC_CHANNELS.FRIENDS_PENDING_REQUESTS, request),
+    list: (request: PageRequest) => invoke<FriendEntryPage>(IPC_CHANNELS.FRIENDS_LIST, request),
+    requests: (request: ListFriendRequestsRequest) =>
+      invoke<FriendEntryPage>(IPC_CHANNELS.FRIENDS_REQUESTS, request),
+    blocked: (request: PageRequest) =>
+      invoke<FriendEntryPage>(IPC_CHANNELS.FRIENDS_BLOCKED, request),
     sendRequest: (request: FriendUserRequest) =>
-      invoke<FriendshipResponse>(IPC_CHANNELS.FRIENDS_SEND_REQUEST, request),
-    accept: (request: FriendshipIdRequest) =>
-      invoke<FriendshipResponse>(IPC_CHANNELS.FRIENDS_ACCEPT, request),
-    decline: (request: FriendshipIdRequest) =>
-      invoke<FriendshipResponse>(IPC_CHANNELS.FRIENDS_DECLINE, request),
+      invoke<FriendEntryResponse>(IPC_CHANNELS.FRIENDS_SEND_REQUEST, request),
+    cancelRequest: (request: FriendUserRequest) =>
+      invoke<FriendEntryResponse>(IPC_CHANNELS.FRIENDS_CANCEL_REQUEST, request),
+    accept: (request: FriendUserRequest) =>
+      invoke<FriendEntryResponse>(IPC_CHANNELS.FRIENDS_ACCEPT, request),
+    decline: (request: FriendUserRequest) =>
+      invoke<FriendEntryResponse>(IPC_CHANNELS.FRIENDS_DECLINE, request),
     remove: (request: FriendUserRequest) =>
       invoke<DeletedResponse>(IPC_CHANNELS.FRIENDS_REMOVE, request),
-  },
-  notifications: {
-    list: (request: ListNotificationsRequest) =>
-      invoke<NotificationPage>(IPC_CHANNELS.NOTIFICATIONS_LIST, request),
-    unreadCount: () => invoke<UnreadCount>(IPC_CHANNELS.NOTIFICATIONS_UNREAD_COUNT),
-    markRead: (request: NotificationIdRequest) =>
-      invoke<NotificationResponse>(IPC_CHANNELS.NOTIFICATIONS_MARK_READ, request),
-    markAllRead: () => invoke<UnreadCount>(IPC_CHANNELS.NOTIFICATIONS_MARK_ALL_READ),
+    block: (request: FriendUserRequest) =>
+      invoke<FriendEntryResponse>(IPC_CHANNELS.FRIENDS_BLOCK, request),
+    unblock: (request: FriendUserRequest) =>
+      invoke<FriendEntryResponse>(IPC_CHANNELS.FRIENDS_UNBLOCK, request),
   },
   profile: {
-    update: (request: UpdateProfileRequest) =>
-      invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_UPDATE, request),
-    pickAvatar: () => invoke<AvatarPickResponse>(IPC_CHANNELS.PROFILE_PICK_AVATAR),
-    commitAvatar: (request: AvatarCommitRequest) =>
-      invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_COMMIT_AVATAR, request),
     listPosts: (request: UserPostsRequest) =>
       invoke<UserPostsResponse>(IPC_CHANNELS.PROFILE_LIST_POSTS, request),
     getUser: (request: PublicUserRequest) =>
       invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_GET_USER, request),
+  },
+  chat: {
+    listConversations: (request: ListConversationsRequest) =>
+      invoke<ConversationPage>(IPC_CHANNELS.CHAT_LIST_CONVERSATIONS, request),
+    createConversation: (request: CreateConversationRequest) =>
+      invoke<ConversationResponse>(IPC_CHANNELS.CHAT_CREATE_CONVERSATION, request),
+    getConversation: (request: ConversationIdRequest) =>
+      invoke<ConversationResponse>(IPC_CHANNELS.CHAT_GET_CONVERSATION, request),
+    listMessages: (request: ListMessagesRequest) =>
+      invoke<MessagePage>(IPC_CHANNELS.CHAT_LIST_MESSAGES, request),
+    sendMessage: (request: SendChatMessageRequest) =>
+      invoke<ChatMessageResponse>(IPC_CHANNELS.CHAT_SEND_MESSAGE, request),
+    markRead: (request: MarkReadRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.CHAT_MARK_READ, request),
+    typing: (request: TypingRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.CHAT_TYPING, request),
+    socketState: () => invoke<ChatSocketState>(IPC_CHANNELS.CHAT_SOCKET_STATE),
+    onEvent: (listener: (event: unknown) => void) => {
+      // The IpcRendererEvent is not forwarded: it carries the sender, which
+      // the page has no business holding. Only the payload crosses.
+      const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(IPC_CHANNELS.CHAT_EVENT, handler);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.CHAT_EVENT, handler);
+      };
+    },
+  },
+  links: {
+    preview: (request: LinkPreviewRequest) =>
+      invoke<LinkPreviewResponse>(IPC_CHANNELS.LINKS_PREVIEW, request),
   },
   files: {
     exportPosts: (request: ExportPostsRequest) =>

@@ -7,18 +7,18 @@ interface EmptyStateProps {
   action?: ReactNode;
 }
 
-/** The shared "nothing here yet" surface used across the dashboard. */
+/** The shared "nothing here yet" surface. */
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div className="border-outline-variant gap-md px-lg py-xl flex flex-col items-center rounded-xl border border-dashed text-center">
+    <div className="gap-md px-lg py-xl flex flex-col items-center text-center">
       <span
         aria-hidden
-        className="bg-surface-container-low text-primary flex size-12 items-center justify-center rounded-xl"
+        className="bg-surface-container text-primary ring-outline-variant flex size-14 items-center justify-center rounded-2xl ring-1"
       >
         {icon}
       </span>
       <div className="gap-xs flex flex-col">
-        <h3 className="font-heading text-h3 text-on-surface">{title}</h3>
+        <h3 className="font-heading text-h2 text-on-surface">{title}</h3>
         <p className="font-body-sm text-body-sm text-on-surface-variant max-w-copy">
           {description}
         </p>

@@ -244,7 +244,7 @@ export function PostEditor({ post, isSaving, onSave, onCancel }: PostEditorProps
             disabled={isSaving || room === 0}
             title={
               room > 0
-                ? `Add up to ${String(room)} more (JPEG, PNG or GIF, 5 MB each)`
+                ? `Add up to ${String(room)} more (JPEG, PNG, GIF or WebP, 5 MB each)`
                 : `That is the limit of ${String(POST_MAX_IMAGES)} photos`
             }
             onClick={attach}
