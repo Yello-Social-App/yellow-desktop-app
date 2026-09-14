@@ -6,10 +6,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Tracks the Yello API changes of 2026-09-11.
+## [0.3.0] - 2026-09-15
+
+Moves to the live deployment at `api.yello.cachewraith.com`, adds real-time
+chat, redesigns the interface, and previews three surfaces the API does not
+serve yet. Also carries the 2026-09-11 API changes that were merged after
+0.2.0 (listed under their own headings below).
 
 ### Added
 
+- **Real-time chat.** Direct and group conversations on the yello-chat
+  service: history, sending, read receipts (✓/✓✓ from the participants'
+  markers), typing indicators and presence over a WebSocket owned by the
+  main process, with an HTTP fallback for sends keyed by `clientId` so a
+  retry cannot duplicate. Start a chat from a profile, a friend row, the
+  right rail, or the "New message" picker (one friend = direct, several =
+  group). A "Live" indicator in the top bar shows the socket's state.
+- **Friends, fully.** Cancel a sent request, see requests you sent, block and
+  unblock, and a Blocked list — every route addressed by the other user's id
+  as the API now models it. A profile's buttons read the server's own
+  `friendStatus`.
+- **Comment editing** (`PUT /comments/{id}`), by the author.
+- **Clickable links** in posts, comments and chat, opening in the system
+  browser. The first link on a post (without photos), on a comment, and in a
+  quoted original gets a **preview card** — GitHub, YouTube (via oEmbed) and
+  any page with Open Graph tags — unfurled in the main process with SSRF
+  guards, and the thumbnail re-encoded to a small JPEG so the CSP stays
+  closed.
+- **Six reactions.** Hovering the heart opens a strip of 👍 ❤️ 😄 😮 😢 😠 on
+  posts and comments; the button shows what you chose.
+- **Light theme.** Settings → Appearance: dark (default), light, or system.
+- **Communities, Showcase and Stories** (preview). Reddit-style communities
+  with votes and per-community pages; a KhmerCoder-style project showcase
+  with a featured strip, filters, detail pages and a submit form; Instagram-
+  style stories with a viewer that grows out of the tapped ring and shrinks
+  back into it. These have no API yet: they run on sample data and keep what
+  you do in memory for the session, and each carries a "Preview" chip.
+- **Linux packages for every family**: `.rpm` (Fedora, openSUSE, RHEL) and
+  `.pacman` (Arch, Manjaro) join `.deb` and `.AppImage`.
 - **Resend code.** Both code screens — verifying a registration and resetting a
   password — offer "Resend code", backed by `POST /auth/resend-otp`. The button
   waits out the server's one-minute cooldown so it cannot be pressed into a
@@ -26,6 +60,19 @@ Tracks the Yello API changes of 2026-09-11.
 
 ### Changed
 
+- **Live server.** The app targets `https://api.yello.cachewraith.com`
+  (`prod`, the default) or `http://localhost:8080` (`local`); the `dev`
+  target and the `dev:prod`/`package:prod` scripts are gone. Every REST path
+  is under `/v1`. Set `YELLO_CHAT_BASE_URL` only when running the two
+  services on different local ports.
+- **Redesigned interface.** Dark-first palette with Yello yellow as the one
+  accent, pill controls, a 56px frosted top bar, an icon navigation rail with
+  count badges, a centred column of spaced post cards, a stories row and a
+  "For you | Communities" tab on Home, and a right rail (your counts, friend
+  requests with inline accept/decline, friends online, recent chats, popular
+  communities, trending projects). On Messages the column widens into the
+  rail's slot with a transition rather than swapping frames.
+- **WebP** is accepted for post images; the server decodes it.
 - **Password reset is now email → code → new password.** `/forgot-password`
   emails a six-digit code; the same screen checks it; `/reset-password` takes
   only the new password. There is nothing to paste: the reset token the API
@@ -42,6 +89,37 @@ Tracks the Yello API changes of 2026-09-11.
 - Post cards read `isOwner` from the server to decide whether to show edit and
   delete, and author names everywhere use the `fullName` the API now sends on
   every author summary.
+
+### Removed
+
+- **Notifications**, **profile editing** and **avatar upload**: the live API
+  has no routes for them (`/notifications`, `PUT /users/me`,
+  `PUT /users/me/avatar` all answer 404). The sidebar badges now count
+  unread messages and friend requests instead. Profile details are set at
+  sign-up.
+- The sample chat data; conversations are real.
+
+### Fixed
+
+- Multipart image keys are the server's `images[]` / `removeImageIds[]`, so
+  uploads are read as lists.
+- The share link is the post's own `shareUrl`; the removed `share-link`
+  route is no longer called.
+- Link preview cards in comments and quoted reposts render at their full
+  width (a bare `max-w-md` resolved to the 16px spacing token).
+
+### Security
+
+- The chat socket authenticates by sending the access token as the first
+  frame over `wss://`, never in the URL; the token never enters the renderer.
+  Frames are parsed against a schema in the main process before being pushed
+  and parsed again on arrival.
+- Link unfurling is treated as SSRF: web URLs only, hosts must resolve to
+  public addresses (re-checked on every redirect), bodies capped and
+  time-limited, and the image decoded and re-encoded by `nativeImage`
+  before it reaches the page. Unfurling from the client means a linked site
+  sees the reader's IP, as a browser visit would; no cookies are sent.
+- External links open only over `http(s)`; every other scheme is refused.
 
 ## [0.2.0] - 2026-09-07
 

@@ -18,14 +18,14 @@ Settings; the tokens live in `src/styles/globals.css`.
 Every tagged release carries installers for all three platforms on the
 [releases page](https://github.com/Yello-Social-App/yellow-desktop-app/releases):
 
-| Platform                                | File                          |
-| --------------------------------------- | ----------------------------- |
-| Ubuntu, Debian, Mint                    | `.deb`                        |
-| Fedora, openSUSE, RHEL                  | `.rpm`                        |
-| Arch, Manjaro, EndeavourOS              | `.pacman`                     |
-| Any other Linux                         | `.AppImage`                   |
-| macOS (Apple Silicon and Intel)         | `.dmg`, `.zip`                |
-| Windows                                 | `.exe` (NSIS installer)       |
+| Platform                        | File                    |
+| ------------------------------- | ----------------------- |
+| Ubuntu, Debian, Mint            | `.deb`                  |
+| Fedora, openSUSE, RHEL          | `.rpm`                  |
+| Arch, Manjaro, EndeavourOS      | `.pacman`               |
+| Any other Linux                 | `.AppImage`             |
+| macOS (Apple Silicon and Intel) | `.dmg`, `.zip`          |
+| Windows                         | `.exe` (NSIS installer) |
 
 They are unsigned, so macOS Gatekeeper and Windows SmartScreen will both warn on
 first launch until signing certificates are added to the release workflow.
@@ -210,16 +210,16 @@ user can still see attached and fail the post at publish time.
 Every endpoint of the Yello API (`/v1`, 34) and the chat service (`/ws`, 6) is
 wired through the main process and reachable from a screen.
 
-| Area      | Endpoints                                                                                     | Where                                                                   |
-| --------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Auth      | register, verify-otp, resend-otp, login, refresh, logout, forgot-password, reset-password     | `/login`, `/register`, `/verify`, `/forgot-password`, `/reset-password` |
+| Area      | Endpoints                                                                                    | Where                                                                   |
+| --------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Auth      | register, verify-otp, resend-otp, login, refresh, logout, forgot-password, reset-password    | `/login`, `/register`, `/verify`, `/forgot-password`, `/reset-password` |
 | Users     | `GET /users/me`, `GET /users/{id}`, `GET /users/{id}/posts`, block / unblock                 | `/profile`, `/users/:userId`                                            |
-| Posts     | create (text, visibility, images), get, update (incl. images), delete, repost                 | composer, post card, `/posts/:postId`                                   |
-| Feed      | `GET /feed` (cursor-paged)                                                                    | `/feed`                                                                 |
-| Comments  | create (incl. replies via `parentCommentId`), list (replies nested), update, delete           | the thread under a post card                                            |
-| Reactions | toggle, summary, who-reacted — for both `POST` and `COMMENT` targets                          | like buttons; the reactions dialog                                      |
-| Friends   | send, cancel, accept, decline, unfriend; friends, requests (received / sent), blocked          | `/friends`, the right rail, and the buttons on a profile                |
-| Chat      | conversations (list, create, get), messages (history, send), read marker; live socket frames  | `/messages`, `/messages/:conversationId`, the right rail                |
+| Posts     | create (text, visibility, images), get, update (incl. images), delete, repost                | composer, post card, `/posts/:postId`                                   |
+| Feed      | `GET /feed` (cursor-paged)                                                                   | `/feed`                                                                 |
+| Comments  | create (incl. replies via `parentCommentId`), list (replies nested), update, delete          | the thread under a post card                                            |
+| Reactions | toggle, summary, who-reacted — for both `POST` and `COMMENT` targets                         | like buttons; the reactions dialog                                      |
+| Friends   | send, cancel, accept, decline, unfriend; friends, requests (received / sent), blocked        | `/friends`, the right rail, and the buttons on a profile                |
+| Chat      | conversations (list, create, get), messages (history, send), read marker; live socket frames | `/messages`, `/messages/:conversationId`, the right rail                |
 
 A post's share link is the `shareUrl` on the post itself; copying it goes
 through the main process, which re-reads the post so the clipboard only ever
