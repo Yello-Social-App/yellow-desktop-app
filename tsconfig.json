@@ -31,5 +31,5 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["src", "electron", "shared", "scripts", "vite.config.ts"]
+  "include": ["src", "electron", "shared", "scripts", "vite.config.mts"]
 }

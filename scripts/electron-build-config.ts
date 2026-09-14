@@ -16,6 +16,14 @@ export const ELECTRON_OUT_DIR = 'dist-electron';
 /** Electron 44 ships Node 22. */
 const NODE_TARGET = 'node22';
 
+function bakedApiTarget(isDev: boolean): Record<string, string> {
+  const target = process.env.YELLO_API_TARGET;
+  if (isDev || target === undefined || target === '') {
+    return {};
+  }
+  return { 'process.env.YELLO_API_TARGET': JSON.stringify(target) };
+}
+
 export function electronBuildOptions(isDev: boolean): BuildOptions {
   return {
     entryPoints: ['electron/main.ts', 'electron/preload.ts'],
@@ -29,6 +37,10 @@ export function electronBuildOptions(isDev: boolean): BuildOptions {
     external: ['electron', 'electron-updater'],
     sourcemap: isDev ? 'inline' : false,
     minify: !isDev,
+    // A packaged app has no shell environment to read, so a target chosen at
+    // build time (`npm run package:prod`) is baked into the bundle. Dev builds
+    // leave it alone so the runner's environment stays the source of truth.
+    define: bakedApiTarget(isDev),
     logLevel: 'warning',
   };
 }

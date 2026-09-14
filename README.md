@@ -40,14 +40,23 @@ Other scripts:
 
 ### Pointing at a different API
 
-The base URL is a **main-process** setting, not a `VITE_*` one:
+The base URL is a **main-process** setting, not a `VITE_*` one. The known
+servers are named in `API_TARGETS` in `electron/config.ts`:
+
+| Target  | Command                                       |
+| ------- | --------------------------------------------- |
+| `local` | `npm run dev:local`                           |
+| `dev`   | `npm run dev` (default)                       |
+| `prod`  | `npm run dev:prod`, or `npm run package:prod` |
+
+Any other server can be given as a full URL, which wins over the target name:
 
 ```sh
 YELLO_API_BASE_URL=https://staging.example.com npm run dev
 ```
 
-It defaults to `https://dev.yello-api.cachewraith.com`. HTTPS is required unless
-the host is loopback.
+HTTPS is required unless the host is loopback. A packaged build bakes in the
+target that was set when it was built (`YELLO_API_TARGET`), defaulting to `dev`.
 
 ### Signing in
 
