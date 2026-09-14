@@ -1,7 +1,14 @@
-/** Every server path in one place, so a version bump is a one-file change. */
+/**
+ * Every server path in one place, so a version bump is a one-file change.
+ *
+ * Two services share the host. The Yello API is mounted under `/v1` and wraps
+ * every answer in an envelope; the chat service (yello-chat) is mounted under
+ * `/ws` and answers bare JSON — `apiRequest` is told which it is talking to.
+ */
 export const API_VERSION = 'v1';
 
-const base = `/api/${API_VERSION}`;
+const base = `/${API_VERSION}`;
+const chat = '/ws';
 
 /**
  * Path segments are always percent-encoded here rather than at the call site,
@@ -23,9 +30,9 @@ export const ENDPOINTS = {
   },
   users: {
     me: `${base}/users/me`,
-    avatar: `${base}/users/me/avatar`,
     byId: (userId: string) => `${base}/users/${seg(userId)}`,
     posts: (userId: string) => `${base}/users/${seg(userId)}/posts`,
+    block: (userId: string) => `${base}/users/${seg(userId)}/block`,
   },
   feed: {
     list: `${base}/feed`,
@@ -34,7 +41,6 @@ export const ENDPOINTS = {
     create: `${base}/posts`,
     byId: (postId: string) => `${base}/posts/${seg(postId)}`,
     repost: (postId: string) => `${base}/posts/${seg(postId)}/repost`,
-    shareLink: (postId: string) => `${base}/posts/${seg(postId)}/share-link`,
     comments: (postId: string) => `${base}/posts/${seg(postId)}/comments`,
   },
   comments: {
@@ -50,15 +56,19 @@ export const ENDPOINTS = {
   friends: {
     list: `${base}/friends`,
     requests: `${base}/friends/requests`,
+    blocked: `${base}/friends/blocked`,
+    /** Send (POST) and cancel (DELETE) a request, by the other user's id. */
     requestTo: (userId: string) => `${base}/friends/requests/${seg(userId)}`,
-    accept: (friendshipId: string) => `${base}/friends/requests/${seg(friendshipId)}/accept`,
-    decline: (friendshipId: string) => `${base}/friends/requests/${seg(friendshipId)}/decline`,
+    accept: (userId: string) => `${base}/friends/requests/${seg(userId)}/accept`,
+    decline: (userId: string) => `${base}/friends/requests/${seg(userId)}/decline`,
     remove: (userId: string) => `${base}/friends/${seg(userId)}`,
   },
-  notifications: {
-    list: `${base}/notifications`,
-    unreadCount: `${base}/notifications/unread-count`,
-    markRead: (notificationId: string) => `${base}/notifications/${seg(notificationId)}/read`,
-    markAllRead: `${base}/notifications/read-all`,
+  chat: {
+    conversations: `${chat}/conversations`,
+    conversation: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}`,
+    messages: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/messages`,
+    read: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/read`,
+    /** The live socket, relative to the API origin (wss:// for https://). */
+    socket: chat,
   },
 } as const;

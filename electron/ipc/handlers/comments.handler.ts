@@ -23,6 +23,7 @@ import {
   deletedResponseSchema,
   ipcOk,
   listCommentsRequestSchema,
+  updateCommentRequestSchema,
   type CommentPage,
   type CommentResponse,
   type DeletedResponse,
@@ -67,6 +68,27 @@ export function registerCommentHandlers(): void {
         schema: commentPageSchema,
         params: { page, size },
       }),
+  );
+
+  registerIpcHandler(
+    IPC_CHANNELS.COMMENTS_UPDATE,
+    updateCommentRequestSchema,
+    async ({ commentId, content }): Promise<IpcResult<CommentResponse>> => {
+      // Only the commenter may edit; the server answers ACCESS_DENIED otherwise.
+      const result = await apiRequest({
+        method: 'put',
+        url: ENDPOINTS.comments.byId(commentId),
+        body: { content },
+        schema: commentSchema,
+      });
+
+      if (!result.ok) {
+        return result;
+      }
+
+      log.info('comment_updated', {});
+      return ipcOk(commentResponseSchema.parse({ comment: result.data }));
+    },
   );
 
   registerIpcHandler(

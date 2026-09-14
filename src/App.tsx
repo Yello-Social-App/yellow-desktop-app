@@ -17,8 +17,11 @@ import { VerifyOtpPage } from '@/routes/auth/VerifyOtpPage';
 const FeedPage = lazy(() => import('@/routes/feed/FeedPage'));
 const PostPage = lazy(() => import('@/routes/feed/PostPage'));
 const FriendsPage = lazy(() => import('@/routes/friends/FriendsPage'));
+const CommunitiesPage = lazy(() => import('@/routes/communities/CommunitiesPage'));
+const CommunityPage = lazy(() => import('@/routes/communities/CommunityPage'));
+const ShowcasePage = lazy(() => import('@/routes/showcase/ShowcasePage'));
+const ProjectPage = lazy(() => import('@/routes/showcase/ProjectPage'));
 const MessagesPage = lazy(() => import('@/routes/messages/MessagesPage'));
-const NotificationsPage = lazy(() => import('@/routes/notifications/NotificationsPage'));
 const ProfilePage = lazy(() => import('@/routes/profile/ProfilePage'));
 const UserProfilePage = lazy(() => import('@/routes/profile/UserProfilePage'));
 const SettingsPage = lazy(() => import('@/routes/settings/SettingsPage'));
@@ -59,8 +62,12 @@ export function App() {
                 <Route path="/feed" element={<FeedPage />} />
                 <Route path="/posts/:postId" element={<PostPage />} />
                 <Route path="/messages" element={<MessagesPage />} />
-                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/messages/:conversationId" element={<MessagesPage />} />
                 <Route path="/friends" element={<FriendsPage />} />
+                <Route path="/communities" element={<CommunitiesPage />} />
+                <Route path="/c/:slug" element={<CommunityPage />} />
+                <Route path="/showcase" element={<ShowcasePage />} />
+                <Route path="/showcase/:projectId" element={<ProjectPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/users/:userId" element={<UserProfilePage />} />
                 <Route path="/settings" element={<SettingsPage />} />

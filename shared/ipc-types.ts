@@ -17,7 +17,7 @@
 import { z } from 'zod';
 
 /* ------------------------------------------------------------------ *
- * Domain — mirrors the Yello API (openapi 3.1, /v3/api-docs)
+ * Domain — mirrors the Yello API (/docs/json) and the yello-chat service (/ws/docs)
  * ------------------------------------------------------------------ */
 
 /**
@@ -42,6 +42,12 @@ export const userSchema = z.object({
   bio: optionalText(1000),
   status: optionalText(64),
   createdAt: optionalText(64),
+  /**
+   * Only on `GET /users/{id}`: the viewer's relationship to this person, as the
+   * server sees it. Held as text rather than an enum so a status added later
+   * cannot void the profile (A10); compare against FRIEND_STATUSES.
+   */
+  friendStatus: optionalText(32),
 });
 
 export const authorSchema = z.object({
@@ -156,46 +162,31 @@ export const threadCommentSchema = commentSchema.extend({
     .transform((value) => value ?? []),
 });
 
-export const FRIENDSHIP_STATUSES = ['PENDING', 'ACCEPTED', 'DECLINED', 'BLOCKED'] as const;
+export const FRIEND_STATUSES = [
+  'SELF',
+  'FRIENDS',
+  'REQUEST_SENT',
+  'REQUEST_RECEIVED',
+  'NONE',
+] as const;
 
-export const friendshipSchema = z.object({
-  id: z.string().min(1).max(64),
-  /** Always the other party, never the caller — the same shape works both ways. */
+/**
+ * What every friendship mutation returns, and each row of the friends,
+ * requests and blocked lists. There is no friendship id anywhere: the other
+ * user's id addresses every route, and `friendStatus` says what the button
+ * should read now.
+ */
+export const friendEntrySchema = z.object({
+  /** Always the other party, never the caller. */
   user: authorSchema,
-  status: z
+  /** Text rather than an enum so a status added later cannot void a list (A10). */
+  friendStatus: z
     .string()
     .max(32)
     .nullish()
-    .transform((value) => value ?? 'PENDING'),
-  createdAt: timestamp,
-  respondedAt: optionalText(64),
-});
-
-export const NOTIFICATION_TYPES = [
-  'FRIEND_REQUEST',
-  'FRIEND_ACCEPTED',
-  'COMMENT',
-  'REPOST',
-] as const;
-
-export const notificationSchema = z.object({
-  id: z.string().min(1).max(64),
-  /**
-   * Held as text rather than an enum on purpose: a type the server adds later
-   * must not make the whole list unparseable (A10). Compare against
-   * NOTIFICATION_TYPES and fall through to a generic row.
-   */
-  type: z.string().min(1).max(64),
-  /** Null only for system-raised notifications. */
-  actor: authorSchema.nullish(),
-  /** A friendship, comment or post id, depending on `type`. */
-  targetId: optionalText(64),
-  read: z
-    .boolean()
-    .nullish()
-    .transform((value) => value ?? false),
-  readAt: optionalText(64),
-  createdAt: timestamp,
+    .transform((value) => value ?? 'NONE'),
+  /** Lists only: when the friendship was accepted / the request was sent. */
+  since: optionalText(64),
 });
 
 /**
@@ -256,10 +247,8 @@ export type Author = z.infer<typeof authorSchema>;
 export type Post = z.infer<typeof postSchema>;
 export type Comment = z.infer<typeof commentSchema>;
 export type ThreadComment = z.infer<typeof threadCommentSchema>;
-export type Friendship = z.infer<typeof friendshipSchema>;
-export type Notification = z.infer<typeof notificationSchema>;
-export type FriendshipStatus = (typeof FRIENDSHIP_STATUSES)[number];
-export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+export type FriendEntry = z.infer<typeof friendEntrySchema>;
+export type FriendStatus = (typeof FRIEND_STATUSES)[number];
 export type ReactionType = z.infer<typeof reactionTypeSchema>;
 export type PostVisibility = z.infer<typeof postVisibilitySchema>;
 
@@ -488,14 +477,12 @@ export const repostRequestSchema = z.object({
   content: z.string().trim().max(5000).optional(),
 });
 
-export const shareLinkResponseSchema = z.object({ url: z.string().max(2048) });
-
 /**
- * Copying is done in the main process, from a URL the *server* returned for a
- * post id — the renderer never supplies the text that lands on the clipboard,
- * so a compromised renderer cannot plant arbitrary content there (A01). It also
- * sidesteps the default-deny permission policy, which refuses clipboard access
- * to the page.
+ * Copying is done in the main process, from the `shareUrl` the *server* returns
+ * for a post id — the renderer never supplies the text that lands on the
+ * clipboard, so a compromised renderer cannot plant arbitrary content there
+ * (A01). It also sidesteps the default-deny permission policy, which refuses
+ * clipboard access to the page.
  */
 export const shareLinkCopiedResponseSchema = z.object({
   url: z.string().max(2048),
@@ -541,14 +528,6 @@ export const listReactorsRequestSchema = z.object({
   size: z.number().int().min(1).max(50),
 });
 
-export const FRIEND_STATUSES = [
-  'SELF',
-  'FRIENDS',
-  'REQUEST_SENT',
-  'REQUEST_RECEIVED',
-  'NONE',
-] as const;
-
 /**
  * The viewer's relationship to a reactor, as the server reports it. Held as
  * text rather than an enum so a status added later cannot void the list
@@ -588,6 +567,11 @@ export const deleteCommentRequestSchema = z.object({
   commentId: z.string().min(1).max(64),
 });
 
+export const updateCommentRequestSchema = z.object({
+  commentId: z.string().min(1).max(64),
+  content: z.string().trim().min(1).max(COMMENT_MAX_LENGTH),
+});
+
 /* -- friends -- */
 
 export const pageRequestSchema = z.object({
@@ -595,71 +579,30 @@ export const pageRequestSchema = z.object({
   size: z.number().int().min(1).max(50),
 });
 
-/** Addressed by the other user's id: send, and unfriend. */
+/** Every friendship route is addressed by the other user's id. */
 export const friendUserRequestSchema = z.object({
   userId: z.string().min(1).max(64),
 });
 
-/** Addressed by the friendship id from the requests list: accept, and decline. */
-export const friendshipIdRequestSchema = z.object({
-  friendshipId: z.string().min(1).max(64),
+export const FRIEND_REQUEST_DIRECTIONS = ['received', 'sent'] as const;
+
+/** Requests waiting on the caller's answer, or ones the caller sent. */
+export const listFriendRequestsRequestSchema = pageRequestSchema.extend({
+  direction: z.enum(FRIEND_REQUEST_DIRECTIONS),
 });
 
-export const friendshipResponseSchema = z.object({ friendship: friendshipSchema });
+export const friendEntryResponseSchema = z.object({ entry: friendEntrySchema });
 
-export const friendshipPageSchema = pageOf(friendshipSchema);
-
-/* -- notifications -- */
-
-export const listNotificationsRequestSchema = z.object({
-  unreadOnly: z.boolean(),
-  page: z.number().int().min(0).max(1000),
-  size: z.number().int().min(1).max(50),
-});
-
-export const notificationPageSchema = pageOf(notificationSchema);
-
-export const notificationIdRequestSchema = z.object({
-  notificationId: z.string().min(1).max(64),
-});
-
-export const notificationResponseSchema = z.object({ notification: notificationSchema });
-
-export const unreadCountSchema = z.object({
-  unread: z
-    .number()
-    .int()
-    .nonnegative()
-    .nullish()
-    .transform((value) => value ?? 0),
-});
+export const friendEntryPageSchema = pageOf(friendEntrySchema);
 
 /* -- profile -- */
-
-export const PROFILE_LIMITS = {
-  fullNameMax: 100,
-  bioMax: 500,
-  usernameMin: 3,
-  usernameMax: 32,
-} as const;
-
-/** Every field is optional: omit what is not being changed. */
-export const updateProfileRequestSchema = z.object({
-  fullName: z.string().max(PROFILE_LIMITS.fullNameMax).optional(),
-  bio: z.string().max(PROFILE_LIMITS.bioMax).optional(),
-  username: z
-    .string()
-    .min(PROFILE_LIMITS.usernameMin)
-    .max(PROFILE_LIMITS.usernameMax)
-    .regex(/^[a-zA-Z0-9_.]+$/)
-    .optional(),
-});
 
 export const profileResponseSchema = z.object({ user: userSchema });
 
 /**
- * A public profile carries no `email` and no `status`; the shared user schema
- * already marks both optional, so one type covers both reads.
+ * A public profile carries no `email` and no `status` but does carry
+ * `friendStatus`; the shared user schema marks all three optional, so one type
+ * covers both reads.
  */
 export const publicUserRequestSchema = z.object({
   userId: z.string().min(1).max(64),
@@ -679,30 +622,281 @@ export const userPostsResponseSchema = z.object({
   last: z.boolean(),
 });
 
-/**
- * Avatar change is two steps so the user can preview before committing. The
- * file is chosen through the OS dialog and staged in the main process; the
- * renderer receives only an opaque token and a `data:` URL to preview, never a
- * path (OWASP A01). `commit` uploads the staged bytes for that token.
- */
-export const avatarPickResponseSchema = z.object({
-  /** Opaque handle to the staged file; null when the picker was cancelled. */
-  token: z.string().min(1).max(64).nullable(),
-  /** A `data:` URL previewing the choice; null when cancelled. */
-  previewDataUrl: z.string().max(10_000_000).nullable(),
-  cancelled: z.boolean(),
-});
-
-export const avatarCommitRequestSchema = z.object({
-  token: z.string().min(1).max(64),
-});
-
-export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
 export type ProfileResponse = z.infer<typeof profileResponseSchema>;
 export type UserPostsRequest = z.infer<typeof userPostsRequestSchema>;
 export type UserPostsResponse = z.infer<typeof userPostsResponseSchema>;
-export type AvatarPickResponse = z.infer<typeof avatarPickResponseSchema>;
-export type AvatarCommitRequest = z.infer<typeof avatarCommitRequestSchema>;
+
+/* -- chat (yello-chat: /ws/* over HTTP, live frames over the socket) -- */
+
+export const CHAT_MESSAGE_MAX_LENGTH = 20_000;
+export const CHAT_PAGE_MAX_SIZE = 100;
+
+export const CONVERSATION_TYPES = ['DIRECT', 'GROUP'] as const;
+export const conversationTypeSchema = z.enum(CONVERSATION_TYPES);
+
+/**
+ * Chat rows carry user *ids* only — the chat service knows nothing about names
+ * or avatars. The renderer resolves each id through `GET /users/{id}` and
+ * caches the answer (see features/users), so these schemas stay exactly what
+ * the wire carries.
+ */
+export const participantSchema = z.object({
+  userId: z.string().min(1).max(64),
+  /** OWNER or MEMBER; text so a role added later cannot void a conversation. */
+  role: z
+    .string()
+    .max(16)
+    .nullish()
+    .transform((value) => value ?? 'MEMBER'),
+  joinedAt: timestamp,
+  lastReadMessageId: optionalText(64),
+  lastReadAt: optionalText(64),
+});
+
+export const chatMessageSchema = z.object({
+  id: z.string().min(1).max(64),
+  conversationId: z.string().min(1).max(64),
+  senderId: z.string().min(1).max(64),
+  /** The sender's idempotency key; what an optimistic row is reconciled on. */
+  clientId: z
+    .string()
+    .max(64)
+    .nullish()
+    .transform((value) => value ?? ''),
+  body: z.string().max(CHAT_MESSAGE_MAX_LENGTH),
+  createdAt: timestamp,
+});
+
+const lastMessageSchema = z.object({
+  id: z.string().min(1).max(64),
+  senderId: z.string().min(1).max(64),
+  body: z.string().max(CHAT_MESSAGE_MAX_LENGTH),
+  createdAt: timestamp,
+});
+
+/** The bare conversation record, as `POST /ws/conversations` and `conversation.new` carry it. */
+export const conversationSchema = z.object({
+  id: z.string().min(1).max(64),
+  type: conversationTypeSchema,
+  title: optionalText(100),
+  createdBy: z.string().min(1).max(64),
+  createdAt: timestamp,
+  lastMessageAt: optionalText(64),
+});
+
+/** A row of the conversation list: the record plus what the list needs to draw it. */
+export const conversationSummarySchema = conversationSchema.extend({
+  participants: z
+    .array(participantSchema)
+    .max(600)
+    .nullish()
+    .transform((value) => value ?? []),
+  lastMessage: lastMessageSchema.nullish().transform((value) => value ?? null),
+  /** Messages from others after the caller's read marker. */
+  unreadCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((value) => value ?? 0),
+});
+
+/** Keyset pages: pass `nextCursor` back as `cursor` for the next (older) page. */
+export const conversationPageSchema = z.object({
+  items: z
+    .array(conversationSummarySchema)
+    .max(200)
+    .nullish()
+    .transform((value) => value ?? []),
+  nextCursor: z
+    .string()
+    .max(512)
+    .nullish()
+    .transform((value) => value ?? null),
+});
+
+export const messagePageSchema = z.object({
+  items: z
+    .array(chatMessageSchema)
+    .max(200)
+    .nullish()
+    .transform((value) => value ?? []),
+  nextCursor: z
+    .string()
+    .max(512)
+    .nullish()
+    .transform((value) => value ?? null),
+});
+
+export const listConversationsRequestSchema = z.object({
+  cursor: z.string().max(512).optional(),
+  limit: z.number().int().min(1).max(CHAT_PAGE_MAX_SIZE),
+});
+
+export const CHAT_GROUP_TITLE_MAX = 100;
+export const CHAT_GROUP_MAX_MEMBERS = 500;
+
+/**
+ * A direct conversation is idempotent per pair — asking again returns the one
+ * that exists. A group is new every time; the caller becomes its OWNER.
+ */
+export const createConversationRequestSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('DIRECT'),
+    peerId: z.string().min(1).max(64),
+  }),
+  z.object({
+    type: z.literal('GROUP'),
+    title: z.string().trim().min(1).max(CHAT_GROUP_TITLE_MAX),
+    memberIds: z.array(z.string().min(1).max(64)).min(1).max(CHAT_GROUP_MAX_MEMBERS),
+  }),
+]);
+
+export const conversationIdRequestSchema = z.object({
+  conversationId: z.string().min(1).max(64),
+});
+
+export const conversationResponseSchema = z.object({ conversation: conversationSummarySchema });
+
+export const listMessagesRequestSchema = z.object({
+  conversationId: z.string().min(1).max(64),
+  cursor: z.string().max(512).optional(),
+  limit: z.number().int().min(1).max(CHAT_PAGE_MAX_SIZE),
+});
+
+export const sendChatMessageRequestSchema = z.object({
+  conversationId: z.string().min(1).max(64),
+  /** Generated by the renderer per attempt; a retry resends the same one. */
+  clientId: z.string().min(1).max(64),
+  body: z.string().trim().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
+});
+
+export const chatMessageResponseSchema = z.object({ message: chatMessageSchema });
+
+export const markReadRequestSchema = z.object({
+  conversationId: z.string().min(1).max(64),
+  /** The last message seen; the server never moves the marker backwards. */
+  messageId: z.string().min(1).max(64),
+});
+
+export const typingRequestSchema = z.object({
+  conversationId: z.string().min(1).max(64),
+  typing: z.boolean(),
+});
+
+export const CHAT_SOCKET_STATUSES = ['disconnected', 'connecting', 'connected'] as const;
+
+export const chatSocketStateSchema = z.object({
+  status: z.enum(CHAT_SOCKET_STATUSES),
+  /** Users with an open socket, as the server last reported them. */
+  onlineUserIds: z.array(z.string().min(1).max(64)).max(5000),
+});
+
+/**
+ * What the main process pushes to the renderer from the live socket. Each is
+ * a server frame that has already been parsed there — an unknown or malformed
+ * frame never reaches the page (A08). `socket` is the one local event: the
+ * connection's own state, so the UI can say "reconnecting" honestly.
+ */
+export const chatEventSchema = z.discriminatedUnion('event', [
+  z.object({
+    event: z.literal('socket'),
+    data: chatSocketStateSchema,
+  }),
+  z.object({
+    event: z.literal('message.new'),
+    data: z.object({ message: chatMessageSchema }),
+  }),
+  z.object({
+    event: z.literal('message.read'),
+    data: z.object({
+      conversationId: z.string().min(1).max(64),
+      userId: z.string().min(1).max(64),
+      lastReadMessageId: z.string().min(1).max(64),
+      readAt: timestamp,
+    }),
+  }),
+  z.object({
+    event: z.literal('conversation.new'),
+    data: z.object({
+      conversation: conversationSchema,
+      participants: z
+        .array(participantSchema)
+        .max(600)
+        .nullish()
+        .transform((value) => value ?? []),
+    }),
+  }),
+  z.object({
+    event: z.literal('typing'),
+    data: z.object({
+      conversationId: z.string().min(1).max(64),
+      userId: z.string().min(1).max(64),
+      typing: z.boolean(),
+    }),
+  }),
+  z.object({
+    event: z.literal('presence'),
+    data: z.object({
+      userId: z.string().min(1).max(64),
+      online: z.boolean(),
+    }),
+  }),
+]);
+
+export type ConversationType = z.infer<typeof conversationTypeSchema>;
+export type Participant = z.infer<typeof participantSchema>;
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
+export type Conversation = z.infer<typeof conversationSchema>;
+export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
+export type ConversationPage = z.infer<typeof conversationPageSchema>;
+export type MessagePage = z.infer<typeof messagePageSchema>;
+export type ListConversationsRequest = z.infer<typeof listConversationsRequestSchema>;
+export type CreateConversationRequest = z.infer<typeof createConversationRequestSchema>;
+export type ConversationIdRequest = z.infer<typeof conversationIdRequestSchema>;
+export type ConversationResponse = z.infer<typeof conversationResponseSchema>;
+export type ListMessagesRequest = z.infer<typeof listMessagesRequestSchema>;
+export type SendChatMessageRequest = z.infer<typeof sendChatMessageRequestSchema>;
+export type ChatMessageResponse = z.infer<typeof chatMessageResponseSchema>;
+export type MarkReadRequest = z.infer<typeof markReadRequestSchema>;
+export type TypingRequest = z.infer<typeof typingRequestSchema>;
+export type ChatSocketStatus = (typeof CHAT_SOCKET_STATUSES)[number];
+export type ChatSocketState = z.infer<typeof chatSocketStateSchema>;
+export type ChatEvent = z.infer<typeof chatEventSchema>;
+
+/* -- link previews -- */
+
+export const LINK_URL_MAX = 2048;
+
+export const linkPreviewRequestSchema = z.object({
+  url: z.url().max(LINK_URL_MAX),
+});
+
+/**
+ * What an unfurled link looks like. The image arrives as a `data:` URL: the
+ * main process fetched, validated and downscaled it, so the renderer never
+ * loads from an arbitrary host and the CSP `img-src` stays closed.
+ */
+export const linkPreviewSchema = z.object({
+  url: z.string().max(LINK_URL_MAX),
+  /** The page's own host, for the caption. */
+  host: z.string().max(253),
+  siteName: optionalText(120),
+  title: optionalText(300),
+  description: optionalText(500),
+  imageDataUrl: optionalText(2_000_000),
+  /** A known provider gets a tailored card; anything else is generic. */
+  provider: z.enum(['youtube', 'github', 'generic']),
+});
+
+export const linkPreviewResponseSchema = z.object({
+  /** Null when the page could not be read or had nothing worth showing. */
+  preview: linkPreviewSchema.nullable(),
+});
+
+export type LinkPreviewRequest = z.infer<typeof linkPreviewRequestSchema>;
+export type LinkPreview = z.infer<typeof linkPreviewSchema>;
+export type LinkPreviewResponse = z.infer<typeof linkPreviewResponseSchema>;
 
 /* -- files & window -- */
 
@@ -753,7 +947,6 @@ export type PublicUserRequest = z.infer<typeof publicUserRequestSchema>;
 export type PostIdRequest = z.infer<typeof postIdRequestSchema>;
 export type UpdatePostRequest = z.infer<typeof updatePostRequestSchema>;
 export type RepostRequest = z.infer<typeof repostRequestSchema>;
-export type ShareLinkResponse = z.infer<typeof shareLinkResponseSchema>;
 export type ShareLinkCopiedResponse = z.infer<typeof shareLinkCopiedResponseSchema>;
 export type DeletedResponse = z.infer<typeof deletedResponseSchema>;
 export type ReactionTargetType = z.infer<typeof reactionTargetTypeSchema>;
@@ -763,16 +956,13 @@ export type CommentResponse = z.infer<typeof commentResponseSchema>;
 export type ListCommentsRequest = z.infer<typeof listCommentsRequestSchema>;
 export type CommentPage = Page<ThreadComment>;
 export type DeleteCommentRequest = z.infer<typeof deleteCommentRequestSchema>;
+export type UpdateCommentRequest = z.infer<typeof updateCommentRequestSchema>;
 export type PageRequest = z.infer<typeof pageRequestSchema>;
 export type FriendUserRequest = z.infer<typeof friendUserRequestSchema>;
-export type FriendshipIdRequest = z.infer<typeof friendshipIdRequestSchema>;
-export type FriendshipResponse = z.infer<typeof friendshipResponseSchema>;
-export type FriendshipPage = Page<Friendship>;
-export type ListNotificationsRequest = z.infer<typeof listNotificationsRequestSchema>;
-export type NotificationPage = Page<Notification>;
-export type NotificationIdRequest = z.infer<typeof notificationIdRequestSchema>;
-export type NotificationResponse = z.infer<typeof notificationResponseSchema>;
-export type UnreadCount = z.infer<typeof unreadCountSchema>;
+export type ListFriendRequestsRequest = z.infer<typeof listFriendRequestsRequestSchema>;
+export type FriendRequestDirection = (typeof FRIEND_REQUEST_DIRECTIONS)[number];
+export type FriendEntryResponse = z.infer<typeof friendEntryResponseSchema>;
+export type FriendEntryPage = Page<FriendEntry>;
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type RegisterResponse = z.infer<typeof registerResponseSchema>;
 export type VerifyOtpRequest = z.infer<typeof verifyOtpRequestSchema>;
@@ -790,7 +980,6 @@ export type ReactionSummary = z.infer<typeof reactionSummarySchema>;
 export type ListReactorsRequest = z.infer<typeof listReactorsRequestSchema>;
 export type Reactor = z.infer<typeof reactorSchema>;
 export type ReactorPage = Page<Reactor>;
-export type FriendStatus = (typeof FRIEND_STATUSES)[number];
 export type PostExportEntry = z.infer<typeof postExportEntrySchema>;
 export type ExportPostsRequest = z.infer<typeof exportPostsRequestSchema>;
 export type ExportPostsResponse = z.infer<typeof exportPostsResponseSchema>;
@@ -825,12 +1014,12 @@ export interface YelloBridge {
     update(request: UpdatePostRequest): Promise<IpcResult<PostResponse>>;
     remove(request: PostIdRequest): Promise<IpcResult<DeletedResponse>>;
     repost(request: RepostRequest): Promise<IpcResult<PostResponse>>;
-    shareLink(request: PostIdRequest): Promise<IpcResult<ShareLinkResponse>>;
     copyShareLink(request: PostIdRequest): Promise<IpcResult<ShareLinkCopiedResponse>>;
   };
   readonly comments: {
     create(request: CreateCommentRequest): Promise<IpcResult<CommentResponse>>;
     list(request: ListCommentsRequest): Promise<IpcResult<CommentPage>>;
+    update(request: UpdateCommentRequest): Promise<IpcResult<CommentResponse>>;
     remove(request: DeleteCommentRequest): Promise<IpcResult<DeletedResponse>>;
   };
   readonly reactions: {
@@ -839,25 +1028,41 @@ export interface YelloBridge {
     list(request: ListReactorsRequest): Promise<IpcResult<ReactorPage>>;
   };
   readonly friends: {
-    list(request: PageRequest): Promise<IpcResult<FriendshipPage>>;
-    pendingRequests(request: PageRequest): Promise<IpcResult<FriendshipPage>>;
-    sendRequest(request: FriendUserRequest): Promise<IpcResult<FriendshipResponse>>;
-    accept(request: FriendshipIdRequest): Promise<IpcResult<FriendshipResponse>>;
-    decline(request: FriendshipIdRequest): Promise<IpcResult<FriendshipResponse>>;
+    list(request: PageRequest): Promise<IpcResult<FriendEntryPage>>;
+    requests(request: ListFriendRequestsRequest): Promise<IpcResult<FriendEntryPage>>;
+    blocked(request: PageRequest): Promise<IpcResult<FriendEntryPage>>;
+    sendRequest(request: FriendUserRequest): Promise<IpcResult<FriendEntryResponse>>;
+    cancelRequest(request: FriendUserRequest): Promise<IpcResult<FriendEntryResponse>>;
+    accept(request: FriendUserRequest): Promise<IpcResult<FriendEntryResponse>>;
+    decline(request: FriendUserRequest): Promise<IpcResult<FriendEntryResponse>>;
     remove(request: FriendUserRequest): Promise<IpcResult<DeletedResponse>>;
-  };
-  readonly notifications: {
-    list(request: ListNotificationsRequest): Promise<IpcResult<NotificationPage>>;
-    unreadCount(): Promise<IpcResult<UnreadCount>>;
-    markRead(request: NotificationIdRequest): Promise<IpcResult<NotificationResponse>>;
-    markAllRead(): Promise<IpcResult<UnreadCount>>;
+    block(request: FriendUserRequest): Promise<IpcResult<FriendEntryResponse>>;
+    unblock(request: FriendUserRequest): Promise<IpcResult<FriendEntryResponse>>;
   };
   readonly profile: {
-    update(request: UpdateProfileRequest): Promise<IpcResult<ProfileResponse>>;
-    pickAvatar(): Promise<IpcResult<AvatarPickResponse>>;
-    commitAvatar(request: AvatarCommitRequest): Promise<IpcResult<ProfileResponse>>;
     listPosts(request: UserPostsRequest): Promise<IpcResult<UserPostsResponse>>;
     getUser(request: PublicUserRequest): Promise<IpcResult<ProfileResponse>>;
+  };
+  readonly chat: {
+    listConversations(request: ListConversationsRequest): Promise<IpcResult<ConversationPage>>;
+    createConversation(
+      request: CreateConversationRequest,
+    ): Promise<IpcResult<ConversationResponse>>;
+    getConversation(request: ConversationIdRequest): Promise<IpcResult<ConversationResponse>>;
+    listMessages(request: ListMessagesRequest): Promise<IpcResult<MessagePage>>;
+    sendMessage(request: SendChatMessageRequest): Promise<IpcResult<ChatMessageResponse>>;
+    markRead(request: MarkReadRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    typing(request: TypingRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    socketState(): Promise<IpcResult<ChatSocketState>>;
+    /**
+     * Subscribes to frames pushed from the main process. Returns the
+     * unsubscribe; the listener receives an unvalidated value the renderer
+     * parses against `chatEventSchema` before use.
+     */
+    onEvent(listener: (event: unknown) => void): () => void;
+  };
+  readonly links: {
+    preview(request: LinkPreviewRequest): Promise<IpcResult<LinkPreviewResponse>>;
   };
   readonly files: {
     exportPosts(request: ExportPostsRequest): Promise<IpcResult<ExportPostsResponse>>;

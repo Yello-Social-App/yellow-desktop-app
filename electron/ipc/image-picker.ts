@@ -5,9 +5,6 @@
  * opens the OS picker, so the set of readable files is whatever the user just
  * pointed at and nothing else (OWASP A01). Extension and size are checked here
  * before any bytes are sent.
- *
- * Avatars and post images share this module deliberately — two copies of an
- * allowlist is one copy that eventually drifts.
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -19,21 +16,19 @@ import { ipcFail, ipcOk, type IpcResult } from '../../shared/ipc-types';
 
 const log = createLogger('ipc.images');
 
-/** The API caps every image — avatar or post — at 5 MB. */
+/** The API caps every post image at 5 MB. */
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
-/**
- * The server validates uploads by decoding them and the JVM has no WebP
- * decoder, so WebP is refused even though it appears in the allowlist.
- */
+/** What the server accepts, by content: JPEG, PNG, GIF and WebP. */
 const ALLOWED_IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.gif': 'image/gif',
+  '.webp': 'image/webp',
 };
 
-const PICKER_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif'];
+const PICKER_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
 export interface PickOptions {
   title: string;
@@ -77,7 +72,7 @@ export async function readImagePart(filePath: string): Promise<IpcResult<ImagePa
   const extension = path.extname(filePath).toLowerCase();
   const contentType = ALLOWED_IMAGE_EXTENSIONS[extension];
   if (contentType === undefined) {
-    return ipcFail('INVALID_PAYLOAD', 'Choose a JPEG, PNG or GIF image.');
+    return ipcFail('INVALID_PAYLOAD', 'Choose a JPEG, PNG, GIF or WebP image.');
   }
 
   let bytes: Buffer;
@@ -136,51 +131,4 @@ export function toPreviewDataUrl(bytes: Buffer, contentType: string): string {
   });
 
   return `data:image/png;base64,${resized.toPNG().toString('base64')}`;
-}
-
-/** The square edge, in pixels, every stored avatar is normalised to. */
-export const AVATAR_SIZE = 512;
-
-export interface SquareImage {
-  blob: Blob;
-  fileName: string;
-  byteLength: number;
-}
-
-/**
- * Centre-crops an image to a square and scales it to at most {@link AVATAR_SIZE}
- * px, so every avatar is stored at a consistent, crisp resolution rather than
- * whatever odd shape or size the user happened to pick. Never upscales — a
- * smaller source keeps its own size instead of being blurred larger. Emits PNG
- * (lossless, transparency-safe). Falls back to the original bytes if the image
- * cannot be decoded, so a valid-but-exotic file still uploads.
- *
- * Animated GIFs collapse to their first frame, which is the norm for avatars.
- */
-export function toSquareAvatar(part: ImagePart, bytes: Buffer): SquareImage {
-  const image = nativeImage.createFromBuffer(bytes);
-  const { width, height } = image.getSize();
-  if (width === 0 || height === 0) {
-    return { blob: part.blob, fileName: part.fileName, byteLength: part.byteLength };
-  }
-
-  const side = Math.min(width, height);
-  const cropped = image.crop({
-    x: Math.floor((width - side) / 2),
-    y: Math.floor((height - side) / 2),
-    width: side,
-    height: side,
-  });
-
-  const target = Math.min(AVATAR_SIZE, side);
-  const resized = cropped.resize({ width: target, height: target, quality: 'best' });
-  const png = resized.toPNG();
-  const body = new Uint8Array(png).buffer;
-
-  const fileName = `${path.basename(part.fileName, path.extname(part.fileName))}.png`;
-  return {
-    blob: new Blob([body], { type: 'image/png' }),
-    fileName,
-    byteLength: png.byteLength,
-  };
 }

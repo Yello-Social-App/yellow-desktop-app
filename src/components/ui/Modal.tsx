@@ -111,8 +111,8 @@ export function Modal({
       }}
       className={cn(
         'bg-surface-container-lowest text-on-surface border-outline-variant shadow-canvas',
-        'm-auto w-[calc(100vw-2rem)] rounded-2xl border p-0',
-        'backdrop:bg-on-surface/40',
+        'm-auto w-[calc(100vw-2rem)] rounded-3xl border p-0',
+        'backdrop:bg-surface-dim/70 backdrop:backdrop-blur-sm',
         SIZE_CLASSES[size],
       )}
     >
@@ -124,7 +124,7 @@ export function Modal({
       >
         <div className="gap-md flex items-start">
           <div className="gap-xs flex min-w-0 flex-1 flex-col">
-            <h2 id={titleId} className="font-heading text-h3 text-on-surface">
+            <h2 id={titleId} className="font-heading text-h2 text-on-surface">
               {title}
             </h2>
             {description !== undefined && (

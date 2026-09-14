@@ -9,18 +9,21 @@
 import {
   acknowledgedResponseSchema,
   appInfoResponseSchema,
-  avatarPickResponseSchema,
+  chatMessageResponseSchema,
+  chatSocketStateSchema,
   commentPageSchema,
   commentResponseSchema,
+  conversationPageSchema,
+  conversationResponseSchema,
   deletedResponseSchema,
   exportPostsResponseSchema,
   feedResponseSchema,
-  friendshipPageSchema,
-  friendshipResponseSchema,
+  friendEntryPageSchema,
+  friendEntryResponseSchema,
   ipcFail,
   ipcResultSchema,
-  notificationPageSchema,
-  notificationResponseSchema,
+  linkPreviewResponseSchema,
+  messagePageSchema,
   postResponseSchema,
   profileResponseSchema,
   reactionSummarySchema,
@@ -28,13 +31,12 @@ import {
   registerResponseSchema,
   sessionResponseSchema,
   shareLinkCopiedResponseSchema,
-  shareLinkResponseSchema,
   stageImagesResponseSchema,
-  unreadCountSchema,
   userPostsResponseSchema,
   windowStateSchema,
-  type AvatarCommitRequest,
+  type ConversationIdRequest,
   type CreateCommentRequest,
+  type CreateConversationRequest,
   type CreatePostRequest,
   type DeleteCommentRequest,
   type DiscardImagesRequest,
@@ -42,13 +44,15 @@ import {
   type FeedRequest,
   type ForgotPasswordRequest,
   type FriendUserRequest,
-  type FriendshipIdRequest,
   type IpcResult,
   type ListCommentsRequest,
-  type ListNotificationsRequest,
+  type ListConversationsRequest,
+  type ListFriendRequestsRequest,
+  type ListMessagesRequest,
+  type LinkPreviewRequest,
   type ListReactorsRequest,
   type LoginRequest,
-  type NotificationIdRequest,
+  type MarkReadRequest,
   type PageRequest,
   type PostIdRequest,
   type PublicUserRequest,
@@ -57,14 +61,18 @@ import {
   type RepostRequest,
   type ResendOtpRequest,
   type ResetPasswordRequest,
+  type SendChatMessageRequest,
   type StageImagesRequest,
   type ToggleReactionRequest,
+  type TypingRequest,
+  type UpdateCommentRequest,
   type UpdatePostRequest,
-  type UpdateProfileRequest,
   type UserPostsRequest,
   type VerifyOtpRequest,
   type VerifyResetOtpRequest,
   type YelloBridge,
+  chatEventSchema,
+  type ChatEvent,
 } from '@shared/ipc-types';
 import type { z } from 'zod';
 
@@ -174,8 +182,6 @@ export const ipc = {
     guarded('posts.remove', deletedResponseSchema, (api) => api.posts.remove(request)),
   repost: (request: RepostRequest) =>
     guarded('posts.repost', postResponseSchema, (api) => api.posts.repost(request)),
-  postShareLink: (request: PostIdRequest) =>
-    guarded('posts.shareLink', shareLinkResponseSchema, (api) => api.posts.shareLink(request)),
   copyPostShareLink: (request: PostIdRequest) =>
     guarded('posts.copyShareLink', shareLinkCopiedResponseSchema, (api) =>
       api.posts.copyShareLink(request),
@@ -185,6 +191,8 @@ export const ipc = {
     guarded('comments.create', commentResponseSchema, (api) => api.comments.create(request)),
   listComments: (request: ListCommentsRequest) =>
     guarded('comments.list', commentPageSchema, (api) => api.comments.list(request)),
+  updateComment: (request: UpdateCommentRequest) =>
+    guarded('comments.update', commentResponseSchema, (api) => api.comments.update(request)),
   deleteComment: (request: DeleteCommentRequest) =>
     guarded('comments.remove', deletedResponseSchema, (api) => api.comments.remove(request)),
 
@@ -196,49 +204,60 @@ export const ipc = {
     guarded('reactions.list', reactorPageSchema, (api) => api.reactions.list(request)),
 
   listFriends: (request: PageRequest) =>
-    guarded('friends.list', friendshipPageSchema, (api) => api.friends.list(request)),
-  listFriendRequests: (request: PageRequest) =>
-    guarded('friends.pendingRequests', friendshipPageSchema, (api) =>
-      api.friends.pendingRequests(request),
-    ),
+    guarded('friends.list', friendEntryPageSchema, (api) => api.friends.list(request)),
+  listFriendRequests: (request: ListFriendRequestsRequest) =>
+    guarded('friends.requests', friendEntryPageSchema, (api) => api.friends.requests(request)),
+  listBlockedUsers: (request: PageRequest) =>
+    guarded('friends.blocked', friendEntryPageSchema, (api) => api.friends.blocked(request)),
   sendFriendRequest: (request: FriendUserRequest) =>
-    guarded('friends.sendRequest', friendshipResponseSchema, (api) =>
+    guarded('friends.sendRequest', friendEntryResponseSchema, (api) =>
       api.friends.sendRequest(request),
     ),
-  acceptFriendRequest: (request: FriendshipIdRequest) =>
-    guarded('friends.accept', friendshipResponseSchema, (api) => api.friends.accept(request)),
-  declineFriendRequest: (request: FriendshipIdRequest) =>
-    guarded('friends.decline', friendshipResponseSchema, (api) => api.friends.decline(request)),
+  cancelFriendRequest: (request: FriendUserRequest) =>
+    guarded('friends.cancelRequest', friendEntryResponseSchema, (api) =>
+      api.friends.cancelRequest(request),
+    ),
+  acceptFriendRequest: (request: FriendUserRequest) =>
+    guarded('friends.accept', friendEntryResponseSchema, (api) => api.friends.accept(request)),
+  declineFriendRequest: (request: FriendUserRequest) =>
+    guarded('friends.decline', friendEntryResponseSchema, (api) => api.friends.decline(request)),
   removeFriend: (request: FriendUserRequest) =>
     guarded('friends.remove', deletedResponseSchema, (api) => api.friends.remove(request)),
+  blockUser: (request: FriendUserRequest) =>
+    guarded('friends.block', friendEntryResponseSchema, (api) => api.friends.block(request)),
+  unblockUser: (request: FriendUserRequest) =>
+    guarded('friends.unblock', friendEntryResponseSchema, (api) => api.friends.unblock(request)),
 
-  listNotifications: (request: ListNotificationsRequest) =>
-    guarded('notifications.list', notificationPageSchema, (api) => api.notifications.list(request)),
-  unreadNotificationCount: () =>
-    guarded('notifications.unreadCount', unreadCountSchema, (api) =>
-      api.notifications.unreadCount(),
-    ),
-  markNotificationRead: (request: NotificationIdRequest) =>
-    guarded('notifications.markRead', notificationResponseSchema, (api) =>
-      api.notifications.markRead(request),
-    ),
-  markAllNotificationsRead: () =>
-    guarded('notifications.markAllRead', unreadCountSchema, (api) =>
-      api.notifications.markAllRead(),
-    ),
-
-  updateProfile: (request: UpdateProfileRequest) =>
-    guarded('profile.update', profileResponseSchema, (api) => api.profile.update(request)),
-  pickAvatar: () =>
-    guarded('profile.pickAvatar', avatarPickResponseSchema, (api) => api.profile.pickAvatar()),
-  commitAvatar: (request: AvatarCommitRequest) =>
-    guarded('profile.commitAvatar', profileResponseSchema, (api) =>
-      api.profile.commitAvatar(request),
-    ),
   listUserPosts: (request: UserPostsRequest) =>
     guarded('profile.listPosts', userPostsResponseSchema, (api) => api.profile.listPosts(request)),
   getUser: (request: PublicUserRequest) =>
     guarded('profile.getUser', profileResponseSchema, (api) => api.profile.getUser(request)),
+
+  listConversations: (request: ListConversationsRequest) =>
+    guarded('chat.listConversations', conversationPageSchema, (api) =>
+      api.chat.listConversations(request),
+    ),
+  createConversation: (request: CreateConversationRequest) =>
+    guarded('chat.createConversation', conversationResponseSchema, (api) =>
+      api.chat.createConversation(request),
+    ),
+  getConversation: (request: ConversationIdRequest) =>
+    guarded('chat.getConversation', conversationResponseSchema, (api) =>
+      api.chat.getConversation(request),
+    ),
+  listMessages: (request: ListMessagesRequest) =>
+    guarded('chat.listMessages', messagePageSchema, (api) => api.chat.listMessages(request)),
+  sendChatMessage: (request: SendChatMessageRequest) =>
+    guarded('chat.sendMessage', chatMessageResponseSchema, (api) => api.chat.sendMessage(request)),
+  markConversationRead: (request: MarkReadRequest) =>
+    guarded('chat.markRead', acknowledgedResponseSchema, (api) => api.chat.markRead(request)),
+  sendTyping: (request: TypingRequest) =>
+    guarded('chat.typing', acknowledgedResponseSchema, (api) => api.chat.typing(request)),
+  chatSocketState: () =>
+    guarded('chat.socketState', chatSocketStateSchema, (api) => api.chat.socketState()),
+
+  linkPreview: (request: LinkPreviewRequest) =>
+    guarded('links.preview', linkPreviewResponseSchema, (api) => api.links.preview(request)),
 
   exportPosts: (request: ExportPostsRequest) =>
     guarded('files.exportPosts', exportPostsResponseSchema, (api) =>
@@ -255,3 +274,24 @@ export const ipc = {
   getWindowState: () =>
     guarded('window.getState', windowStateSchema, (api) => api.window.getState()),
 } as const;
+
+/**
+ * Frames pushed from the main process. Each one is parsed against the shared
+ * schema before the listener sees it (A08); a value that does not parse is
+ * dropped, not delivered. Returns the unsubscribe, or a no-op when there is
+ * no bridge.
+ */
+export function onChatEvent(listener: (event: ChatEvent) => void): () => void {
+  const api = bridge();
+  if (api === undefined) {
+    return () => undefined;
+  }
+  return api.chat.onEvent((raw) => {
+    const parsed = chatEventSchema.safeParse(raw);
+    if (parsed.success) {
+      listener(parsed.data);
+    } else {
+      log.warn('chat_event_rejected', {});
+    }
+  });
+}

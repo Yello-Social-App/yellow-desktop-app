@@ -98,5 +98,10 @@ export function canDelete(
   return comment.author.id === viewerId || postAuthorId === viewerId;
 }
 
+/** Whether the signed-in user may edit this comment: the author, and only the author. */
+export function canEdit(comment: Comment, viewerId: string | undefined): boolean {
+  return viewerId !== undefined && comment.author.id === viewerId;
+}
+
 export { COMMENT_MAX_LENGTH };
 export type { Comment };

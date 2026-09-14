@@ -11,10 +11,8 @@
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "dev:local": "YELLO_API_TARGET=local tsx scripts/dev.ts",
-    "dev:prod": "YELLO_API_TARGET=prod tsx scripts/dev.ts",
     "build": "npm run typecheck && vite build && tsx scripts/build-electron.ts",
     "package": "npm run build && electron-builder",
-    "package:prod": "YELLO_API_TARGET=prod npm run package",
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",

@@ -14,7 +14,7 @@
  * control; the server rejects an edit or delete by a non-author with
  * `ACCESS_DENIED` regardless (OWASP A01).
  */
-import type { Post, UpdatePostRequest } from '@shared/ipc-types';
+import type { Post, ReactionType, UpdatePostRequest } from '@shared/ipc-types';
 import { useCallback, useState } from 'react';
 
 import {
@@ -38,7 +38,11 @@ export interface PostSink {
 export type PostEdit = Omit<UpdatePostRequest, 'postId'>;
 
 export interface PostActions {
-  toggleReaction: (post: Post) => Promise<void>;
+  /**
+   * With no `type`: the heart — adds a LIKE, or removes whatever is held.
+   * With one: sets that reaction, or removes it when it is already held.
+   */
+  toggleReaction: (post: Post, type?: ReactionType) => Promise<void>;
   save: (post: Post, changes: PostEdit) => Promise<boolean>;
   remove: (post: Post) => Promise<boolean>;
   repost: (post: Post, content?: string) => Promise<boolean>;
@@ -63,15 +67,17 @@ export function usePostActions(sink: PostSink): PostActions {
   const [error, setError] = useState<FeedError | null>(null);
 
   const toggleReaction = useCallback(
-    async (post: Post) => {
+    async (post: Post, type?: ReactionType) => {
       const current = post.viewerReaction ?? null;
+      // The server removes when sent the type already held and sets it
+      // otherwise — so the heart clears a LOVE by sending LOVE, not LIKE.
+      const sent = type ?? current ?? PRIMARY_REACTION;
+      const next = sent === current ? null : sent;
 
       // Optimistic: repaint now, reconcile with the server's summary below.
-      sink.replace({ ...post, viewerReaction: current === null ? PRIMARY_REACTION : null });
+      sink.replace({ ...post, viewerReaction: next });
 
-      // The toggle removes when sent the type already held — so to clear a
-      // LOVE the heart must send LOVE, not LIKE, or it would change it instead.
-      const result = await toggleReactionRequest(post.id, current ?? PRIMARY_REACTION);
+      const result = await toggleReactionRequest(post.id, sent);
 
       if (!result.ok) {
         // Roll back to the last state the server confirmed.

@@ -162,7 +162,7 @@ export function registerFeedHandlers(): void {
       }
 
       for (const part of parts.data) {
-        form.append('images', part.blob, part.fileName);
+        form.append('images[]', part.blob, part.fileName);
       }
 
       const result = await apiRequest({

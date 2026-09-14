@@ -44,7 +44,7 @@ export function RegisterPage() {
   return (
     <AuthLayout>
       <main className="max-w-auth-wide py-lg flex w-full flex-col">
-        <AuthBrand tagline="Create your premium sanctuary." />
+        <AuthBrand tagline="Create an account and start posting." />
 
         <Card elevation="canvas" className="overflow-hidden rounded-3xl">
           <div aria-hidden className="bg-primary-container h-2 w-full" />
