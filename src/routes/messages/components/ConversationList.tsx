@@ -12,12 +12,12 @@ interface ConversationListProps {
 /** The left rail of the messages screen. */
 export function ConversationList({ summaries, activeId, onSelect }: ConversationListProps) {
   return (
-    <ul className="flex flex-col">
+    <ul className="stagger flex flex-col">
       {summaries.map(({ conversation, participantName, participantInitials, preview }) => {
         const isActive = conversation.id === activeId;
 
         return (
-          <li key={conversation.id}>
+          <li key={conversation.id} className="animate-fade-up">
             <button
               type="button"
               aria-current={isActive}
@@ -25,7 +25,7 @@ export function ConversationList({ summaries, activeId, onSelect }: Conversation
                 onSelect(conversation.id);
               }}
               className={cn(
-                'gap-md px-md py-sm flex w-full items-center border-l-4 text-left transition-colors',
+                'gap-md px-md py-sm transition-tone flex w-full items-center border-l-4 text-left',
                 isActive
                   ? 'border-primary-container bg-surface-container-lowest'
                   : 'hover:bg-surface-container-low border-transparent',

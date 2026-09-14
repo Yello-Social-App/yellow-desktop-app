@@ -6,6 +6,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Tracks the Yello API changes of 2026-09-11.
+
+### Added
+
+- **Resend code.** Both code screens — verifying a registration and resetting a
+  password — offer "Resend code", backed by `POST /auth/resend-otp`. The button
+  waits out the server's one-minute cooldown so it cannot be pressed into a
+  silent no-op, and the confirmation is worded not to confirm the address.
+- **Editing a post's photos.** The editor removes existing images (undoable
+  until Save) and appends new ones through the same staging flow the composer
+  uses; `PUT /posts/{id}` is sent as JSON unless there are files to add. The
+  server's ten-image cap is what the picker is offered.
+- **Who reacted.** The reaction count opens a dialog with a tab per reaction
+  type (counts from `/summary`) and the people behind it, newest first, from
+  the new `GET /reactions/{targetType}/{targetId}`. Each row carries the
+  server's word on the viewer's friendship with that person, so it can offer
+  Add friend / Accept / Friends without a call per row.
+
+### Changed
+
+- **Password reset is now email → code → new password.** `/forgot-password`
+  emails a six-digit code; the same screen checks it; `/reset-password` takes
+  only the new password. There is nothing to paste: the reset token the API
+  mints for a correct code is held in the main process and spent there, so it
+  never enters the renderer — the same rule the access token follows.
+- **One reaction call.** `PUT` and `DELETE /reactions/…` are gone; the client
+  sends `POST` with the type the button represents and the server adds, changes
+  or removes. To clear a reaction the heart sends back whatever the viewer
+  held, not always `LIKE`, since a different type would change it instead.
+- **Comments arrive nested.** The list endpoint pages top-level comments newest
+  first with their replies underneath, so a thread is never cut across pages.
+  The store still holds a flat list; the page is flattened on load and a new
+  top-level comment now leads rather than trails.
+- Post cards read `isOwner` from the server to decide whether to show edit and
+  delete, and author names everywhere use the `fullName` the API now sends on
+  every author summary.
+
 ## [0.2.0] - 2026-09-07
 
 The first tagged release, so this section covers the whole client rather than

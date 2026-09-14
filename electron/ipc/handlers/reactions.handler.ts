@@ -1,10 +1,11 @@
 /**
  * Reactions, for either target type.
  *
- * One reaction per user per target is enforced by the server's database, so
- * `set` is idempotent in effect: sending a different type replaces the previous
- * one rather than adding a second. All three calls answer with the same summary
- * so the UI can repaint counts without a follow-up read.
+ * There is one write: a toggle. The server compares the type sent with the
+ * caller's current reaction and adds, changes or removes accordingly, so the
+ * client never has to know its prior state to get the right outcome — and a
+ * double-click cannot add twice. Every call answers with the summary so the
+ * UI can repaint counts without a follow-up read.
  *
  * `targetType` is a closed enum in the request schema rather than free text —
  * it becomes a URL path segment, and an unbounded string there would be a route
@@ -16,34 +17,27 @@ import { IPC_CHANNELS } from '../channels';
 import { registerIpcHandler } from '../register';
 
 import {
-  clearReactionRequestSchema,
+  listReactorsRequestSchema,
   reactionSummarySchema,
   reactionTargetRequestSchema,
-  setReactionRequestSchema,
+  reactorPageSchema,
+  toggleReactionRequestSchema,
   type IpcResult,
   type ReactionSummary,
+  type ReactorPage,
 } from '../../../shared/ipc-types';
 
 export function registerReactionHandlers(): void {
   registerIpcHandler(
-    IPC_CHANNELS.REACTIONS_SET,
-    setReactionRequestSchema,
+    IPC_CHANNELS.REACTIONS_TOGGLE,
+    toggleReactionRequestSchema,
     async ({ targetType, targetId, type }): Promise<IpcResult<ReactionSummary>> =>
       apiRequest({
-        method: 'put',
+        method: 'post',
         url: ENDPOINTS.reactions.forTarget(targetType, targetId),
+        // Always sent explicitly: an absent body means LIKE upstream, and a
+        // default that lives on the server is one the client cannot see change.
         body: { type },
-        schema: reactionSummarySchema,
-      }),
-  );
-
-  registerIpcHandler(
-    IPC_CHANNELS.REACTIONS_CLEAR,
-    clearReactionRequestSchema,
-    async ({ targetType, targetId }): Promise<IpcResult<ReactionSummary>> =>
-      apiRequest({
-        method: 'delete',
-        url: ENDPOINTS.reactions.forTarget(targetType, targetId),
         schema: reactionSummarySchema,
       }),
   );
@@ -56,6 +50,20 @@ export function registerReactionHandlers(): void {
         method: 'get',
         url: ENDPOINTS.reactions.summary(targetType, targetId),
         schema: reactionSummarySchema,
+      }),
+  );
+
+  // Who reacted, newest first, with the viewer's friendship to each — the
+  // server works that out per row, so the list needs no follow-up calls.
+  registerIpcHandler(
+    IPC_CHANNELS.REACTIONS_LIST,
+    listReactorsRequestSchema,
+    async ({ targetType, targetId, type, page, size }): Promise<IpcResult<ReactorPage>> =>
+      apiRequest({
+        method: 'get',
+        url: ENDPOINTS.reactions.forTarget(targetType, targetId),
+        schema: reactorPageSchema,
+        params: { page, size, ...(type === undefined ? {} : { type }) },
       }),
   );
 }

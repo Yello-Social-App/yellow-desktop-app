@@ -31,7 +31,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         ref={ref}
         aria-invalid={isInvalid}
         className={cn(
-          'font-body text-body text-on-surface w-full rounded-lg border py-3 transition-all',
+          'font-body text-body text-on-surface transition-tone w-full rounded-lg border py-3',
           'bg-surface-container-low placeholder:text-outline-variant',
           'focus:ring-2 focus:outline-none',
           isInvalid

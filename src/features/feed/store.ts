@@ -150,3 +150,45 @@ export const feedPostSink: PostSink = {
     useFeedStore.getState().prependPost(post);
   },
 };
+
+/**
+ * The feed outlives every other list: a profile timeline or a single post page
+ * is fetched fresh on mount, but the feed keeps its posts for the session. So
+ * a change made anywhere else — a comment, a reaction, an edit — has to reach
+ * the feed's copy too, or the timeline shows the old count until a reload.
+ *
+ * These wrap another list's own updaters so the feed hears the same change.
+ * Each feed update is a no-op when the feed does not hold that post.
+ */
+export function mirroredToFeed(sink: PostSink): PostSink {
+  const mirrored: PostSink = {
+    replace: (post) => {
+      sink.replace(post);
+      feedPostSink.replace(post);
+    },
+    remove: (postId) => {
+      sink.remove(postId);
+      feedPostSink.remove(postId);
+    },
+  };
+
+  const { prepend } = sink;
+  if (prepend !== undefined) {
+    mirrored.prepend = (post) => {
+      prepend(post);
+      // A new post of the viewer's own belongs on the home feed as well.
+      useFeedStore.getState().prependPost(post);
+    };
+  }
+
+  return mirrored;
+}
+
+export function mirrorCommentCountToFeed(
+  adjust: (postId: string, delta: number) => void,
+): (postId: string, delta: number) => void {
+  return (postId, delta) => {
+    adjust(postId, delta);
+    useFeedStore.getState().adjustCommentCount(postId, delta);
+  };
+}

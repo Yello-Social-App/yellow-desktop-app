@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import { Avatar } from '@/components/ui/Avatar';
 import { Card } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/IconButton';
+import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import type { PostActions, PostEdit } from '@/features/feed/post-actions';
 import { canEdit } from '@/features/feed/post-actions';
 import { viewerHasReacted, visibilityOf, type Post } from '@/features/feed/types';
@@ -37,10 +38,16 @@ interface PostCardProps {
   /** The signed-in user, which decides whether edit and delete are offered. */
   viewerId: string | undefined;
   onCommentCountChange: (postId: string, delta: number) => void;
+  /**
+   * On the post's own page: the thread opens by default and the card stops
+   * linking to itself. In a timeline the text, timestamp and comment count
+   * all lead to that page.
+   */
+  isDetail?: boolean;
 }
 
 const ACTION_CLASS =
-  'flex flex-1 items-center justify-center gap-sm rounded-lg py-2 font-label text-label transition-colors disabled:opacity-40';
+  'flex flex-1 items-center justify-center gap-sm rounded-lg py-2 font-label text-label transition-tone disabled:opacity-40';
 
 const VISIBILITY_ICONS = {
   PUBLIC: Globe,
@@ -66,8 +73,12 @@ export const PostCard = memo(function PostCard({
   actions,
   viewerId,
   onCommentCountChange,
+  isDetail = false,
 }: PostCardProps) {
-  const [panel, setPanel] = useState<OpenPanel>('none');
+  const [panel, setPanel] = useState<OpenPanel>(isDetail ? 'comments' : 'none');
+  /** Which photo the viewer is open on; null when it is closed. */
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const permalink = `/posts/${post.id}`;
   const [dialog, setDialog] = useState<OpenDialog>('none');
 
   const author = displayName(post.author);
@@ -94,12 +105,19 @@ export const PostCard = memo(function PostCard({
         <div className="min-w-0">
           <Link
             to={`/users/${post.author.id}`}
-            className="font-heading text-h3 text-on-surface hover:text-primary block truncate transition-colors"
+            className="font-heading text-h3 text-on-surface hover:text-primary transition-tone block truncate"
           >
             {author}
           </Link>
           <p className="font-small text-small text-on-surface-variant gap-xs flex items-center truncate">
-            {handleOf(post.author)} · {relativeTime(post.createdAt)}
+            {handleOf(post.author)} ·{' '}
+            {isDetail ? (
+              relativeTime(post.createdAt)
+            ) : (
+              <Link to={permalink} className="hover:text-on-surface hover:underline">
+                {relativeTime(post.createdAt)}
+              </Link>
+            )}
             <VisibilityIcon
               aria-label={`Visibility: ${visibility.toLowerCase()}`}
               className="size-3"
@@ -146,24 +164,55 @@ export const PostCard = memo(function PostCard({
           }}
         />
       ) : (
-        post.content !== '' && (
+        post.content !== '' &&
+        (isDetail ? (
           <p className="font-body text-body text-on-surface leading-relaxed whitespace-pre-wrap">
             {post.content}
           </p>
-        )
+        ) : (
+          // The text is the natural thing to click to open a post; a link
+          // rather than a click handler on the card, so buttons inside the
+          // card keep their own meaning and the keyboard sees a real target.
+          <Link
+            to={permalink}
+            className="font-body text-body text-on-surface hover:text-on-surface/80 block leading-relaxed whitespace-pre-wrap"
+          >
+            {post.content}
+          </Link>
+        ))
       )}
 
       {post.images.length > 0 && (
         <ul className="gap-sm grid grid-cols-1 sm:grid-cols-2">
-          {post.images.map((image) => (
+          {post.images.map((image, position) => (
             <li
-              key={image.url}
+              key={image.id ?? image.url}
               className="border-outline-variant overflow-hidden rounded-lg border"
             >
-              <img src={image.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+              <button
+                type="button"
+                aria-haspopup="dialog"
+                aria-label={`Open photo ${String(position + 1)} of ${String(post.images.length)}`}
+                onClick={() => {
+                  setLightboxIndex(position);
+                }}
+                className="focus-visible:ring-primary-container block h-full w-full cursor-zoom-in focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <img src={image.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+              </button>
             </li>
           ))}
         </ul>
+      )}
+
+      {lightboxIndex !== null && (
+        <ImageLightbox
+          images={post.images.map((image) => ({ url: image.url }))}
+          initialIndex={lightboxIndex}
+          onClose={() => {
+            setLightboxIndex(null);
+          }}
+        />
       )}
 
       {post.originalPost !== null && post.originalPost !== undefined && (
@@ -186,7 +235,13 @@ export const PostCard = memo(function PostCard({
       <div className="text-on-surface-variant font-small text-small flex items-start justify-between">
         <ReactionBreakdown post={post} />
         <span className="gap-md flex">
-          <span>{post.commentCount} comments</span>
+          {isDetail ? (
+            <span>{post.commentCount} comments</span>
+          ) : (
+            <Link to={permalink} className="hover:text-on-surface hover:underline">
+              {post.commentCount} comments
+            </Link>
+          )}
           <span>{post.repostCount} reposts</span>
         </span>
       </div>
@@ -263,7 +318,7 @@ export const PostCard = memo(function PostCard({
       </div>
 
       {panel === 'comments' && (
-        <CommentThread post={post} onCommentCountChange={onCommentCountChange} />
+        <CommentThread post={post} onCommentCountChange={onCommentCountChange} loadAll={isDetail} />
       )}
 
       {dialog === 'repost' && (

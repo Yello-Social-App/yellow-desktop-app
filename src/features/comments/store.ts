@@ -18,13 +18,8 @@ import { create } from 'zustand';
 
 import { createLogger } from '@/lib/logger';
 
-import {
-  addComment,
-  addCommentReaction,
-  deleteComment,
-  fetchComments,
-  removeCommentReaction,
-} from './api';
+import { addComment, deleteComment, fetchComments, toggleCommentReaction } from './api';
+import { flattenThread, replyRootOf } from './types';
 import { PRIMARY_REACTION } from '@/features/feed/types';
 
 const log = createLogger('comments.store');
@@ -39,7 +34,11 @@ export interface ThreadState {
   hasMore: boolean;
   isLoadingMore: boolean;
   isSubmitting: boolean;
-  /** The comment being replied to, or null for a reply to the post itself. */
+  /**
+   * The comment being replied to, or null for a reply to the post itself.
+   * May itself be a reply: the API nests one level, so the new comment then
+   * attaches to that reply's parent, and the person is addressed by name.
+   */
   replyTo: Comment | null;
   /** Comment ids with an in-flight delete or reaction. */
   pendingIds: ReadonlySet<string>;
@@ -109,9 +108,10 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
       return;
     }
 
+    // Held flat, replies after their parent; the tree is rebuilt for display.
     const existing = page === 0 ? [] : threadOf(postId).items;
     patch(postId, {
-      items: [...existing, ...result.data.content],
+      items: [...existing, ...flattenThread(result.data.content)],
       page: result.data.page,
       hasMore: !result.data.last,
       status: 'ready',
@@ -157,7 +157,7 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
       }
 
       patch(postId, { isSubmitting: true, error: null });
-      const parentId = thread.replyTo?.id;
+      const parentId = replyRootOf(thread.replyTo);
       const result = await addComment(postId, content, parentId);
 
       if (!result.ok) {
@@ -165,9 +165,12 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
         return null;
       }
 
-      // Appended, not prepended: the thread reads oldest-first.
+      // Where it lands follows the server's order: top-level comments read
+      // newest first, so a new one leads; replies read oldest first under
+      // their parent, so a new one trails.
+      const items = threadOf(postId).items;
       patch(postId, {
-        items: [...threadOf(postId).items, result.data],
+        items: parentId === undefined ? [result.data, ...items] : [...items, result.data],
         isSubmitting: false,
         replyTo: null,
       });
@@ -225,9 +228,12 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
         pendingIds: withPending(threadOf(postId).pendingIds, commentId, true),
       });
 
-      const result = hadReacted
-        ? await removeCommentReaction(commentId)
-        : await addCommentReaction(commentId);
+      // The toggle removes when sent the type already held, so clearing means
+      // sending back whatever the viewer had — not always LIKE.
+      const result = await toggleCommentReaction(
+        commentId,
+        existing.viewerReaction ?? PRIMARY_REACTION,
+      );
 
       if (!result.ok) {
         // Roll back to the last state the server confirmed.

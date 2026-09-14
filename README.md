@@ -176,16 +176,16 @@ sidebar, top bar and composer all repaint from one source.
 
 ## API coverage
 
-All 35 endpoints are wired through the main process and reachable from a screen.
+All 36 endpoints are wired through the main process and reachable from a screen.
 
 | Area          | Endpoints                                                                                 | Where                                                                   |
 | ------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Auth          | register, verify-otp, login, refresh, logout, forgot-password, reset-password             | `/login`, `/register`, `/verify`, `/forgot-password`, `/reset-password` |
+| Auth          | register, verify-otp, resend-otp, login, refresh, logout, forgot-password, reset-password | `/login`, `/register`, `/verify`, `/forgot-password`, `/reset-password` |
 | Users         | `GET`/`PUT /users/me`, `PUT /users/me/avatar`, `GET /users/{id}`, `GET /users/{id}/posts` | `/profile`, `/users/:userId`                                            |
-| Posts         | create (text, visibility, images), get, update, delete, repost, share-link                | composer, post card, `/posts/:postId`                                   |
+| Posts         | create (text, visibility, images), get, update (incl. images), delete, repost, share-link | composer, post card, `/posts/:postId`                                   |
 | Feed          | `GET /feed` (cursor-paged)                                                                | `/feed`                                                                 |
-| Comments      | create (incl. replies via `parentCommentId`), list, delete                                | the thread under a post card                                            |
-| Reactions     | set, clear, summary — for both `POST` and `COMMENT` targets                               | like buttons; the reaction-count breakdown                              |
+| Comments      | create (incl. replies via `parentCommentId`), list (replies nested), delete               | the thread under a post card                                            |
+| Reactions     | toggle, summary, who-reacted — for both `POST` and `COMMENT` targets                      | like buttons; the reactions dialog                                      |
 | Friends       | send request, accept, decline, list, pending requests, unfriend                           | `/friends`, and the button on a profile                                 |
 | Notifications | list (incl. `unreadOnly`), unread-count, mark read, mark all read                         | `/notifications`, sidebar badge                                         |
 

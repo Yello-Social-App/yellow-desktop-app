@@ -43,7 +43,7 @@ export const FriendRow = memo(function FriendRow({
       <div className="min-w-0 flex-1">
         <Link
           to={`/users/${person.id}`}
-          className="font-heading text-h3 text-on-surface hover:text-primary block truncate transition-colors"
+          className="font-heading text-h3 text-on-surface hover:text-primary transition-tone block truncate"
         >
           {name}
         </Link>

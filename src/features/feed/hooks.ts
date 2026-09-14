@@ -3,7 +3,7 @@
  * presentational.
  */
 import type { Post } from '@shared/ipc-types';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { SEARCH_DEBOUNCE_MS } from '@/lib/constants';
@@ -11,7 +11,7 @@ import { displayName } from '@/lib/user-display';
 
 import { fetchPost } from './api';
 import { usePostActions, type PostActions, type PostSink } from './post-actions';
-import { feedPostSink, useFeedStore } from './store';
+import { feedPostSink, mirrorCommentCountToFeed, mirroredToFeed, useFeedStore } from './store';
 
 export function useFeed() {
   const status = useFeedStore((state) => state.status);
@@ -118,33 +118,40 @@ export function useSinglePost(postId: string | undefined): SinglePostState {
     };
   }, [postId]);
 
+  // Mirrored to the feed: this page is fetched fresh each time, the feed is
+  // not, so what changes here has to reach the feed's copy of the post too.
   const sink = useMemo<PostSink>(
-    () => ({
-      replace: (updated) => {
-        setLoaded((current) =>
-          current?.post?.id === updated.id ? { ...current, post: updated } : current,
-        );
-      },
-      remove: () => {
-        setLoaded((current) => (current === null ? null : { ...current, post: null }));
-      },
-    }),
+    () =>
+      mirroredToFeed({
+        replace: (updated) => {
+          setLoaded((current) =>
+            current?.post?.id === updated.id ? { ...current, post: updated } : current,
+          );
+        },
+        remove: () => {
+          setLoaded((current) => (current === null ? null : { ...current, post: null }));
+        },
+      }),
     [],
   );
 
-  const adjustCommentCount = useCallback((_postId: string, delta: number) => {
-    setLoaded((current) =>
-      current?.post == null
-        ? current
-        : {
-            ...current,
-            post: {
-              ...current.post,
-              commentCount: Math.max(0, current.post.commentCount + delta),
-            },
-          },
-    );
-  }, []);
+  const adjustCommentCount = useMemo(
+    () =>
+      mirrorCommentCountToFeed((_postId, delta) => {
+        setLoaded((current) =>
+          current?.post == null
+            ? current
+            : {
+                ...current,
+                post: {
+                  ...current.post,
+                  commentCount: Math.max(0, current.post.commentCount + delta),
+                },
+              },
+        );
+      }),
+    [],
+  );
 
   // Status is derived from which id the state belongs to, so a route change
   // reads as loading without an effect having to reset anything.

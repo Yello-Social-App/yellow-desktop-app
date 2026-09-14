@@ -128,7 +128,7 @@ export function EditProfileForm({ user, mutations, onDone }: EditProfileFormProp
             onChange={(event) => {
               form.setField('bio', event.target.value);
             }}
-            className="bg-surface-container-low border-outline-variant font-body text-body text-on-surface placeholder:text-outline-variant focus:border-primary-container focus:ring-primary-container/20 px-md w-full resize-none rounded-lg border py-3 transition-all focus:ring-2 focus:outline-none"
+            className="bg-surface-container-low border-outline-variant font-body text-body text-on-surface placeholder:text-outline-variant focus:border-primary-container focus:ring-primary-container/20 px-md transition-tone w-full resize-none rounded-lg border py-3 focus:ring-2 focus:outline-none"
           />
         </FormField>
 

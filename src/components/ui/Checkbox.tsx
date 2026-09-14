@@ -21,7 +21,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
         )}
         {...rest}
       />
-      <span className="font-body-sm text-body-sm text-on-surface-variant group-hover:text-on-surface transition-colors">
+      <span className="font-body-sm text-body-sm text-on-surface-variant group-hover:text-on-surface transition-tone">
         {label}
       </span>
     </label>

@@ -2,12 +2,13 @@
  * Comment shapes.
  *
  * The records come from the API (see @shared/ipc-types); what lives here is the
- * composer contract and the reply-tree assembly. The list endpoint returns
- * top-level comments only — replies are addressed by their `parentCommentId` —
- * so the nesting the UI shows is built on this side, one level deep, matching
- * how the server raises notifications for a thread.
+ * composer contract and the two directions of the reply tree. The list
+ * endpoint nests each comment's replies under it; the store holds the thread
+ * flat, because every mutation — add, delete, react — is a lookup by id, and
+ * a flat list makes each of those one `find`. `toThread` puts the nesting back
+ * for display.
  */
-import { COMMENT_MAX_LENGTH, type Comment } from '@shared/ipc-types';
+import { COMMENT_MAX_LENGTH, type Comment, type ThreadComment } from '@shared/ipc-types';
 import { z } from 'zod';
 
 export const COMMENTS_PAGE_SIZE = 20;
@@ -35,9 +36,26 @@ function isReply(comment: Comment): boolean {
 }
 
 /**
- * Groups a flat list into one level of nesting. Replies whose parent is not in
- * the same list are kept as roots rather than dropped, so a reply to a comment
- * on a later page still renders (A10 — an incomplete page must not lose rows).
+ * Where a reply to `target` attaches. Replies are one level deep server-side
+ * ("Replies are only one level deep"), so answering a reply joins the same
+ * thread under its parent rather than starting a deeper one.
+ */
+export function replyRootOf(target: Comment | null): string | undefined {
+  if (target === null) {
+    return undefined;
+  }
+  return target.parentCommentId ?? target.id;
+}
+
+/** A page as the server sends it, flattened: each parent, then its replies. */
+export function flattenThread(comments: readonly ThreadComment[]): Comment[] {
+  return comments.flatMap(({ replies, ...comment }) => [comment, ...replies]);
+}
+
+/**
+ * Groups a flat list into one level of nesting, in list order. Replies whose
+ * parent is not in the list are kept as roots rather than dropped, so a row
+ * the server sent is never lost to a shape it did not expect (A10).
  */
 export function toThread(comments: readonly Comment[]): CommentNode[] {
   const roots = new Map<string, CommentNode>();

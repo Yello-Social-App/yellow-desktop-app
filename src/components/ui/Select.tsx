@@ -56,7 +56,7 @@ function SelectInner<TValue extends string>(
           onValueChange(event.target.value as TValue);
         }}
         className={cn(
-          'font-body-sm text-body-sm text-on-surface w-full appearance-none rounded-lg border py-2 transition-all',
+          'font-body-sm text-body-sm text-on-surface transition-tone w-full appearance-none rounded-lg border py-2',
           'bg-surface-container-low cursor-pointer',
           'focus:ring-2 focus:outline-none',
           isInvalid

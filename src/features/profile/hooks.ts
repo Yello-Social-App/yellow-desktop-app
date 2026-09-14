@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useAuthStore } from '@/features/auth/store';
 import type { PostSink } from '@/features/feed/post-actions';
+import { mirrorCommentCountToFeed, mirroredToFeed } from '@/features/feed/store';
 import { PROFILE_POSTS_PAGE_SIZE } from '@/lib/constants';
 
 import {
@@ -94,38 +95,45 @@ export function useProfilePosts(
 
   const isOwnProfile = options.isOwnProfile ?? false;
 
+  // Mirrored to the feed: a timeline is fetched fresh each visit, the feed is
+  // not, so what changes here has to reach the feed's copy of the post too.
   const sink = useMemo<PostSink>(
-    () => ({
-      replace: (updated) => {
-        setPosts((current) => current.map((post) => (post.id === updated.id ? updated : post)));
-      },
-      remove: (postId) => {
-        setPosts((current) => current.filter((post) => post.id !== postId));
-        setTotalPosts((current) => Math.max(0, current - 1));
-      },
-      // A repost is the viewer's own post, so it belongs at the top of their
-      // own timeline and nowhere on someone else's.
-      ...(isOwnProfile
-        ? {
-            prepend: (post: Post) => {
-              setPosts((current) => [post, ...current]);
-              setTotalPosts((current) => current + 1);
-            },
-          }
-        : {}),
-    }),
+    () =>
+      mirroredToFeed({
+        replace: (updated) => {
+          setPosts((current) => current.map((post) => (post.id === updated.id ? updated : post)));
+        },
+        remove: (postId) => {
+          setPosts((current) => current.filter((post) => post.id !== postId));
+          setTotalPosts((current) => Math.max(0, current - 1));
+        },
+        // A repost is the viewer's own post, so it belongs at the top of their
+        // own timeline and nowhere on someone else's.
+        ...(isOwnProfile
+          ? {
+              prepend: (post: Post) => {
+                setPosts((current) => [post, ...current]);
+                setTotalPosts((current) => current + 1);
+              },
+            }
+          : {}),
+      }),
     [isOwnProfile],
   );
 
-  const adjustCommentCount = useCallback((postId: string, delta: number) => {
-    setPosts((current) =>
-      current.map((post) =>
-        post.id === postId
-          ? { ...post, commentCount: Math.max(0, post.commentCount + delta) }
-          : post,
-      ),
-    );
-  }, []);
+  const adjustCommentCount = useMemo(
+    () =>
+      mirrorCommentCountToFeed((postId, delta) => {
+        setPosts((current) =>
+          current.map((post) =>
+            post.id === postId
+              ? { ...post, commentCount: Math.max(0, post.commentCount + delta) }
+              : post,
+          ),
+        );
+      }),
+    [],
+  );
 
   return {
     posts,

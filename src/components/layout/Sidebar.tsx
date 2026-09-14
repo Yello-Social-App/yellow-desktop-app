@@ -37,7 +37,7 @@ const NAV_ITEMS: readonly NavItem[] = [
 
 /** Active state is the 4px yellow left bar specified by the design system. */
 const ITEM_BASE =
-  'flex items-center gap-md rounded-r-lg border-l-4 py-3 pl-4 transition-colors duration-200';
+  'flex items-center gap-md rounded-r-lg border-l-4 py-3 pl-4 transition-tone duration-200';
 
 function itemClasses(isActive: boolean): string {
   return cn(

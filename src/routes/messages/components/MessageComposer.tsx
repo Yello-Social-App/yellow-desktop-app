@@ -53,7 +53,7 @@ export function MessageComposer() {
             setBody(event.target.value);
             setError(null);
           }}
-          className="bg-surface-container-low border-outline-variant font-body text-body text-on-surface placeholder:text-outline-variant focus:border-primary-container focus:ring-primary-container/20 px-md w-full flex-1 rounded-full border py-2 transition-all focus:ring-2 focus:outline-none"
+          className="bg-surface-container-low border-outline-variant font-body text-body text-on-surface placeholder:text-outline-variant focus:border-primary-container focus:ring-primary-container/20 px-md transition-tone w-full flex-1 rounded-full border py-2 focus:ring-2 focus:outline-none"
         />
         <IconButton
           label="Send message"

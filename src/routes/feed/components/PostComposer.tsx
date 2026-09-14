@@ -167,7 +167,7 @@ export function PostComposer() {
                   onClick={() => {
                     detach(image.token);
                   }}
-                  className="bg-inverse-surface text-inverse-on-surface absolute top-1 right-1 inline-flex size-6 items-center justify-center rounded-full transition-opacity hover:opacity-80 disabled:opacity-40"
+                  className="bg-inverse-surface text-inverse-on-surface transition-tone absolute top-1 right-1 inline-flex size-6 items-center justify-center rounded-full hover:opacity-80 disabled:opacity-40"
                 >
                   <X aria-hidden className="size-3.5" />
                 </button>

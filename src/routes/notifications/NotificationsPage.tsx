@@ -87,9 +87,9 @@ export default function NotificationsPage() {
 
       {status === 'ready' && items.length > 0 && (
         <>
-          <ul className="list-windowed gap-md flex flex-col">
+          <ul className="stagger gap-md flex flex-col">
             {items.map((notification) => (
-              <li key={notification.id}>
+              <li key={notification.id} className="animate-fade-up">
                 <NotificationRow
                   notification={notification}
                   isPending={pendingIds.has(notification.id)}

@@ -51,6 +51,21 @@ export const verifyOtpFormSchema = z.object({
     .regex(new RegExp(`^[0-9]{${OTP_LENGTH}}$`), `Enter the ${OTP_LENGTH}-digit code.`),
 });
 
+/** Step two of a reset: the new password, confirmed. The token is held in main. */
+export const resetPasswordFormSchema = z
+  .object({
+    newPassword: z
+      .string()
+      .min(REGISTER_PASSWORD_MIN_LENGTH, `Use at least ${REGISTER_PASSWORD_MIN_LENGTH} characters.`)
+      .max(PASSWORD_MAX_LENGTH, 'That password is too long.'),
+    confirmPassword: z.string(),
+  })
+  .refine((values) => values.newPassword === values.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  });
+
 export type LoginFormValues = z.infer<typeof loginFormSchema>;
 export type RegisterFormValues = z.infer<typeof registerFormSchema>;
 export type VerifyOtpFormValues = z.infer<typeof verifyOtpFormSchema>;
+export type ResetPasswordFormValues = z.infer<typeof resetPasswordFormSchema>;

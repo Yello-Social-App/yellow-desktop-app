@@ -4,10 +4,18 @@
 import type { Session, User } from '@shared/ipc-types';
 import { useCallback, useEffect, useState } from 'react';
 
-import { SESSION_EXPIRY_CHECK_MS } from '@/lib/constants';
+import { OTP_RESEND_COOLDOWN_MS, SESSION_EXPIRY_CHECK_MS } from '@/lib/constants';
 import type { Result } from '@/lib/result';
 
-import { login, register, verifyOtp, type AuthError } from './api';
+import {
+  login,
+  register,
+  resendOtp,
+  resetPassword,
+  verifyOtp,
+  verifyResetOtp,
+  type AuthError,
+} from './api';
 import { useAuthStore, type AuthStatus } from './store';
 
 export function useAuthStatus(): AuthStatus {
@@ -106,6 +114,70 @@ export function useVerifyOtp() {
     [adoptSession],
   );
   return useSubmission(verifyOtp, onSuccess);
+}
+
+export function useVerifyResetOtp() {
+  return useSubmission(verifyResetOtp);
+}
+
+export function useResetPassword() {
+  return useSubmission(resetPassword);
+}
+
+export interface ResendOtp {
+  resend: () => void;
+  isResending: boolean;
+  /** Seconds until the button is offered again; 0 when it is. */
+  cooldownSeconds: number;
+  /** True once a resend was accepted, until the next attempt. */
+  hasResent: boolean;
+  error: AuthError | null;
+}
+
+/**
+ * The "Resend code" button, for either OTP screen.
+ *
+ * The server refuses a second code within 60 seconds of the first — silently,
+ * with the same 200 — so the button holds itself back for that long after a
+ * resend rather than letting the user press it into a cooldown they cannot see.
+ */
+export function useResendOtp(email: string): ResendOtp {
+  const [hasResent, setHasResent] = useState(false);
+  const [availableAt, setAvailableAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const onSuccess = useCallback(() => {
+    setHasResent(true);
+    setAvailableAt(Date.now() + OTP_RESEND_COOLDOWN_MS);
+  }, []);
+  const { submit, isSubmitting, error } = useSubmission(resendOtp, onSuccess);
+
+  const cooldownSeconds =
+    availableAt === null ? 0 : Math.max(0, Math.ceil((availableAt - now) / 1000));
+  const isCoolingDown = cooldownSeconds > 0;
+
+  // Ticks only while there is a countdown to show.
+  useEffect(() => {
+    if (!isCoolingDown) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [isCoolingDown]);
+
+  const resend = useCallback(() => {
+    if (isCoolingDown) {
+      return;
+    }
+    setHasResent(false);
+    void submit(email);
+  }, [isCoolingDown, submit, email]);
+
+  return { resend, isResending: isSubmitting, cooldownSeconds, hasResent, error };
 }
 
 export function useSignOut(): () => Promise<void> {

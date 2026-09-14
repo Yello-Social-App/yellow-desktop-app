@@ -10,8 +10,10 @@ import { usePostActions } from '@/features/feed/post-actions';
 import { PostCard } from './components/PostCard';
 
 /**
- * A single post and its thread — where a notification about a comment or a
- * repost lands, and what a shared link refers to.
+ * A single post and its thread — reached by clicking a post in a timeline,
+ * where a notification about a comment or a repost lands, and what a shared
+ * link refers to. The thread is open from the start: this page is where the
+ * comments are read in full.
  *
  * `GET /posts/{id}` is readable anonymously but still enforces the post's
  * visibility, so a `PRIVATE` post belonging to someone else answers 403 rather
@@ -27,7 +29,7 @@ export default function PostPage() {
     <div className="max-w-content-max gap-lg px-lg py-lg mx-auto flex w-full flex-col">
       <Link
         to="/feed"
-        className="font-label text-label text-on-surface-variant hover:text-on-surface gap-sm flex items-center transition-colors"
+        className="font-label text-label text-on-surface-variant hover:text-on-surface gap-sm transition-tone flex items-center"
       >
         <ArrowLeft aria-hidden className="size-4" />
         Back to feed
@@ -63,6 +65,7 @@ export default function PostPage() {
           actions={actions}
           viewerId={viewer?.id}
           onCommentCountChange={adjustCommentCount}
+          isDetail
         />
       )}
     </div>

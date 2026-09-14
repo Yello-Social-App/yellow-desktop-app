@@ -1,9 +1,10 @@
 /**
  * Comments on posts, and replies to comments.
  *
- * The list endpoint returns top-level comments only — replies are addressed by
- * their `parentCommentId` — so this layer does not attempt to build a tree; it
- * hands back the page the server sent and lets the UI decide.
+ * The list endpoint pages top-level comments, newest first, with each one's
+ * replies nested underneath (oldest first, one level deep). A page is therefore
+ * a complete thread for the comments on it; this layer hands it back as sent
+ * and lets the UI decide how to hold it.
  */
 import { z } from 'zod';
 
@@ -64,8 +65,7 @@ export function registerCommentHandlers(): void {
         method: 'get',
         url: ENDPOINTS.posts.comments(postId),
         schema: commentPageSchema,
-        // Oldest first is the reading order for a thread.
-        params: { page, size, sort: 'createdAt,asc' },
+        params: { page, size },
       }),
   );
 

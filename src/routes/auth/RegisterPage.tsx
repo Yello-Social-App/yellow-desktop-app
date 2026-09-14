@@ -63,7 +63,7 @@ export function RegisterPage() {
           Already have an account?{' '}
           <Link
             to="/login"
-            className="font-label text-label text-primary hover:text-primary-fixed-dim ml-xs transition-colors"
+            className="font-label text-label text-primary hover:text-primary-fixed-dim ml-xs transition-tone"
           >
             Log in here
           </Link>

@@ -47,10 +47,13 @@ export const userSchema = z.object({
 export const authorSchema = z.object({
   id: z.string().min(1).max(64),
   username: z.string().min(1).max(64),
+  fullName: optionalText(200),
   avatarUrl: optionalText(2048),
 });
 
 export const postImageSchema = z.object({
+  /** What `removeImageIds` takes on an edit. Optional so an older row still renders. */
+  id: optionalText(64),
   url: z.string().max(2048),
   position: z.number().int().nonnegative().optional(),
 });
@@ -97,6 +100,11 @@ const postBaseShape = {
     .transform((value) => value ?? 0),
   shareUrl: optionalText(2048),
   visibility: optionalText(32),
+  /** The server's word on authorship; always false for an anonymous read. */
+  isOwner: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
 };
 
 /** A repost embeds the post it quotes; nesting stops at one level. */
@@ -118,7 +126,7 @@ export const commentSchema = z.object({
   id: z.string().min(1).max(64),
   postId: z.string().min(1).max(64),
   author: authorSchema,
-  /** Set when this comment is a reply; the list endpoint returns top level only. */
+  /** Set when this comment is a reply; replies nest one level deep. */
   parentCommentId: optionalText(64),
   content: z
     .string()
@@ -133,6 +141,19 @@ export const commentSchema = z.object({
     .transform((value) => value ?? 0),
   viewerReaction: reactionTypeSchema.nullish(),
   createdAt: timestamp,
+});
+
+/**
+ * A top-level comment as the list endpoint returns it: with its replies
+ * nested underneath. Replies carry an empty `replies` of their own, which the
+ * plain comment schema strips.
+ */
+export const threadCommentSchema = commentSchema.extend({
+  replies: z
+    .array(commentSchema)
+    .max(500)
+    .nullish()
+    .transform((value) => value ?? []),
 });
 
 export const FRIENDSHIP_STATUSES = ['PENDING', 'ACCEPTED', 'DECLINED', 'BLOCKED'] as const;
@@ -234,6 +255,7 @@ export type User = z.infer<typeof userSchema>;
 export type Author = z.infer<typeof authorSchema>;
 export type Post = z.infer<typeof postSchema>;
 export type Comment = z.infer<typeof commentSchema>;
+export type ThreadComment = z.infer<typeof threadCommentSchema>;
 export type Friendship = z.infer<typeof friendshipSchema>;
 export type Notification = z.infer<typeof notificationSchema>;
 export type FriendshipStatus = (typeof FRIENDSHIP_STATUSES)[number];
@@ -333,27 +355,39 @@ export const registerResponseSchema = z.object({
   message: z.string().max(500),
 });
 
+export const OTP_CODE_PATTERN = /^[0-9]{6}$/;
+
 export const verifyOtpRequestSchema = z.object({
   email: z.email(),
-  code: z.string().regex(/^[0-9]{6}$/),
+  code: z.string().regex(OTP_CODE_PATTERN),
   remember: z.boolean(),
 });
 
 export const sessionResponseSchema = z.object({ session: sessionSchema.nullable() });
 
 /**
- * Both password-reset steps answer with nothing useful — `forgot-password`
- * deliberately returns the same 200 whether or not the address exists, so the
- * endpoint cannot be used to enumerate accounts (A01). The renderer is told
- * only that the request was accepted.
+ * The password-reset flow is three calls, and the renderer sees a credential
+ * in none of them: `forgot-password` and `resend-otp` answer the same 200
+ * whether or not the address exists, so neither can enumerate accounts (A01);
+ * `verify-reset-otp` exchanges the emailed code for a reset token that is held
+ * in the main process; and `reset-password` spends that held token. The
+ * renderer is only ever told that a step was accepted.
  */
 export const forgotPasswordRequestSchema = z.object({
   email: z.email().max(254),
 });
 
+/** Re-sends whichever code the account is currently waiting on. */
+export const resendOtpRequestSchema = z.object({
+  email: z.email().max(254),
+});
+
+export const verifyResetOtpRequestSchema = z.object({
+  email: z.email().max(254),
+  code: z.string().regex(OTP_CODE_PATTERN),
+});
+
 export const resetPasswordRequestSchema = z.object({
-  /** A single-use secret from the reset email. Never logged (A09). */
-  token: z.string().min(1).max(512),
   newPassword: z.string().min(12).max(128),
 });
 
@@ -394,6 +428,17 @@ export const stagedImageSchema = z.object({
   byteSize: z.number().int().nonnegative(),
 });
 
+/**
+ * How many more the caller can attach. The main process caps at what is
+ * staged overall; an editor also has to leave room for the images the post
+ * already has.
+ */
+export const stageImagesRequestSchema = z
+  .object({
+    limit: z.number().int().min(1).max(POST_MAX_IMAGES).optional(),
+  })
+  .optional();
+
 export const stageImagesResponseSchema = z.object({
   images: z.array(stagedImageSchema).max(POST_MAX_IMAGES),
   /** True when the picker was dismissed without choosing anything. */
@@ -425,10 +470,17 @@ export const postIdRequestSchema = z.object({
   postId: z.string().min(1).max(64),
 });
 
+/**
+ * Every field is optional and absent means unchanged. Images are edited in two
+ * directions at once: `removeImageIds` names existing ones by the `id` on the
+ * post, and `imageTokens` are staged handles to append, exactly as on create.
+ */
 export const updatePostRequestSchema = z.object({
   postId: z.string().min(1).max(64),
   content: z.string().trim().max(5000).optional(),
   visibility: postVisibilitySchema.optional(),
+  removeImageIds: z.array(z.string().min(1).max(64)).max(POST_MAX_IMAGES).optional(),
+  imageTokens: z.array(z.string().min(1).max(64)).max(POST_MAX_IMAGES).optional(),
 });
 
 export const repostRequestSchema = z.object({
@@ -465,18 +517,51 @@ const reactionTargetShape = {
 
 export const reactionTargetRequestSchema = z.object(reactionTargetShape);
 
-export const setReactionRequestSchema = z.object({
+/**
+ * One call for add, change and remove: the server compares `type` with the
+ * caller's current reaction and does whichever applies. Sending the type you
+ * already hold removes it.
+ */
+export const toggleReactionRequestSchema = z.object({
   ...reactionTargetShape,
   type: reactionTypeSchema,
 });
-
-export const clearReactionRequestSchema = z.object(reactionTargetShape);
 
 export const reactionSummarySchema = z.object({
   counts: z.record(z.string(), z.number()).default({}),
   total: z.number().int().nonnegative().default(0),
   viewerReaction: reactionTypeSchema.nullish(),
 });
+
+/** Who reacted, optionally narrowed to one reaction type. */
+export const listReactorsRequestSchema = z.object({
+  ...reactionTargetShape,
+  type: reactionTypeSchema.optional(),
+  page: z.number().int().min(0).max(1000),
+  size: z.number().int().min(1).max(50),
+});
+
+export const FRIEND_STATUSES = [
+  'SELF',
+  'FRIENDS',
+  'REQUEST_SENT',
+  'REQUEST_RECEIVED',
+  'NONE',
+] as const;
+
+/**
+ * The viewer's relationship to a reactor, as the server reports it. Held as
+ * text rather than an enum so a status added later cannot void the list
+ * (A10); compare against FRIEND_STATUSES.
+ */
+export const reactorSchema = z.object({
+  user: authorSchema,
+  type: reactionTypeSchema,
+  reactedAt: timestamp,
+  friendStatus: optionalText(32),
+});
+
+export const reactorPageSchema = pageOf(reactorSchema);
 
 /* -- comments -- */
 
@@ -497,7 +582,7 @@ export const listCommentsRequestSchema = z.object({
   size: z.number().int().min(1).max(50),
 });
 
-export const commentPageSchema = pageOf(commentSchema);
+export const commentPageSchema = pageOf(threadCommentSchema);
 
 export const deleteCommentRequestSchema = z.object({
   commentId: z.string().min(1).max(64),
@@ -660,6 +745,8 @@ export const windowStateSchema = z.object({
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type ForgotPasswordRequest = z.infer<typeof forgotPasswordRequestSchema>;
+export type ResendOtpRequest = z.infer<typeof resendOtpRequestSchema>;
+export type VerifyResetOtpRequest = z.infer<typeof verifyResetOtpRequestSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
 export type AcknowledgedResponse = z.infer<typeof acknowledgedResponseSchema>;
 export type PublicUserRequest = z.infer<typeof publicUserRequestSchema>;
@@ -674,7 +761,7 @@ export type ReactionTargetRequest = z.infer<typeof reactionTargetRequestSchema>;
 export type CreateCommentRequest = z.infer<typeof createCommentRequestSchema>;
 export type CommentResponse = z.infer<typeof commentResponseSchema>;
 export type ListCommentsRequest = z.infer<typeof listCommentsRequestSchema>;
-export type CommentPage = Page<Comment>;
+export type CommentPage = Page<ThreadComment>;
 export type DeleteCommentRequest = z.infer<typeof deleteCommentRequestSchema>;
 export type PageRequest = z.infer<typeof pageRequestSchema>;
 export type FriendUserRequest = z.infer<typeof friendUserRequestSchema>;
@@ -694,12 +781,16 @@ export type FeedRequest = z.infer<typeof feedRequestSchema>;
 export type FeedResponse = z.infer<typeof feedResponseSchema>;
 export type CreatePostRequest = z.infer<typeof createPostRequestSchema>;
 export type StagedImage = z.infer<typeof stagedImageSchema>;
+export type StageImagesRequest = z.infer<typeof stageImagesRequestSchema>;
 export type StageImagesResponse = z.infer<typeof stageImagesResponseSchema>;
 export type DiscardImagesRequest = z.infer<typeof discardImagesRequestSchema>;
 export type PostResponse = z.infer<typeof postResponseSchema>;
-export type SetReactionRequest = z.infer<typeof setReactionRequestSchema>;
-export type ClearReactionRequest = z.infer<typeof clearReactionRequestSchema>;
+export type ToggleReactionRequest = z.infer<typeof toggleReactionRequestSchema>;
 export type ReactionSummary = z.infer<typeof reactionSummarySchema>;
+export type ListReactorsRequest = z.infer<typeof listReactorsRequestSchema>;
+export type Reactor = z.infer<typeof reactorSchema>;
+export type ReactorPage = Page<Reactor>;
+export type FriendStatus = (typeof FRIEND_STATUSES)[number];
 export type PostExportEntry = z.infer<typeof postExportEntrySchema>;
 export type ExportPostsRequest = z.infer<typeof exportPostsRequestSchema>;
 export type ExportPostsResponse = z.infer<typeof exportPostsResponseSchema>;
@@ -717,14 +808,16 @@ export interface YelloBridge {
     verifyOtp(request: VerifyOtpRequest): Promise<IpcResult<SessionResponse>>;
     logout(): Promise<IpcResult<SessionResponse>>;
     currentSession(): Promise<IpcResult<SessionResponse>>;
+    resendOtp(request: ResendOtpRequest): Promise<IpcResult<AcknowledgedResponse>>;
     forgotPassword(request: ForgotPasswordRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    verifyResetOtp(request: VerifyResetOtpRequest): Promise<IpcResult<AcknowledgedResponse>>;
     resetPassword(request: ResetPasswordRequest): Promise<IpcResult<AcknowledgedResponse>>;
   };
   readonly feed: {
     list(request: FeedRequest): Promise<IpcResult<FeedResponse>>;
     createPost(request: CreatePostRequest): Promise<IpcResult<PostResponse>>;
     /** Opens the OS picker and stages what was chosen, for preview. */
-    stageImages(): Promise<IpcResult<StageImagesResponse>>;
+    stageImages(request?: StageImagesRequest): Promise<IpcResult<StageImagesResponse>>;
     discardImages(request: DiscardImagesRequest): Promise<IpcResult<AcknowledgedResponse>>;
   };
   readonly posts: {
@@ -741,9 +834,9 @@ export interface YelloBridge {
     remove(request: DeleteCommentRequest): Promise<IpcResult<DeletedResponse>>;
   };
   readonly reactions: {
-    set(request: SetReactionRequest): Promise<IpcResult<ReactionSummary>>;
-    clear(request: ClearReactionRequest): Promise<IpcResult<ReactionSummary>>;
+    toggle(request: ToggleReactionRequest): Promise<IpcResult<ReactionSummary>>;
     summary(request: ReactionTargetRequest): Promise<IpcResult<ReactionSummary>>;
+    list(request: ListReactorsRequest): Promise<IpcResult<ReactorPage>>;
   };
   readonly friends: {
     list(request: PageRequest): Promise<IpcResult<FriendshipPage>>;

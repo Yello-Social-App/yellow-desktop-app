@@ -20,7 +20,6 @@ import type {
   AppInfoResponse,
   AvatarCommitRequest,
   AvatarPickResponse,
-  ClearReactionRequest,
   CommentPage,
   CommentResponse,
   CreateCommentRequest,
@@ -34,6 +33,7 @@ import type {
   FeedResponse,
   ForgotPasswordRequest,
   FriendUserRequest,
+  ListReactorsRequest,
   FriendshipIdRequest,
   FriendshipPage,
   FriendshipResponse,
@@ -51,21 +51,25 @@ import type {
   PublicUserRequest,
   ReactionSummary,
   ReactionTargetRequest,
+  ReactorPage,
   RegisterRequest,
   RegisterResponse,
   RepostRequest,
+  ResendOtpRequest,
   ResetPasswordRequest,
   SessionResponse,
-  SetReactionRequest,
   ShareLinkCopiedResponse,
   ShareLinkResponse,
+  StageImagesRequest,
   StageImagesResponse,
+  ToggleReactionRequest,
   UnreadCount,
   UpdatePostRequest,
   UpdateProfileRequest,
   UserPostsRequest,
   UserPostsResponse,
   VerifyOtpRequest,
+  VerifyResetOtpRequest,
   WindowState,
   YelloBridge,
 } from '../shared/ipc-types';
@@ -85,8 +89,12 @@ const bridge: YelloBridge = {
       invoke<SessionResponse>(IPC_CHANNELS.AUTH_VERIFY_OTP, request),
     logout: () => invoke<SessionResponse>(IPC_CHANNELS.AUTH_LOGOUT),
     currentSession: () => invoke<SessionResponse>(IPC_CHANNELS.AUTH_CURRENT_SESSION),
+    resendOtp: (request: ResendOtpRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_RESEND_OTP, request),
     forgotPassword: (request: ForgotPasswordRequest) =>
       invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_FORGOT_PASSWORD, request),
+    verifyResetOtp: (request: VerifyResetOtpRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_VERIFY_RESET_OTP, request),
     resetPassword: (request: ResetPasswordRequest) =>
       invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_RESET_PASSWORD, request),
   },
@@ -94,7 +102,8 @@ const bridge: YelloBridge = {
     list: (request: FeedRequest) => invoke<FeedResponse>(IPC_CHANNELS.FEED_LIST, request),
     createPost: (request: CreatePostRequest) =>
       invoke<PostResponse>(IPC_CHANNELS.FEED_CREATE_POST, request),
-    stageImages: () => invoke<StageImagesResponse>(IPC_CHANNELS.FEED_STAGE_IMAGES),
+    stageImages: (request?: StageImagesRequest) =>
+      invoke<StageImagesResponse>(IPC_CHANNELS.FEED_STAGE_IMAGES, request),
     discardImages: (request: DiscardImagesRequest) =>
       invoke<AcknowledgedResponse>(IPC_CHANNELS.FEED_DISCARD_IMAGES, request),
   },
@@ -118,12 +127,12 @@ const bridge: YelloBridge = {
       invoke<DeletedResponse>(IPC_CHANNELS.COMMENTS_DELETE, request),
   },
   reactions: {
-    set: (request: SetReactionRequest) =>
-      invoke<ReactionSummary>(IPC_CHANNELS.REACTIONS_SET, request),
-    clear: (request: ClearReactionRequest) =>
-      invoke<ReactionSummary>(IPC_CHANNELS.REACTIONS_CLEAR, request),
+    toggle: (request: ToggleReactionRequest) =>
+      invoke<ReactionSummary>(IPC_CHANNELS.REACTIONS_TOGGLE, request),
     summary: (request: ReactionTargetRequest) =>
       invoke<ReactionSummary>(IPC_CHANNELS.REACTIONS_SUMMARY, request),
+    list: (request: ListReactorsRequest) =>
+      invoke<ReactorPage>(IPC_CHANNELS.REACTIONS_LIST, request),
   },
   friends: {
     list: (request: PageRequest) => invoke<FriendshipPage>(IPC_CHANNELS.FRIENDS_LIST, request),

@@ -21,9 +21,11 @@ interface ModalProps {
   size?: 'sm' | 'md';
 }
 
+// Named widths, not Tailwind's `max-w-sm`: the theme's spacing scale owns the
+// bare sm/md names, so `max-w-sm` here would be 8px — a dialog one sliver wide.
 const SIZE_CLASSES = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
+  sm: 'max-w-dialog-sm',
+  md: 'max-w-dialog-md',
 } as const;
 
 /**
