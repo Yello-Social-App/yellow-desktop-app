@@ -55,7 +55,7 @@ export default defineConfig([
     },
   },
   {
-    files: ['electron/**/*.ts', 'scripts/**/*.ts', 'vite.config.ts'],
+    files: ['electron/**/*.ts', 'scripts/**/*.ts', 'vite.config.mts'],
     languageOptions: {
       globals: globals.node,
     },

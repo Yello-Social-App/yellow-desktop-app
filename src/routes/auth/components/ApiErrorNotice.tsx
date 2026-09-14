@@ -7,6 +7,9 @@ const FRIENDLY_MESSAGES: Record<string, string> = {
   RATE_LIMIT_EXCEEDED: 'Too many attempts. Wait a few minutes and try again.',
   ACCOUNT_NOT_VERIFIED: 'This account still needs its email code. Register again to get a new one.',
   ACCOUNT_SUSPENDED: 'This account is suspended. Contact support to restore it.',
+  OTP_INVALID: 'That code is wrong or has expired. Check the email, or ask for a new one.',
+  OTP_TOO_MANY_ATTEMPTS: 'Too many wrong codes. Ask for a new one.',
+  RESET_TOKEN_INVALID: 'This reset has expired. Start again to get a new code.',
   NETWORK: 'Could not reach Yello. Check your connection and try again.',
 };
 

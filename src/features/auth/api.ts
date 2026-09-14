@@ -58,19 +58,40 @@ export async function logout(): Promise<void> {
 }
 
 /**
- * Starts a password reset. Succeeds identically whether or not the address is
- * registered, so the UI must not imply the account was found.
+ * Re-sends whichever code the account is waiting on — a registration code or
+ * a reset code. Succeeds identically whether or not the address is registered,
+ * and inside the server's per-account cooldown, so the UI must not imply the
+ * account was found or that a new email is certain.
+ */
+export async function resendOtp(email: string): Promise<Result<true, AuthError>> {
+  const result = await ipc.resendOtp({ email });
+  return result.ok ? ok(true) : fail(result.error);
+}
+
+/**
+ * Starts a password reset by emailing a code. Succeeds identically whether or
+ * not the address is registered, so the UI must not imply the account was
+ * found.
  */
 export async function forgotPassword(email: string): Promise<Result<true, AuthError>> {
   const result = await ipc.forgotPassword({ email });
   return result.ok ? ok(true) : fail(result.error);
 }
 
-/** Completes a reset with the token from the email. */
-export async function resetPassword(
-  token: string,
-  newPassword: string,
+/**
+ * Exchanges the emailed reset code for a reset token. The token stays in the
+ * main process; the renderer only learns that the code was accepted.
+ */
+export async function verifyResetOtp(
+  email: string,
+  code: string,
 ): Promise<Result<true, AuthError>> {
-  const result = await ipc.resetPassword({ token, newPassword });
+  const result = await ipc.verifyResetOtp({ email, code });
+  return result.ok ? ok(true) : fail(result.error);
+}
+
+/** Completes the reset with the token the main process is holding. */
+export async function resetPassword(newPassword: string): Promise<Result<true, AuthError>> {
+  const result = await ipc.resetPassword({ newPassword });
   return result.ok ? ok(true) : fail(result.error);
 }

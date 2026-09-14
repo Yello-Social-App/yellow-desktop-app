@@ -2,6 +2,7 @@
  * Friendship hooks: thin selectors over the store, plus the one derived answer
  * the profile screens need.
  */
+import type { FriendStatus } from '@shared/ipc-types';
 import { useEffect, useMemo } from 'react';
 
 import { useCurrentUser } from '@/features/auth/hooks';
@@ -105,6 +106,83 @@ export function useRelationship(userId: string | undefined): RelationshipControl
       if (userId !== undefined) {
         void unfriend(userId);
       }
+    },
+  };
+}
+
+/** The server's `friendStatus` vocabulary, in this store's terms. */
+const REPORTED_RELATIONSHIPS: Record<FriendStatus, Relationship> = {
+  SELF: 'self',
+  FRIENDS: 'friends',
+  REQUEST_SENT: 'outgoing',
+  REQUEST_RECEIVED: 'incoming',
+  NONE: 'none',
+};
+
+function isFriendStatus(value: string | undefined): value is FriendStatus {
+  return value !== undefined && value in REPORTED_RELATIONSHIPS;
+}
+
+/**
+ * A relationship control for a row the *server* has already classified — a
+ * reactor, say — rather than one derived from the lists held here.
+ *
+ * The server's answer wins because it knows things this store cannot: an
+ * outgoing request sent from another device, for one. The actions are still
+ * the store's, and `onChanged` fires after any of them succeeds so the caller
+ * can re-read the row rather than guess the new status. An unknown status
+ * (added server-side later) falls back to the derived answer (A10).
+ */
+export function useReportedRelationship(
+  userId: string,
+  reported: string | undefined,
+  onChanged: () => void,
+): RelationshipControl {
+  const derived = useRelationship(userId);
+  const relationship = isFriendStatus(reported)
+    ? REPORTED_RELATIONSHIPS[reported]
+    : derived.relationship;
+
+  // An incoming request can only be answered with its friendship id, which
+  // the reactor row does not carry; the requests list is where it lives.
+  const requests = useFriendsStore((state) => state.requests);
+  const friendshipId = useMemo(
+    () => requests.find((item) => item.user.id === userId)?.id ?? null,
+    [requests, userId],
+  );
+
+  const sendRequest = useFriendsStore((state) => state.sendRequest);
+  const accept = useFriendsStore((state) => state.accept);
+  const decline = useFriendsStore((state) => state.decline);
+  const unfriend = useFriendsStore((state) => state.unfriend);
+
+  const after = (done: Promise<boolean>): void => {
+    void done.then((changed) => {
+      if (changed) {
+        onChanged();
+      }
+    });
+  };
+
+  return {
+    relationship,
+    friendshipId,
+    isBusy: derived.isBusy,
+    sendRequest: () => {
+      after(sendRequest(userId));
+    },
+    accept: () => {
+      if (friendshipId !== null) {
+        after(accept(friendshipId));
+      }
+    },
+    decline: () => {
+      if (friendshipId !== null) {
+        after(decline(friendshipId));
+      }
+    },
+    unfriend: () => {
+      after(unfriend(userId));
     },
   };
 }

@@ -1,12 +1,14 @@
 import { LogOut, Search, Settings } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
-import { useCurrentUser, useSignOut } from '@/features/auth/hooks';
+import { useCurrentUser } from '@/features/auth/hooks';
 import { displayName, initialsOf } from '@/lib/user-display';
 
+import { SignOutDialog } from './SignOutDialog';
 import { WindowControls } from './WindowControls';
 
 interface TopbarProps {
@@ -20,8 +22,8 @@ interface TopbarProps {
  */
 export function Topbar({ searchQuery, onSearchChange }: TopbarProps) {
   const user = useCurrentUser();
-  const signOut = useSignOut();
   const navigate = useNavigate();
+  const [isSignOutOpen, setIsSignOutOpen] = useState(false);
 
   return (
     <header className="app-drag bg-surface/80 border-outline-variant h-topbar gap-lg px-lg flex shrink-0 items-center justify-between border-b backdrop-blur-md">
@@ -52,9 +54,10 @@ export function Topbar({ searchQuery, onSearchChange }: TopbarProps) {
         />
         <IconButton
           label="Sign out"
+          aria-haspopup="dialog"
           icon={<LogOut className="size-5" />}
           onClick={() => {
-            void signOut();
+            setIsSignOutOpen(true);
           }}
         />
         {user !== null && (
@@ -63,6 +66,15 @@ export function Topbar({ searchQuery, onSearchChange }: TopbarProps) {
         <span aria-hidden className="bg-outline-variant mx-sm h-6 w-px" />
         <WindowControls />
       </div>
+
+      {isSignOutOpen && (
+        <SignOutDialog
+          isOpen
+          onClose={() => {
+            setIsSignOutOpen(false);
+          }}
+        />
+      )}
     </header>
   );
 }

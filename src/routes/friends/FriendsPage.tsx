@@ -13,7 +13,7 @@ import { FriendRow } from './components/FriendRow';
 type Tab = 'friends' | 'requests';
 
 const TAB_BASE =
-  'font-label text-label gap-sm px-md flex items-center rounded-lg py-2 transition-colors';
+  'font-label text-label gap-sm px-md flex items-center rounded-lg py-2 transition-tone';
 
 /**
  * Friends, and the requests waiting on an answer.
@@ -124,9 +124,9 @@ export default function FriendsPage() {
 
       {activeStatus === 'ready' && rows.length > 0 && (
         <>
-          <ul className="list-windowed gap-md flex flex-col">
+          <ul className="stagger gap-md flex flex-col">
             {rows.map((friendship) => (
-              <li key={friendship.id}>
+              <li key={friendship.id} className="animate-fade-up">
                 <FriendRow
                   friendship={friendship}
                   variant={tab === 'friends' ? 'friend' : 'request'}

@@ -63,7 +63,7 @@ export const NotificationRow = memo(function NotificationRow({
           {name !== null && hasActor && (
             <Link
               to={`/users/${actor.id}`}
-              className="font-heading text-on-surface hover:text-primary transition-colors"
+              className="font-heading text-on-surface hover:text-primary transition-tone"
             >
               {name}{' '}
             </Link>
@@ -74,7 +74,7 @@ export const NotificationRow = memo(function NotificationRow({
             <Link
               to={target}
               className={cn(
-                'hover:text-primary transition-colors',
+                'hover:text-primary transition-tone',
                 name === null && 'first-letter:uppercase',
               )}
             >

@@ -18,6 +18,7 @@ import { ENDPOINTS } from '../../api/endpoints';
 import { apiRequest } from '../../api/http-client';
 import { IPC_CHANNELS } from '../channels';
 import { registerIpcHandler } from '../register';
+import { discardStagedImages, resolveStagedImages } from '../staged-images';
 
 import {
   deletedResponseSchema,
@@ -56,15 +57,50 @@ export function registerPostHandlers(): void {
     },
   );
 
+  /**
+   * The endpoint takes JSON or multipart on the same path. JSON is sent unless
+   * there are files to append — every field is optional upstream, so only what
+   * is actually changing goes in either body.
+   */
   registerIpcHandler(
     IPC_CHANNELS.POSTS_UPDATE,
     updatePostRequestSchema,
-    async ({ postId, content, visibility }): Promise<IpcResult<PostResponse>> => {
-      // Both fields are optional upstream: send only what is actually changing.
-      const body = {
-        ...(content === undefined ? {} : { content }),
-        ...(visibility === undefined ? {} : { visibility }),
-      };
+    async ({
+      postId,
+      content,
+      visibility,
+      removeImageIds = [],
+      imageTokens = [],
+    }): Promise<IpcResult<PostResponse>> => {
+      const parts = resolveStagedImages(imageTokens);
+      if (!parts.ok) {
+        return parts;
+      }
+
+      let body: unknown;
+      if (parts.data.length === 0) {
+        body = {
+          ...(content === undefined ? {} : { content }),
+          ...(visibility === undefined ? {} : { visibility }),
+          ...(removeImageIds.length === 0 ? {} : { removeImageIds }),
+        };
+      } else {
+        const form = new FormData();
+        if (content !== undefined) {
+          form.append('content', content);
+        }
+        if (visibility !== undefined) {
+          form.append('visibility', visibility);
+        }
+        // Repeated keys, not `[]` suffixes: that is how the server reads a list.
+        for (const imageId of removeImageIds) {
+          form.append('removeImageIds', imageId);
+        }
+        for (const part of parts.data) {
+          form.append('images', part.blob, part.fileName);
+        }
+        body = form;
+      }
 
       const result = await apiRequest({
         method: 'put',
@@ -77,7 +113,13 @@ export function registerPostHandlers(): void {
         return result;
       }
 
-      log.info('post_updated', {});
+      // Only once the server has them: a failed edit keeps its attachments.
+      discardStagedImages(imageTokens);
+
+      log.info('post_updated', {
+        added: parts.data.length,
+        removed: removeImageIds.length,
+      });
       return ipcOk(postResponseSchema.parse({ post: result.data }));
     },
   );

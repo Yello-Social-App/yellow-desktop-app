@@ -130,6 +130,8 @@
   --spacing-auth-wide: 576px;
   --spacing-search: 320px;
   --spacing-copy: 384px;
+  --spacing-dialog-sm: 384px;
+  --spacing-dialog-md: 448px;
 
   /* ---- Shape ----------------------------------------------------------
    * The source design.md ships both a numeric `rounded` map and a prose
@@ -146,6 +148,66 @@
   /* ---- Elevation: tonal layering, never heavy shadows ------------------ */
   --shadow-floating: 0 4px 12px rgb(0 0 0 / 0.03);
   --shadow-canvas: 0 8px 32px rgb(0 0 0 / 0.04);
+
+  /* ---- Motion ----------------------------------------------------------
+   * One curve and three durations, used by everything that moves: hover
+   * tones, panels opening, dialogs, rows arriving. Things decelerate into
+   * place (ease-out) and never bounce. `--default-transition-*` is what every
+   * `transition-*` utility picks up, so the existing hover transitions share
+   * the curve without being touched.
+   */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: var(--ease-soft);
+
+  --animate-fade-in: fade-in 250ms var(--ease-soft) both;
+  --animate-fade-up: fade-up 350ms var(--ease-soft) both;
+  --animate-scale-in: scale-in 250ms var(--ease-soft) both;
+  --animate-expand: expand 300ms var(--ease-soft) both;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Panels that open inside a card: fades and settles, no height tweening,
+     which would relayout everything below it on every frame. */
+  @keyframes expand {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }
 
 @layer base {
@@ -153,6 +215,13 @@
   body,
   #root {
     height: 100%;
+  }
+
+  /* Programmatic and anchor scrolls glide; wheel and trackpad scrolling is
+     the OS's own and stays untouched. */
+  html,
+  * {
+    scroll-behavior: smooth;
   }
 
   body {
@@ -174,6 +243,133 @@
     outline: 2px solid var(--color-primary-container);
     outline-offset: 2px;
   }
+
+  /* Dialogs and lightboxes: settle in on open, fade out on close. The native
+     <dialog> toggles `display`, so the exit needs `allow-discrete` and the
+     entry needs @starting-style — both plain CSS, nothing to time in React. */
+  dialog {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+    transition:
+      opacity 200ms var(--ease-soft),
+      transform 250ms var(--ease-soft),
+      overlay 250ms allow-discrete,
+      display 250ms allow-discrete;
+  }
+
+  dialog[open] {
+    opacity: 1;
+    transform: none;
+
+    @starting-style {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+  }
+
+  dialog::backdrop {
+    opacity: 0;
+    transition:
+      opacity 250ms var(--ease-soft),
+      overlay 250ms allow-discrete,
+      display 250ms allow-discrete;
+  }
+
+  dialog[open]::backdrop {
+    opacity: 1;
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+
+  /* Anything that acts on a click shows a hand. Tailwind's preflight leaves
+     buttons on the default arrow; this restores the platform convention in one
+     place so no control has to remember `cursor-pointer` on its own. A
+     disabled control shows why it will not respond. */
+  a[href],
+  button,
+  [role='button'],
+  [role='tab'],
+  [role='menuitem'],
+  [role='option'],
+  label[for],
+  select,
+  summary,
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='file'],
+  input[type='submit'],
+  input[type='button'] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role='button'][aria-disabled='true'],
+  select:disabled,
+  input:disabled,
+  label[for]:has(+ :disabled) {
+    cursor: not-allowed;
+  }
+
+  /* Pressed controls give a little under the pointer. */
+  button:not(:disabled):active,
+  [role='button']:not([aria-disabled='true']):active {
+    transform: scale(0.98);
+    transition-duration: 80ms;
+  }
+
+  /* Someone who asked the OS for less motion gets none of the above: no
+     entrances, no gliding scroll, and hover tones switch instantly. */
+  @media (prefers-reduced-motion: reduce) {
+    html,
+    * {
+      scroll-behavior: auto;
+    }
+
+    *,
+    ::before,
+    ::after,
+    ::backdrop {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* The one transition every interactive surface uses: tone, opacity and the
+   press transform, on the shared curve. Replaces Tailwind's `transition-colors`
+   so that a pressed button eases back rather than snapping. */
+@utility transition-tone {
+  transition-property:
+    color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow,
+    transform;
+  transition-timing-function: var(--ease-soft);
+  transition-duration: 200ms;
+}
+
+/* Rows arriving together land one after another rather than all at once.
+   Delays live here because a strict CSP rejects inline `style`. */
+@utility stagger {
+  & > :nth-child(1) {
+    animation-delay: 0ms;
+  }
+  & > :nth-child(2) {
+    animation-delay: 40ms;
+  }
+  & > :nth-child(3) {
+    animation-delay: 80ms;
+  }
+  & > :nth-child(4) {
+    animation-delay: 120ms;
+  }
+  & > :nth-child(5) {
+    animation-delay: 160ms;
+  }
+  & > :nth-child(n + 6) {
+    animation-delay: 200ms;
+  }
 }
 
 @layer components {
@@ -188,7 +384,9 @@
   }
 
   /* Long lists render off-screen rows lazily. This keeps the timeline cheap
-     before real virtualization is wired in. */
+     before real virtualization is wired in. Applied past a row threshold only
+     (see PostList): below it, the estimate vs. real height mismatch makes the
+     scrollbar jump as rows come into view, which reads as jank for no gain. */
   .list-windowed > * {
     content-visibility: auto;
     contain-intrinsic-size: auto var(--feed-row-height, 220px);

@@ -15,6 +15,7 @@ export const ENDPOINTS = {
     login: `${base}/auth/login`,
     register: `${base}/auth/register`,
     verifyOtp: `${base}/auth/verify-otp`,
+    resendOtp: `${base}/auth/resend-otp`,
     refresh: `${base}/auth/refresh`,
     logout: `${base}/auth/logout`,
     forgotPassword: `${base}/auth/forgot-password`,

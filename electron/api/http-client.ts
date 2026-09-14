@@ -11,7 +11,10 @@
  *   - transport must be HTTPS; cleartext is only tolerated against loopback in
  *     development;
  *   - a 401 triggers exactly one refresh-and-retry, so an expired access token
- *     is invisible to the caller but a revoked session fails fast (A07).
+ *     is invisible to the caller but a revoked session fails fast (A07);
+ *   - concurrent 401s share one refresh. Refresh tokens rotate, so two
+ *     parallel exchanges of the same token would have the loser fail — and
+ *     then clear the pair the winner had just stored.
  *
  * Request and response bodies are never logged: that is where tokens and PII
  * live (A09).
@@ -113,20 +116,43 @@ function requireClient(): AxiosInstance {
   return client;
 }
 
-/** Exchanges the stored refresh token for a new pair. */
-async function refreshAccessToken(): Promise<boolean> {
+/** The refresh currently in flight, so callers that arrive together share it. */
+let refreshInFlight: Promise<boolean> | null = null;
+
+/** Exchanges the stored refresh token for a new pair — once at a time. */
+function refreshAccessToken(): Promise<boolean> {
+  refreshInFlight ??= exchangeRefreshToken().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+async function exchangeRefreshToken(): Promise<boolean> {
   const refresh = storedRefreshToken();
   if (refresh === null) {
     return false;
   }
 
-  const response = await requireClient().post(ENDPOINTS.auth.refresh, { refreshToken: refresh });
+  let response;
+  try {
+    response = await requireClient().post(ENDPOINTS.auth.refresh, { refreshToken: refresh });
+  } catch (error) {
+    // Unreachable is not revoked: keep the pair for the next attempt (A10).
+    const reason = error instanceof AxiosError ? error.code : undefined;
+    log.warn('token_refresh_errored', { reason });
+    return false;
+  }
+
   const envelope = apiEnvelopeSchema.safeParse(response.data);
   const pair = envelope.success ? tokenPairSchema.safeParse(envelope.data.data) : null;
 
   if (response.status >= 400 || pair?.success !== true) {
     log.info('token_refresh_failed', { status: response.status });
-    clearTokens();
+    // Only a rejection of the token *we* sent means the session is gone; a
+    // pair stored by someone else meanwhile is theirs to keep.
+    if (storedRefreshToken() === refresh) {
+      clearTokens();
+    }
     return false;
   }
 

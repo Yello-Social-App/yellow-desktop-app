@@ -1,22 +1,19 @@
 /**
  * How a person is shown.
  *
- * The API gives a username and an optional full name, so the display rules live
- * in one place rather than being re-derived in every component.
+ * The API gives a username and an optional full name — on every author
+ * summary as well as the full profile — so the display rules live in one place
+ * rather than being re-derived in every component.
  */
-import type { Author, User } from '@shared/ipc-types';
+import type { Author } from '@shared/ipc-types';
 
 const MAX_INITIALS = 2;
 const FALLBACK_INITIAL = 'Y';
 
-type Nameable = Pick<User, 'username' | 'fullName'> | Pick<Author, 'username'>;
-
-function fullNameOf(person: Nameable): string | undefined {
-  return 'fullName' in person ? person.fullName : undefined;
-}
+type Nameable = Pick<Author, 'username' | 'fullName'>;
 
 export function displayName(person: Nameable): string {
-  return fullNameOf(person) ?? person.username;
+  return person.fullName ?? person.username;
 }
 
 export function initialsOf(person: Nameable): string {

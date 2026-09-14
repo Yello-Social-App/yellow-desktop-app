@@ -24,6 +24,7 @@ import {
   postResponseSchema,
   profileResponseSchema,
   reactionSummarySchema,
+  reactorPageSchema,
   registerResponseSchema,
   sessionResponseSchema,
   shareLinkCopiedResponseSchema,
@@ -33,7 +34,6 @@ import {
   userPostsResponseSchema,
   windowStateSchema,
   type AvatarCommitRequest,
-  type ClearReactionRequest,
   type CreateCommentRequest,
   type CreatePostRequest,
   type DeleteCommentRequest,
@@ -46,6 +46,7 @@ import {
   type IpcResult,
   type ListCommentsRequest,
   type ListNotificationsRequest,
+  type ListReactorsRequest,
   type LoginRequest,
   type NotificationIdRequest,
   type PageRequest,
@@ -54,12 +55,15 @@ import {
   type ReactionTargetRequest,
   type RegisterRequest,
   type RepostRequest,
+  type ResendOtpRequest,
   type ResetPasswordRequest,
-  type SetReactionRequest,
+  type StageImagesRequest,
+  type ToggleReactionRequest,
   type UpdatePostRequest,
   type UpdateProfileRequest,
   type UserPostsRequest,
   type VerifyOtpRequest,
+  type VerifyResetOtpRequest,
   type YelloBridge,
 } from '@shared/ipc-types';
 import type { z } from 'zod';
@@ -67,6 +71,22 @@ import type { z } from 'zod';
 import { createLogger } from './logger';
 
 const log = createLogger('renderer.ipc');
+
+type UnauthenticatedListener = () => void;
+const unauthenticatedListeners = new Set<UnauthenticatedListener>();
+
+/**
+ * Fires when a call fails with UNAUTHENTICATED after the main process has
+ * already tried and failed to refresh — the session is over, whatever screen
+ * the user is on. The auth store subscribes; a screen never has to interpret
+ * that error itself.
+ */
+export function onUnauthenticated(listener: UnauthenticatedListener): () => void {
+  unauthenticatedListeners.add(listener);
+  return () => {
+    unauthenticatedListeners.delete(listener);
+  };
+}
 
 function bridge(): YelloBridge | undefined {
   return window.yello;
@@ -100,7 +120,13 @@ async function guarded<TSchema extends z.ZodType>(
     return ipcFail('INVALID_PAYLOAD', 'The desktop response had an unexpected shape.');
   }
 
-  return parsed.data as IpcResult<z.infer<TSchema>>;
+  const result = parsed.data as IpcResult<z.infer<TSchema>>;
+  if (!result.ok && result.error.code === 'UNAUTHENTICATED') {
+    for (const listener of unauthenticatedListeners) {
+      listener();
+    }
+  }
+  return result;
 }
 
 export const ipc = {
@@ -114,9 +140,15 @@ export const ipc = {
   currentSession: () =>
     guarded('auth.currentSession', sessionResponseSchema, (api) => api.auth.currentSession()),
 
+  resendOtp: (request: ResendOtpRequest) =>
+    guarded('auth.resendOtp', acknowledgedResponseSchema, (api) => api.auth.resendOtp(request)),
   forgotPassword: (request: ForgotPasswordRequest) =>
     guarded('auth.forgotPassword', acknowledgedResponseSchema, (api) =>
       api.auth.forgotPassword(request),
+    ),
+  verifyResetOtp: (request: VerifyResetOtpRequest) =>
+    guarded('auth.verifyResetOtp', acknowledgedResponseSchema, (api) =>
+      api.auth.verifyResetOtp(request),
     ),
   resetPassword: (request: ResetPasswordRequest) =>
     guarded('auth.resetPassword', acknowledgedResponseSchema, (api) =>
@@ -127,8 +159,8 @@ export const ipc = {
     guarded('feed.list', feedResponseSchema, (api) => api.feed.list(request)),
   createPost: (request: CreatePostRequest) =>
     guarded('feed.createPost', postResponseSchema, (api) => api.feed.createPost(request)),
-  stageImages: () =>
-    guarded('feed.stageImages', stageImagesResponseSchema, (api) => api.feed.stageImages()),
+  stageImages: (request?: StageImagesRequest) =>
+    guarded('feed.stageImages', stageImagesResponseSchema, (api) => api.feed.stageImages(request)),
   discardImages: (request: DiscardImagesRequest) =>
     guarded('feed.discardImages', acknowledgedResponseSchema, (api) =>
       api.feed.discardImages(request),
@@ -156,12 +188,12 @@ export const ipc = {
   deleteComment: (request: DeleteCommentRequest) =>
     guarded('comments.remove', deletedResponseSchema, (api) => api.comments.remove(request)),
 
-  setReaction: (request: SetReactionRequest) =>
-    guarded('reactions.set', reactionSummarySchema, (api) => api.reactions.set(request)),
-  clearReaction: (request: ClearReactionRequest) =>
-    guarded('reactions.clear', reactionSummarySchema, (api) => api.reactions.clear(request)),
+  toggleReaction: (request: ToggleReactionRequest) =>
+    guarded('reactions.toggle', reactionSummarySchema, (api) => api.reactions.toggle(request)),
   reactionSummary: (request: ReactionTargetRequest) =>
     guarded('reactions.summary', reactionSummarySchema, (api) => api.reactions.summary(request)),
+  listReactors: (request: ListReactorsRequest) =>
+    guarded('reactions.list', reactorPageSchema, (api) => api.reactions.list(request)),
 
   listFriends: (request: PageRequest) =>
     guarded('friends.list', friendshipPageSchema, (api) => api.friends.list(request)),

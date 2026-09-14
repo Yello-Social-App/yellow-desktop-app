@@ -14,16 +14,15 @@
  * control; the server rejects an edit or delete by a non-author with
  * `ACCESS_DENIED` regardless (OWASP A01).
  */
-import type { Post, PostVisibility } from '@shared/ipc-types';
+import type { Post, UpdatePostRequest } from '@shared/ipc-types';
 import { useCallback, useState } from 'react';
 
 import {
-  addReaction,
   copyShareLink,
   deletePost as deletePostRequest,
   editPost,
-  removeReaction,
   repost as repostRequest,
+  toggleReaction as toggleReactionRequest,
   type FeedError,
 } from './api';
 import { PRIMARY_REACTION } from './types';
@@ -36,10 +35,7 @@ export interface PostSink {
   prepend?: (post: Post) => void;
 }
 
-export interface PostEdit {
-  content?: string;
-  visibility?: PostVisibility;
-}
+export type PostEdit = Omit<UpdatePostRequest, 'postId'>;
 
 export interface PostActions {
   toggleReaction: (post: Post) => Promise<void>;
@@ -54,8 +50,12 @@ export interface PostActions {
   clearError: () => void;
 }
 
+/**
+ * `isOwner` is the server's answer and is preferred; the author check is the
+ * fallback for a record that predates the field.
+ */
 export function canEdit(post: Post, viewerId: string | undefined): boolean {
-  return viewerId !== undefined && post.author.id === viewerId;
+  return post.isOwner || (viewerId !== undefined && post.author.id === viewerId);
 }
 
 export function usePostActions(sink: PostSink): PostActions {
@@ -64,12 +64,14 @@ export function usePostActions(sink: PostSink): PostActions {
 
   const toggleReaction = useCallback(
     async (post: Post) => {
-      const hadReacted = post.viewerReaction !== null && post.viewerReaction !== undefined;
+      const current = post.viewerReaction ?? null;
 
       // Optimistic: repaint now, reconcile with the server's summary below.
-      sink.replace({ ...post, viewerReaction: hadReacted ? null : PRIMARY_REACTION });
+      sink.replace({ ...post, viewerReaction: current === null ? PRIMARY_REACTION : null });
 
-      const result = hadReacted ? await removeReaction(post.id) : await addReaction(post.id);
+      // The toggle removes when sent the type already held — so to clear a
+      // LOVE the heart must send LOVE, not LIKE, or it would change it instead.
+      const result = await toggleReactionRequest(post.id, current ?? PRIMARY_REACTION);
 
       if (!result.ok) {
         // Roll back to the last state the server confirmed.

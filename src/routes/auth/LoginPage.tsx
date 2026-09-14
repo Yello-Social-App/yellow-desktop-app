@@ -77,7 +77,7 @@ export function LoginPage() {
               />
               <Link
                 to="/forgot-password"
-                className="font-label text-label text-primary hover:text-primary-fixed-dim transition-colors"
+                className="font-label text-label text-primary hover:text-primary-fixed-dim transition-tone"
               >
                 Forgot password?
               </Link>
@@ -95,7 +95,7 @@ export function LoginPage() {
           Don&apos;t have an account?{' '}
           <Link
             to="/register"
-            className="font-label text-label text-primary hover:text-primary-fixed-dim ml-xs transition-colors"
+            className="font-label text-label text-primary hover:text-primary-fixed-dim ml-xs transition-tone"
           >
             Register
           </Link>

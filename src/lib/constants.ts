@@ -6,6 +6,9 @@ export const SESSION_TTL_MS = 30 * 60 * 1000;
 /** How often the renderer re-checks whether the current session has expired. */
 export const SESSION_EXPIRY_CHECK_MS = 30 * 1000;
 
+/** The API sends at most one code per account per minute; the button waits as long. */
+export const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+
 /** Latency the mock API simulates, so loading states are exercised for real. */
 export const MOCK_LATENCY_MS = 600;
 

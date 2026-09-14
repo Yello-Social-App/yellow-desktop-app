@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { FormField } from '@/components/ui/FormField';
 import { Input } from '@/components/ui/Input';
-import { useCurrentUser, useSignOut } from '@/features/auth/hooks';
+import { SignOutDialog } from '@/components/layout/SignOutDialog';
+import { useCurrentUser } from '@/features/auth/hooks';
 import { useLoadedPosts } from '@/features/feed/hooks';
 import { ipc } from '@/lib/ipc';
 import { createLogger } from '@/lib/logger';
@@ -18,8 +19,8 @@ const EXPORT_FILE_NAME = 'yello-posts';
 
 export default function SettingsPage() {
   const user = useCurrentUser();
-  const signOut = useSignOut();
   const navigate = useNavigate();
+  const [isSignOutOpen, setIsSignOutOpen] = useState(false);
   const emailFieldId = useId();
   const [appInfo, setAppInfo] = useState<AppInfoResponse | null>(null);
   const posts = useLoadedPosts();
@@ -107,13 +108,22 @@ export default function SettingsPage() {
             </Button>
             <Button
               variant="secondary"
+              aria-haspopup="dialog"
               leadingIcon={<LogOut className="size-4" />}
               onClick={() => {
-                void signOut();
+                setIsSignOutOpen(true);
               }}
             >
               Sign out
             </Button>
+            {isSignOutOpen && (
+              <SignOutDialog
+                isOpen
+                onClose={() => {
+                  setIsSignOutOpen(false);
+                }}
+              />
+            )}
           </div>
         </Card>
       </section>

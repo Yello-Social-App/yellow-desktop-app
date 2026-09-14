@@ -8,6 +8,7 @@
 import type { Session, User } from '@shared/ipc-types';
 import { create } from 'zustand';
 
+import { onUnauthenticated } from '@/lib/ipc';
 import { createLogger } from '@/lib/logger';
 
 import { currentSession, logout } from './api';
@@ -78,3 +79,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return expiresAt > Date.now();
   },
 }));
+
+/**
+ * A call that came back UNAUTHENTICATED means the main process could not
+ * refresh: the session is revoked or expired for good. Drop to the sign-in
+ * screen rather than leave a screen showing the API's 401 text. Only while
+ * signed in — a rejected sign-in attempt is that form's own business.
+ */
+onUnauthenticated(() => {
+  if (useAuthStore.getState().status === 'authenticated') {
+    log.info('session_ended_by_server', {});
+    useAuthStore.setState(signedOutState);
+  }
+});

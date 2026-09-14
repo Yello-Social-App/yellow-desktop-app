@@ -2,10 +2,24 @@
  * Main-process configuration.
  *
  * The API base URL lives here rather than in a VITE_* variable because the HTTP
- * client now runs in the main process. An operator can override it per
- * environment; the default is the shared development service.
+ * client runs in the main process. Resolution order:
+ *
+ *   1. YELLO_API_BASE_URL — a full URL, wins outright (ad-hoc overrides);
+ *   2. YELLO_API_TARGET   — a name from API_TARGETS below (`local`, `dev`, `prod`);
+ *   3. DEFAULT_API_TARGET.
+ *
+ * `npm run dev:local` / `dev:prod` and `package:prod` set the target for you;
+ * `npm run dev` uses the default. To point at a new server, edit API_TARGETS.
  */
-const DEFAULT_API_BASE_URL = 'https://dev.yello-api.cachewraith.com';
+export const API_TARGETS = {
+  local: 'http://localhost:8080',
+  dev: 'https://dev.yello-api.cachewraith.com',
+  prod: 'https://yello-api.cachewraith.com',
+} as const;
+
+export type ApiTarget = keyof typeof API_TARGETS;
+
+const DEFAULT_API_TARGET: ApiTarget = 'dev';
 
 /**
  * Where uploaded media (avatars, post images) is served from. This is the R2
@@ -15,9 +29,29 @@ const DEFAULT_API_BASE_URL = 'https://dev.yello-api.cachewraith.com';
  */
 const DEFAULT_IMAGE_BASE_URLS = 'https://pub-bbc7c2fe34614a5794960788c8da82e1.r2.dev';
 
+function isApiTarget(value: string): value is ApiTarget {
+  return Object.prototype.hasOwnProperty.call(API_TARGETS, value);
+}
+
+export function apiTargetFromEnvironment(): ApiTarget {
+  const configured = process.env.YELLO_API_TARGET;
+  if (configured === undefined || configured === '') {
+    return DEFAULT_API_TARGET;
+  }
+  if (!isApiTarget(configured)) {
+    throw new Error(
+      `Unknown YELLO_API_TARGET "${configured}". Expected one of: ${Object.keys(API_TARGETS).join(', ')}.`,
+    );
+  }
+  return configured;
+}
+
 export function apiBaseUrlFromEnvironment(): string {
   const configured = process.env.YELLO_API_BASE_URL;
-  return configured === undefined || configured === '' ? DEFAULT_API_BASE_URL : configured;
+  if (configured !== undefined && configured !== '') {
+    return configured;
+  }
+  return API_TARGETS[apiTargetFromEnvironment()];
 }
 
 /** The distinct image origins to allow, as an array (empty entries dropped). */

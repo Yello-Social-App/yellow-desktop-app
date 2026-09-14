@@ -21,7 +21,7 @@ import { COMMENTS_PAGE_SIZE } from './types';
 
 export type CommentsError = IpcError;
 
-/** Top-level comments, oldest first — the reading order for a thread. */
+/** Top-level comments, newest first, each with its replies nested oldest first. */
 export async function fetchComments(
   postId: string,
   page = 0,
@@ -51,17 +51,14 @@ export async function deleteComment(commentId: string): Promise<Result<true, Com
   return result.ok ? ok(true) : fail(result.error);
 }
 
-export async function addCommentReaction(
+/**
+ * Adds, changes or removes in one call: the server compares `type` with the
+ * viewer's current reaction. Sending the type already held removes it.
+ */
+export async function toggleCommentReaction(
   commentId: string,
   type: ReactionType = PRIMARY_REACTION,
 ): Promise<Result<ReactionSummary, CommentsError>> {
-  const result = await ipc.setReaction({ targetType: 'COMMENT', targetId: commentId, type });
-  return result.ok ? ok(result.data) : fail(result.error);
-}
-
-export async function removeCommentReaction(
-  commentId: string,
-): Promise<Result<ReactionSummary, CommentsError>> {
-  const result = await ipc.clearReaction({ targetType: 'COMMENT', targetId: commentId });
+  const result = await ipc.toggleReaction({ targetType: 'COMMENT', targetId: commentId, type });
   return result.ok ? ok(result.data) : fail(result.error);
 }

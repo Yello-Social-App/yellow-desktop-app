@@ -1,56 +1,49 @@
-import { KeyRound } from 'lucide-react';
-import { useId, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { z } from 'zod';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { FormField } from '@/components/ui/FormField';
-import { Input } from '@/components/ui/Input';
-import { resetPassword, type AuthError } from '@/features/auth/api';
-import { PASSWORD_MAX_LENGTH, REGISTER_PASSWORD_MIN_LENGTH } from '@/features/auth/types';
+import { useResetPassword } from '@/features/auth/hooks';
+import {
+  REGISTER_PASSWORD_MIN_LENGTH,
+  resetPasswordFormSchema,
+  type ResetPasswordFormValues,
+} from '@/features/auth/types';
 import { useZodForm } from '@/hooks/use-zod-form';
 
 import { ApiErrorNotice } from './components/ApiErrorNotice';
 import { AuthBrand } from './components/AuthBrand';
 import { PasswordField } from './components/PasswordField';
 
-/** Mirrors the API's own rule: the reset token is opaque, the password is 12+. */
-const resetPasswordFormSchema = z
-  .object({
-    token: z.string().trim().min(1, 'Paste the token from the email.').max(512),
-    newPassword: z
-      .string()
-      .min(REGISTER_PASSWORD_MIN_LENGTH, `Use at least ${REGISTER_PASSWORD_MIN_LENGTH} characters.`)
-      .max(PASSWORD_MAX_LENGTH, 'That password is too long.'),
-    confirmPassword: z.string(),
-  })
-  .refine((values) => values.newPassword === values.confirmPassword, {
-    message: 'Passwords do not match.',
-    path: ['confirmPassword'],
-  });
+const INITIAL_VALUES = { newPassword: '', confirmPassword: '' };
 
-type ResetPasswordFormValues = z.infer<typeof resetPasswordFormSchema>;
-
-const INITIAL_VALUES = { token: '', newPassword: '', confirmPassword: '' };
+interface ResetLocationState {
+  email?: string;
+}
 
 /**
- * Step two of a password reset.
+ * The last step of a password reset.
  *
- * The token arrives by email and cannot be read back from the API, so it is
- * pasted here. It is a single-use secret: it goes straight through IPC to the
- * main process and is never logged (OWASP A09).
+ * There is nothing to paste: the reset token was minted when the emailed code
+ * was checked and is held by the main process, which spends it here. The token
+ * is good for fifteen minutes and one use, so a rejection sends the user back
+ * to ask for a new code rather than letting them retry a dead one.
  */
 export function ResetPasswordPage() {
-  const tokenId = useId();
+  const location = useLocation();
   const navigate = useNavigate();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<AuthError | null>(null);
+  const email = (location.state as ResetLocationState | null)?.email;
+  const { submit, isSubmitting, error } = useResetPassword();
   const form = useZodForm<typeof INITIAL_VALUES, ResetPasswordFormValues>(
     resetPasswordFormSchema,
     INITIAL_VALUES,
   );
+
+  // Reached directly: no code has been checked on this run, so there is no
+  // token to spend.
+  if (email === undefined) {
+    return <Navigate to="/forgot-password" replace />;
+  }
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -59,16 +52,11 @@ export function ResetPasswordPage() {
       return;
     }
 
-    setIsSubmitting(true);
-    setError(null);
-
-    void resetPassword(validated.data.token, validated.data.newPassword).then((result) => {
-      setIsSubmitting(false);
-      if (result.ok) {
-        // Straight to sign-in: the reset does not issue a session.
+    void submit(validated.data.newPassword).then((result) => {
+      if (result?.ok === true) {
+        // Straight to sign-in: the reset does not issue a session, and it
+        // revokes every existing one.
         void navigate('/login', { replace: true });
-      } else {
-        setError(result.error);
       }
     });
   };
@@ -83,28 +71,12 @@ export function ResetPasswordPage() {
             <div className="gap-xs flex flex-col">
               <h2 className="font-heading text-h3 text-on-surface">Reset your password</h2>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Paste the token from the reset email, then pick a new password of at least{' '}
-                {REGISTER_PASSWORD_MIN_LENGTH} characters.
+                Code accepted for <strong className="text-on-surface">{email}</strong>. Pick a new
+                password of at least {REGISTER_PASSWORD_MIN_LENGTH} characters.
               </p>
             </div>
 
             <div className="gap-md flex flex-col">
-              <FormField id={tokenId} label="Reset token" error={form.errors.token}>
-                <Input
-                  id={tokenId}
-                  type="text"
-                  autoComplete="one-time-code"
-                  spellCheck={false}
-                  placeholder="Paste the token from your email"
-                  value={form.values.token}
-                  isInvalid={form.errors.token !== undefined}
-                  leadingIcon={<KeyRound className="size-5" />}
-                  onChange={(event) => {
-                    form.setField('token', event.target.value);
-                  }}
-                />
-              </FormField>
-
               <PasswordField
                 label="New password"
                 showLeadingIcon
@@ -137,10 +109,10 @@ export function ResetPasswordPage() {
         </Card>
 
         <p className="font-body-sm text-body-sm text-on-surface-variant mt-lg text-center">
-          Need a new link?{' '}
+          Code expired?{' '}
           <Link
             to="/forgot-password"
-            className="font-label text-label text-primary hover:text-primary-fixed-dim ml-xs transition-colors"
+            className="font-label text-label text-primary hover:text-primary-fixed-dim ml-xs transition-tone"
           >
             Start again
           </Link>

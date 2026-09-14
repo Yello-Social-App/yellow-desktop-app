@@ -107,9 +107,9 @@ export default function UserProfilePage() {
         )}
 
         {status === 'ready' && posts.length > 0 && (
-          <ul className="list-windowed gap-lg flex flex-col">
+          <ul className="stagger gap-lg flex flex-col">
             {posts.map((post) => (
-              <li key={post.id}>
+              <li key={post.id} className="animate-fade-up">
                 <PostCard
                   post={post}
                   actions={actions}

@@ -10,8 +10,8 @@ import { displayName, handleOf, initialsOf } from '@/lib/user-display';
 
 interface CommentRowProps {
   comment: Comment;
-  /** Replies are indented one level; the API nests no deeper than that. */
-  isReply?: boolean;
+  /** Draws the vertical line from this row's avatar down to its replies. */
+  hasReplies?: boolean;
   canDelete: boolean;
   isPending: boolean;
   onReply: (commentId: string) => void;
@@ -20,11 +20,11 @@ interface CommentRowProps {
 }
 
 const ACTION_CLASS =
-  'font-small text-small gap-xs inline-flex items-center rounded-md px-1.5 py-0.5 transition-colors disabled:opacity-40';
+  'font-small text-small gap-xs inline-flex items-center rounded-md px-1.5 py-0.5 transition-tone disabled:opacity-40';
 
 export const CommentRow = memo(function CommentRow({
   comment,
-  isReply = false,
+  hasReplies = false,
   canDelete,
   isPending,
   onReply,
@@ -35,22 +35,28 @@ export const CommentRow = memo(function CommentRow({
   const hasReacted = comment.viewerReaction !== null && comment.viewerReaction !== undefined;
 
   return (
-    <article className={cn('gap-sm flex', isReply && 'pl-lg')}>
-      <Link to={`/users/${comment.author.id}`} className="shrink-0">
-        <Avatar
-          initials={initialsOf(comment.author)}
-          name={author}
-          imageUrl={comment.author.avatarUrl}
-          size="sm"
-        />
-      </Link>
+    <article className="gap-sm animate-fade-up flex">
+      {/* The avatar column: the avatar, then — when replies hang off this
+          comment — a line that runs the rest of the row's height, so the
+          branch into each reply below has something to come off. */}
+      <div className="flex shrink-0 flex-col items-center">
+        <Link to={`/users/${comment.author.id}`} className="shrink-0">
+          <Avatar
+            initials={initialsOf(comment.author)}
+            name={author}
+            imageUrl={comment.author.avatarUrl}
+            size="sm"
+          />
+        </Link>
+        {hasReplies && <span aria-hidden className="bg-outline-variant mt-1 w-px flex-1" />}
+      </div>
 
       <div className="min-w-0 flex-1">
         <div className="bg-surface-container-low px-md py-sm rounded-xl">
           <div className="gap-xs flex flex-wrap items-baseline">
             <Link
               to={`/users/${comment.author.id}`}
-              className="font-label text-label text-on-surface hover:text-primary transition-colors"
+              className="font-label text-label text-on-surface hover:text-primary transition-tone"
             >
               {author}
             </Link>
@@ -82,22 +88,20 @@ export const CommentRow = memo(function CommentRow({
             {comment.reactionCount > 0 ? comment.reactionCount : 'Like'}
           </button>
 
-          {!isReply && (
-            <button
-              type="button"
-              disabled={isPending}
-              onClick={() => {
-                onReply(comment.id);
-              }}
-              className={cn(
-                ACTION_CLASS,
-                'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface',
-              )}
-            >
-              <Reply aria-hidden className="size-3.5" />
-              Reply
-            </button>
-          )}
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => {
+              onReply(comment.id);
+            }}
+            className={cn(
+              ACTION_CLASS,
+              'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface',
+            )}
+          >
+            <Reply aria-hidden className="size-3.5" />
+            Reply
+          </button>
 
           {canDelete && (
             <button

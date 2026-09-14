@@ -15,9 +15,20 @@ import { z } from 'zod';
 export const POST_MAX_LENGTH = 5000;
 export const FEED_PAGE_SIZE = 20;
 export const COMMENT_PAGE_SIZE = 20;
+export const REACTORS_PAGE_SIZE = 20;
 
 /** The heart button maps to one reaction type; the API supports six. */
 export const PRIMARY_REACTION: ReactionType = 'LIKE';
+
+/** How each of the six reaction types reads on screen. */
+export const REACTION_LABELS: Record<ReactionType, { emoji: string; label: string }> = {
+  LIKE: { emoji: '👍', label: 'Like' },
+  LOVE: { emoji: '❤️', label: 'Love' },
+  HAHA: { emoji: '😄', label: 'Haha' },
+  WOW: { emoji: '😮', label: 'Wow' },
+  SAD: { emoji: '😢', label: 'Sad' },
+  ANGRY: { emoji: '😠', label: 'Angry' },
+};
 
 /** `reactionCounts` also carries a `total` key, which is not a reaction type. */
 const TOTAL_KEY = 'total';

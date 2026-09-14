@@ -3,6 +3,7 @@ import { Inbox } from 'lucide-react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import type { PostActions } from '@/features/feed/post-actions';
 import type { Post } from '@/features/feed/types';
+import { cn } from '@/lib/cn';
 import { FEED_ROW_HEIGHT_PX, VIRTUALIZATION_THRESHOLD } from '@/lib/constants';
 
 import { PostCard } from './PostCard';
@@ -48,12 +49,17 @@ export function PostList({
 
   return (
     <ul
-      className="list-windowed gap-lg flex flex-col"
+      // Lazy rendering of off-screen rows only earns its keep on a long list;
+      // below the threshold its height estimates make the scrollbar jump.
+      className={cn(
+        'stagger gap-lg flex flex-col',
+        posts.length > VIRTUALIZATION_THRESHOLD && 'list-windowed',
+      )}
       data-row-height={FEED_ROW_HEIGHT_PX}
       data-windowing-threshold={VIRTUALIZATION_THRESHOLD}
     >
       {posts.map((post) => (
-        <li key={post.id}>
+        <li key={post.id} className="animate-fade-up">
           <PostCard
             post={post}
             actions={actions}

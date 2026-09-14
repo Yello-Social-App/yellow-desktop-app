@@ -10,18 +10,24 @@ import type {
   FeedResponse,
   IpcError,
   Post,
-  PostVisibility,
   ReactionSummary,
   ReactionType,
+  ReactorPage,
   ShareLinkCopiedResponse,
   ShareLinkResponse,
   StagedImage,
+  UpdatePostRequest,
 } from '@shared/ipc-types';
 
 import { ipc } from '@/lib/ipc';
 import { fail, ok, type Result } from '@/lib/result';
 
-import { FEED_PAGE_SIZE, PRIMARY_REACTION, type ComposePostInput } from './types';
+import {
+  FEED_PAGE_SIZE,
+  PRIMARY_REACTION,
+  REACTORS_PAGE_SIZE,
+  type ComposePostInput,
+} from './types';
 
 export type FeedError = IpcError;
 
@@ -58,9 +64,11 @@ export interface StagedImages {
  *
  * The per-post limit is enforced in the main process, which is the side that
  * knows what is staged — so everything that comes back here is attachable.
+ * `limit` is how an editor says it has less room, because of the images the
+ * post already carries.
  */
-export async function stagePostImages(): Promise<Result<StagedImages, FeedError>> {
-  const result = await ipc.stageImages();
+export async function stagePostImages(limit?: number): Promise<Result<StagedImages, FeedError>> {
+  const result = await ipc.stageImages(limit === undefined ? undefined : { limit });
   return result.ok
     ? ok({ images: result.data.images, skipped: result.data.skipped })
     : fail(result.error);
@@ -79,9 +87,10 @@ export async function fetchPost(postId: string): Promise<Result<Post, FeedError>
   return result.ok ? ok(result.data.post) : fail(result.error);
 }
 
+/** Every field optional; `imageTokens` are staged handles to append. */
 export async function editPost(
   postId: string,
-  changes: { content?: string; visibility?: PostVisibility },
+  changes: Omit<UpdatePostRequest, 'postId'>,
 ): Promise<Result<Post, FeedError>> {
   const result = await ipc.updatePost({ postId, ...changes });
   return result.ok ? ok(result.data.post) : fail(result.error);
@@ -122,16 +131,15 @@ export async function copyShareLink(
 
 /* -- reactions -- */
 
-export async function addReaction(
+/**
+ * Adds, changes or removes in one call: the server compares `type` with the
+ * viewer's current reaction. Sending the type already held removes it.
+ */
+export async function toggleReaction(
   postId: string,
   type: ReactionType = PRIMARY_REACTION,
 ): Promise<Result<ReactionSummary, FeedError>> {
-  const result = await ipc.setReaction({ targetType: 'POST', targetId: postId, type });
-  return result.ok ? ok(result.data) : fail(result.error);
-}
-
-export async function removeReaction(postId: string): Promise<Result<ReactionSummary, FeedError>> {
-  const result = await ipc.clearReaction({ targetType: 'POST', targetId: postId });
+  const result = await ipc.toggleReaction({ targetType: 'POST', targetId: postId, type });
   return result.ok ? ok(result.data) : fail(result.error);
 }
 
@@ -139,5 +147,21 @@ export async function fetchReactionSummary(
   postId: string,
 ): Promise<Result<ReactionSummary, FeedError>> {
   const result = await ipc.reactionSummary({ targetType: 'POST', targetId: postId });
+  return result.ok ? ok(result.data) : fail(result.error);
+}
+
+/** Who reacted, newest first; `type` narrows to one reaction. */
+export async function fetchReactors(
+  postId: string,
+  page: number,
+  type?: ReactionType,
+): Promise<Result<ReactorPage, FeedError>> {
+  const result = await ipc.listReactors({
+    targetType: 'POST',
+    targetId: postId,
+    page,
+    size: REACTORS_PAGE_SIZE,
+    ...(type === undefined ? {} : { type }),
+  });
   return result.ok ? ok(result.data) : fail(result.error);
 }
