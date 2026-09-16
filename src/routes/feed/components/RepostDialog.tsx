@@ -1,10 +1,12 @@
 import { Repeat2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { REPOST_MAX_LENGTH, type Post } from '@/features/feed/types';
+import { extractLinks } from '@/lib/links';
 import { relativeTime } from '@/lib/relative-time';
 import { displayName, initialsOf } from '@/lib/user-display';
 
@@ -29,6 +31,10 @@ interface RepostDialogProps {
  */
 export function RepostDialog({ post, isOpen, isBusy, onRepost, onClose }: RepostDialogProps) {
   const [content, setContent] = useState('');
+  // The quoted post's own link, so the dialog shows what is being quoted
+  // rather than dropping it. The composer's text is deliberately not
+  // unfurled: that would fetch on a half-typed URL.
+  const [quotedLink] = post.images.length === 0 ? extractLinks(post.content) : [];
   const trimmed = content.trim();
 
   return (
@@ -91,6 +97,7 @@ export function RepostDialog({ post, isOpen, isBusy, onRepost, onClose }: Repost
             {post.images.length} photo{post.images.length > 1 ? 's' : ''}
           </p>
         )}
+        {quotedLink !== undefined && <LinkPreviewCard url={quotedLink} size="sm" />}
       </blockquote>
     </Modal>
   );

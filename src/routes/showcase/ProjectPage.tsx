@@ -2,6 +2,7 @@ import { ArrowLeft, ExternalLink, Eye, GitBranch, Heart, Star } from 'lucide-rea
 import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -9,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { SampleBadge } from '@/components/ui/SampleBadge';
 import { useShowcaseStore } from '@/features/showcase/store';
 import { cn } from '@/lib/cn';
+import { extractLinks } from '@/lib/links';
 import { coverClass } from '@/mocks/people';
 import { calendarDay } from '@/lib/relative-time';
 import { displayName, handleOf, initialsOf } from '@/lib/user-display';
@@ -42,6 +44,9 @@ export default function ProjectPage() {
       />
     );
   }
+
+  // Computed past the not-found return, so `project` is known to exist.
+  const [descriptionLink] = extractLinks(project.description);
 
   const external = (href: string, label: string, icon: React.ReactNode) => (
     <a
@@ -129,6 +134,11 @@ export default function ProjectPage() {
               text={project.description === '' ? 'No description yet.' : project.description}
             />
           </p>
+          {descriptionLink !== undefined && (
+            <div className="mt-3">
+              <LinkPreviewCard url={descriptionLink} size="lg" />
+            </div>
+          )}
         </section>
 
         <section className="bg-surface-container-lowest border-outline-variant flex items-center gap-3 rounded-2xl border p-4">

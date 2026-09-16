@@ -280,7 +280,7 @@ export const PostCard = memo(function PostCard({
             )}
             {originalLink !== undefined && (
               <span className="mt-1 block">
-                <LinkPreviewCard url={originalLink} compact />
+                <LinkPreviewCard url={originalLink} size="md" />
               </span>
             )}
           </blockquote>
