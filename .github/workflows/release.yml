@@ -8,6 +8,13 @@
 # The release is created as a draft (see `publish` in electron-builder.yml) and
 # only published once all three jobs have finished, so nobody can download a
 # release that is still missing two platforms' installers.
+#
+# The draft is created by its own job before the matrix fans out, and never by
+# the builders. Three builders starting at once each asked GitHub to get-or-
+# create the release for the tag, all three missed, and two of them created a
+# draft — v0.4.0 ended up with two releases on one tag, the Windows installer
+# uploaded into the one that was never published. Creating it once, up front,
+# leaves the builders with nothing to race over.
 name: Release
 
 on:
@@ -23,8 +30,29 @@ env:
   NODE_VERSION: '22'
 
 jobs:
+  prepare:
+    name: Create the draft release
+    runs-on: ubuntu-latest
+    steps:
+      # Idempotent on purpose: re-running the workflow for a tag that already
+      # has a release must reuse it, not fail and not make a second one.
+      - name: Create the draft release unless it already exists
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists; the builders will upload into it."
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --draft \
+              --title "${GITHUB_REF_NAME#v}" \
+              --notes ""
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: prepare
     runs-on: ${{ matrix.os }}
     strategy:
       # One platform failing should not deny the others their artifacts; the
@@ -94,6 +122,21 @@ jobs:
     steps:
       - name: Check out the tag
         uses: actions/checkout@v4
+
+      # A tag carrying two releases is the failure this job exists to catch: the
+      # assets are split across them and `gh release edit` publishes whichever
+      # it resolves first, silently shipping an incomplete release.
+      - name: Fail if the tag carries more than one release
+        run: |
+          count=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq "[.[] | select(.tag_name == \"${GITHUB_REF_NAME}\")] | length")
+          echo "Releases on ${GITHUB_REF_NAME}: ${count}"
+          if [ "${count}" -ne 1 ]; then
+            echo "::error::${count} releases exist for ${GITHUB_REF_NAME}; expected exactly 1."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: List what was uploaded
         run: gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name'
