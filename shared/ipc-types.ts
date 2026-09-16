@@ -898,6 +898,270 @@ export type LinkPreviewRequest = z.infer<typeof linkPreviewRequestSchema>;
 export type LinkPreview = z.infer<typeof linkPreviewSchema>;
 export type LinkPreviewResponse = z.infer<typeof linkPreviewResponseSchema>;
 
+/* -- notifications -- */
+
+/**
+ * The notify service (`/notifications/v1`) is a third service behind the same
+ * origin. Unlike chat it answers in the API's own envelope, so it needs no new
+ * transport — only its own paths.
+ *
+ * Rows are written by the service from domain events; there is no endpoint that
+ * creates one. This app therefore only reads the inbox, acknowledges rows, and
+ * manages its push registration and opt-outs.
+ */
+
+/**
+ * The vocabulary this build knows how to route and offer as a mute.
+ *
+ * A row's `type` is nevertheless held as bounded text, not this enum: rows come
+ * from domain events, and a type added server-side later must not void a whole
+ * page of the inbox (A10). An unknown type still renders — the server's frozen
+ * `title` says what happened — it simply gets the generic icon and no deep link.
+ */
+export const NOTIFICATION_TYPES = [
+  'POST_CREATED',
+  'POST_COMMENTED',
+  'COMMENT_REPLIED',
+  'POST_REPOSTED',
+  'POST_REACTED',
+  'COMMENT_REACTED',
+  'FRIEND_REQUEST_RECEIVED',
+  'FRIEND_REQUEST_ACCEPTED',
+  /** Push-only: chat pushes never land in the inbox. */
+  'CHAT_MESSAGE',
+] as const;
+
+export const notificationTypeSchema = z.string().min(1).max(64);
+
+/** Beyond this many keys a `data` map is not a deep-link hint but a payload. */
+const NOTIFICATION_DATA_MAX_KEYS = 20;
+
+/**
+ * Deep-link hints. Upstream this is always a flat string map (an FCM data map
+ * allows nothing else), so anything richer is dropped rather than trusted. The
+ * keys that survive are still read one at a time and checked as ids before they
+ * are ever turned into a route (A01) — see `routeFor` in the renderer.
+ */
+const notificationDataSchema = z
+  .record(z.string().max(64), z.string().max(512))
+  .nullish()
+  .transform((value) =>
+    value === null || value === undefined
+      ? {}
+      : Object.fromEntries(Object.entries(value).slice(0, NOTIFICATION_DATA_MAX_KEYS)),
+  );
+
+/**
+ * One inbox row. `read` is normalised against `readAt` here rather than trusted
+ * twice: the two cannot then disagree in the UI, whichever the server sent.
+ */
+export const notificationSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    type: notificationTypeSchema,
+    /** Frozen display text, re-rendered server-side as rows aggregate. */
+    title: z.string().max(500),
+    body: optionalText(2000).transform((value) => value ?? ''),
+    data: notificationDataSchema,
+    /** The most recent actor when rows have collapsed into one. */
+    actorId: optionalText(64),
+    /**
+     * 1 unless rows collapsed. Read leniently and floored at 1: the row is
+     * about something that happened, so a 0 or a missing count is a reason to
+     * show it as a single event, never a reason to drop it.
+     */
+    aggregateCount: z
+      .number()
+      .int()
+      .nullish()
+      .transform((value) => (value === null || value === undefined ? 1 : Math.max(1, value))),
+    read: z
+      .boolean()
+      .nullish()
+      .transform((value) => value ?? false),
+    readAt: optionalText(64),
+    createdAt: z.string().max(64),
+    /** Last *activity*, not last edit — and the inbox sort key. */
+    updatedAt: z.string().max(64),
+  })
+  .transform((row) => ({ ...row, read: row.read || row.readAt !== undefined }));
+
+/**
+ * Keyset page: pass `nextCursor` back as `cursor`. `null` is the last page.
+ *
+ * Rows are parsed one at a time and the ones that fail are dropped, rather than
+ * the array being parsed as a whole. A page is a feed of independent events
+ * written from independent domain messages: if one of them carries a field this
+ * build does not expect, the honest outcome is to lose that row, not to blank
+ * the inbox and tell the user they have no notifications (A10). An all-or-
+ * nothing array did exactly that.
+ */
+export const notificationPageSchema = z.object({
+  items: z
+    .array(z.unknown())
+    .max(100)
+    .nullish()
+    .transform((value) =>
+      (value ?? []).flatMap((row) => {
+        const parsed = notificationSchema.safeParse(row);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    ),
+  nextCursor: z
+    .string()
+    .max(512)
+    .nullish()
+    .transform((value) => value ?? null),
+});
+
+export const unreadCountSchema = z.object({
+  count: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((value) => value ?? 0),
+});
+
+/** Only rows that *were* unread are counted, so a second call answers 0. */
+export const markAllNotificationsReadSchema = z.object({
+  updated: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((value) => value ?? 0),
+});
+
+/** The server clamps a larger size silently; refusing it here is honest instead. */
+export const NOTIFICATIONS_PAGE_SIZE_MAX = 50;
+/** The server's own cursor ceiling, enforced before a request is spent on it. */
+const NOTIFICATION_CURSOR_MAX = 400;
+
+export const listNotificationsRequestSchema = z.object({
+  cursor: z.string().max(NOTIFICATION_CURSOR_MAX).optional(),
+  size: z.number().int().min(1).max(NOTIFICATIONS_PAGE_SIZE_MAX),
+  /** Only rows still unread. Pass it unchanged across a whole cursor walk. */
+  unread: z.boolean().optional(),
+});
+
+export const notificationIdRequestSchema = z.object({
+  notificationId: z.string().min(1).max(64),
+});
+
+/* -- notification devices -- */
+
+export const DEVICE_PLATFORMS = ['ios', 'android', 'web'] as const;
+export const devicePlatformSchema = z.enum(DEVICE_PLATFORMS);
+
+export const DEVICE_TOKEN_MIN = 20;
+export const DEVICE_TOKEN_MAX = 4096;
+
+/** Printable ASCII with no whitespace — the service's own rule for a token. */
+const deviceTokenSchema = z
+  .string()
+  .min(DEVICE_TOKEN_MIN)
+  .max(DEVICE_TOKEN_MAX)
+  .regex(/^[\x21-\x7e]+$/, 'Token must be printable with no whitespace');
+
+export const registerDeviceRequestSchema = z.object({
+  token: deviceTokenSchema,
+  platform: devicePlatformSchema,
+  appVersion: z.string().max(40).nullish(),
+  locale: z
+    .string()
+    .max(16)
+    .regex(/^[A-Za-z]{2,3}([_-][A-Za-z0-9]{2,8})*$/, 'Locale must look like "en" or "en-GB"')
+    .nullish(),
+});
+
+export const unregisterDeviceRequestSchema = z.object({ token: deviceTokenSchema });
+
+/**
+ * The registered device, as the service describes it back. Note the absence of
+ * `token`: it is deliberately never echoed, so it stays out of every response,
+ * log and cache (A04). Identify a device by `id`.
+ */
+export const deviceResponseSchema = z.object({
+  id: z.string().min(1).max(64),
+  platform: z.string().max(32),
+  appVersion: optionalText(40),
+  locale: optionalText(16),
+  lastSeenAt: z.string().max(64),
+  createdAt: z.string().max(64),
+});
+
+/* -- notification preferences -- */
+
+/**
+ * Push opt-outs. A user who has never saved any gets these defaults rather than
+ * a 404, so there is no "not configured yet" branch to write.
+ *
+ * `mutedTypes` is read as bounded text for the same reason a row's type is: a
+ * mute the phone set for a type this build has never heard of must survive a
+ * save made here.
+ */
+export const notificationPreferencesSchema = z.object({
+  pushEnabled: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? true),
+  mutedTypes: z
+    .array(notificationTypeSchema)
+    .max(64)
+    .nullish()
+    .transform((value) => value ?? []),
+});
+
+/**
+ * `PUT /preferences` **replaces** the record — an omitted field resets to its
+ * default rather than keeping the stored value, so `mutedTypes: undefined`
+ * would clear every mute. Both fields are required here to make sending a
+ * partial state impossible from this app.
+ */
+export const updateNotificationPreferencesRequestSchema = z.object({
+  pushEnabled: z.boolean(),
+  mutedTypes: z.array(notificationTypeSchema).max(64),
+});
+
+/**
+ * What the main process pushes to the renderer as it watches the inbox.
+ *
+ * There is no socket for notifications and no FCM on the desktop, so the
+ * watcher polls and publishes what changed. `activated` is the one frame that
+ * originates with the user: it is a native OS notification having been clicked,
+ * which the renderer turns into a deep link.
+ */
+export const notificationEventSchema = z.discriminatedUnion('event', [
+  z.object({ event: z.literal('unread-count'), data: unreadCountSchema }),
+  z.object({
+    event: z.literal('received'),
+    data: z.object({ items: z.array(notificationSchema).max(NOTIFICATIONS_PAGE_SIZE_MAX) }),
+  }),
+  z.object({ event: z.literal('activated'), data: z.object({ notification: notificationSchema }) }),
+]);
+
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+export type NotificationData = Record<string, string>;
+export type Notification = z.infer<typeof notificationSchema>;
+export type NotificationPage = z.infer<typeof notificationPageSchema>;
+export type UnreadCount = z.infer<typeof unreadCountSchema>;
+export type MarkAllNotificationsRead = z.infer<typeof markAllNotificationsReadSchema>;
+export type ListNotificationsRequest = z.infer<typeof listNotificationsRequestSchema>;
+export type NotificationIdRequest = z.infer<typeof notificationIdRequestSchema>;
+export type DevicePlatform = (typeof DEVICE_PLATFORMS)[number];
+export type RegisterDeviceRequest = z.infer<typeof registerDeviceRequestSchema>;
+export type UnregisterDeviceRequest = z.infer<typeof unregisterDeviceRequestSchema>;
+export type DeviceResponse = z.infer<typeof deviceResponseSchema>;
+export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
+export type UpdateNotificationPreferencesRequest = z.infer<
+  typeof updateNotificationPreferencesRequestSchema
+>;
+export const notificationResponseSchema = z.object({ notification: notificationSchema });
+
+export type NotificationEvent = z.infer<typeof notificationEventSchema>;
+export type NotificationResponse = z.infer<typeof notificationResponseSchema>;
+
 /* -- files & window -- */
 
 export const postExportEntrySchema = z.object({
@@ -1058,6 +1322,25 @@ export interface YelloBridge {
      * Subscribes to frames pushed from the main process. Returns the
      * unsubscribe; the listener receives an unvalidated value the renderer
      * parses against `chatEventSchema` before use.
+     */
+    onEvent(listener: (event: unknown) => void): () => void;
+  };
+  readonly notifications: {
+    list(request: ListNotificationsRequest): Promise<IpcResult<NotificationPage>>;
+    unreadCount(): Promise<IpcResult<UnreadCount>>;
+    markRead(request: NotificationIdRequest): Promise<IpcResult<NotificationResponse>>;
+    markAllRead(): Promise<IpcResult<MarkAllNotificationsRead>>;
+    dismiss(request: NotificationIdRequest): Promise<IpcResult<DeletedResponse>>;
+    registerDevice(request: RegisterDeviceRequest): Promise<IpcResult<DeviceResponse>>;
+    unregisterDevice(request: UnregisterDeviceRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    preferences(): Promise<IpcResult<NotificationPreferences>>;
+    savePreferences(
+      request: UpdateNotificationPreferencesRequest,
+    ): Promise<IpcResult<NotificationPreferences>>;
+    /**
+     * Subscribes to what the inbox watcher publishes. Returns the unsubscribe;
+     * the listener receives an unvalidated value the renderer parses against
+     * `notificationEventSchema` before use.
      */
     onEvent(listener: (event: unknown) => void): () => void;
   };

@@ -28,11 +28,13 @@ import { registerFeedHandlers } from './ipc/handlers/feed.handler';
 import { registerFriendHandlers } from './ipc/handlers/friends.handler';
 import { registerFsHandlers } from './ipc/handlers/fs.handler';
 import { registerLinkHandlers } from './ipc/handlers/links.handler';
+import { registerNotificationHandlers } from './ipc/handlers/notifications.handler';
 import { registerPostHandlers } from './ipc/handlers/posts.handler';
 import { registerProfileHandlers } from './ipc/handlers/profile.handler';
 import { registerReactionHandlers } from './ipc/handlers/reactions.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
 import { chatSocket } from './chat/socket';
+import { notificationWatcher } from './notifications/watcher';
 import { createLogger } from '../shared/logger';
 import { buildApplicationMenu } from './menu';
 import { initialiseAutoUpdater } from './autoUpdater';
@@ -163,6 +165,15 @@ function createMainWindow(): BrowserWindow {
     initialiseAutoUpdater();
   });
 
+  // The inbox watcher paces itself by whether anyone is looking: often while
+  // the window has focus, rarely once it does not, and at once when it returns.
+  window.on('focus', () => {
+    notificationWatcher.handleFocusChange(true);
+  });
+  window.on('blur', () => {
+    notificationWatcher.handleFocusChange(false);
+  });
+
   window.on('closed', () => {
     mainWindow = null;
   });
@@ -237,6 +248,7 @@ function bootstrap(): void {
   app.on('before-quit', () => {
     // A clean close beats the server waiting out a heartbeat.
     chatSocket.disconnect();
+    notificationWatcher.stop();
   });
 
   app.on('activate', () => {
@@ -265,6 +277,7 @@ function bootstrap(): void {
       registerReactionHandlers();
       registerFriendHandlers();
       registerChatHandlers();
+      registerNotificationHandlers();
       registerProfileHandlers();
       registerWindowHandlers();
 

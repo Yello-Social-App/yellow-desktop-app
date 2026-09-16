@@ -213,6 +213,12 @@ export function adoptTokenPair(pair: z.infer<typeof tokenPairSchema>): number {
 
 export const tokenPairResponseSchema = tokenPairSchema;
 
+/** The first few failing field paths, joined — field names only, never values. */
+function describeIssuePaths(error: z.ZodError): string {
+  const paths = error.issues.slice(0, 8).map((issue) => issue.path.join('.') || '(root)');
+  return [...new Set(paths)].join(', ');
+}
+
 function describeFailure(status: number, body: unknown): IpcResult<never> {
   const parsed = apiErrorEnvelopeSchema.safeParse(body);
   const apiCode = parsed.success ? parsed.data.code : undefined;
@@ -300,7 +306,14 @@ export async function apiRequest<TSchema extends z.ZodType>(
 
   const payload = schema.safeParse(raw);
   if (!payload.success) {
-    log.error('api_payload_rejected', { url, issues: payload.error.issues.length });
+    // The field *paths* that failed, not their values: a count alone makes a
+    // rejected response undiagnosable, and the values are the part that could
+    // carry PII (A09).
+    log.error('api_payload_rejected', {
+      url,
+      issues: payload.error.issues.length,
+      fields: describeIssuePaths(payload.error),
+    });
     return ipcFail('API', 'The server returned an unexpected response.');
   }
 

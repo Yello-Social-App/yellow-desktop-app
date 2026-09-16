@@ -22,6 +22,7 @@ const CommunityPage = lazy(() => import('@/routes/communities/CommunityPage'));
 const ShowcasePage = lazy(() => import('@/routes/showcase/ShowcasePage'));
 const ProjectPage = lazy(() => import('@/routes/showcase/ProjectPage'));
 const MessagesPage = lazy(() => import('@/routes/messages/MessagesPage'));
+const NotificationsPage = lazy(() => import('@/routes/notifications/NotificationsPage'));
 const ProfilePage = lazy(() => import('@/routes/profile/ProfilePage'));
 const UserProfilePage = lazy(() => import('@/routes/profile/UserProfilePage'));
 const SettingsPage = lazy(() => import('@/routes/settings/SettingsPage'));
@@ -63,6 +64,7 @@ export function App() {
                 <Route path="/posts/:postId" element={<PostPage />} />
                 <Route path="/messages" element={<MessagesPage />} />
                 <Route path="/messages/:conversationId" element={<MessagesPage />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/friends" element={<FriendsPage />} />
                 <Route path="/communities" element={<CommunitiesPage />} />
                 <Route path="/c/:slug" element={<CommunityPage />} />

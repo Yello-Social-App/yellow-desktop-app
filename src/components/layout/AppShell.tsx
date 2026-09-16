@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { useChatSubscription } from '@/features/messages/hooks';
+import { useNotificationSubscription } from '@/features/notifications/hooks';
 import { cn } from '@/lib/cn';
 
 import { RightRail } from './RightRail';
@@ -18,7 +19,9 @@ import { Topbar } from './Topbar';
  * rather than through a global store, since nothing else needs it.
  *
  * Chat is subscribed here, not on the messages screen, so a message arriving
- * on any screen still moves its conversation and bumps the badge.
+ * on any screen still moves its conversation and bumps the badge. Notifications
+ * are subscribed for the same reason, and for one more: a clicked OS
+ * notification has to be able to navigate from wherever the user was.
  *
  * The messages screen needs two panes, so on it the column widens into the
  * rail's slot. The frame itself never moves: the nav stays put, the column's
@@ -38,6 +41,7 @@ export function AppShell() {
   const isWide = pathname.startsWith('/messages');
 
   useChatSubscription();
+  useNotificationSubscription();
 
   return (
     <div className="bg-background flex h-full flex-col">

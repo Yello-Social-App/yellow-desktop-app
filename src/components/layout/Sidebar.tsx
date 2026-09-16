@@ -1,4 +1,5 @@
 import {
+  Bell,
   CircleUser,
   House,
   LayoutGrid,
@@ -16,6 +17,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { usePendingRequestCount } from '@/features/friends/hooks';
+import { useUnreadNotificationCount } from '@/features/notifications/hooks';
 import { useUnreadMessageCount } from '@/features/messages/hooks';
 import { cn } from '@/lib/cn';
 import { displayName, handleOf, initialsOf } from '@/lib/user-display';
@@ -33,6 +35,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { to: '/communities', label: 'Communities', icon: <UsersRound className={ICON_CLASS} /> },
   { to: '/showcase', label: 'Showcase', icon: <LayoutGrid className={ICON_CLASS} /> },
   { to: '/messages', label: 'Messages', icon: <MessagesSquare className={ICON_CLASS} /> },
+  { to: '/notifications', label: 'Notifications', icon: <Bell className={ICON_CLASS} /> },
   { to: '/friends', label: 'Friends', icon: <Users className={ICON_CLASS} /> },
   { to: '/profile', label: 'Profile', icon: <CircleUser className={ICON_CLASS} /> },
   { to: '/settings', label: 'Settings', icon: <Settings className={ICON_CLASS} /> },
@@ -43,18 +46,20 @@ function badgeLabel(count: number): string {
 }
 
 /**
- * The navigation rail: large pill links, a live count on Messages (unread)
- * and Friends (requests waiting), the one filled "Post" button, and the
- * signed-in identity anchored at the bottom.
+ * The navigation rail: large pill links, a live count on Messages (unread),
+ * Notifications (unread rows) and Friends (requests waiting), the one filled
+ * "Post" button, and the signed-in identity anchored at the bottom.
  */
 export function Sidebar() {
   const user = useCurrentUser();
   const navigate = useNavigate();
   const unreadMessages = useUnreadMessageCount();
   const pendingRequests = usePendingRequestCount();
+  const unreadNotifications = useUnreadNotificationCount();
 
   const counts: Record<string, number> = {
     '/messages': unreadMessages,
+    '/notifications': unreadNotifications,
     '/friends': pendingRequests,
   };
 

@@ -23,6 +23,7 @@ import {
   persistRefreshToken,
 } from '../../api/token-store';
 import { chatSocket } from '../../chat/socket';
+import { notificationWatcher } from '../../notifications/watcher';
 import { IPC_CHANNELS } from '../channels';
 import { registerIpcHandler } from '../register';
 
@@ -113,6 +114,8 @@ async function currentSession(): Promise<IpcResult<SessionResponse>> {
 
   // A usable session is what the live socket needs; it fetches its own token.
   chatSocket.connect();
+  // Same trigger, same reason: the inbox watcher polls with that token.
+  notificationWatcher.start();
 
   return ipcOk(
     sessionResponseSchema.parse({
@@ -219,8 +222,10 @@ export function registerAuthHandlers(): void {
     IPC_CHANNELS.AUTH_LOGOUT,
     emptyRequestSchema,
     async (): Promise<IpcResult<SessionResponse>> => {
-      // Before the tokens go: a socket re-auth racing a logout has no token to find.
+      // Before the tokens go: a socket re-auth racing a logout has no token to
+      // find, and a poll in flight would 401 its way into a pointless refresh.
       chatSocket.disconnect();
+      notificationWatcher.stop();
 
       if (accessToken() !== null) {
         // Revoke server-side, but a failure here still signs the user out locally.

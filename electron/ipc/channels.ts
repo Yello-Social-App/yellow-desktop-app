@@ -54,6 +54,17 @@ export const IPC_CHANNELS = {
   CHAT_SOCKET_STATE: 'chat:socket-state',
   /** Main → renderer push; the one channel here that is not an invoke handler. */
   CHAT_EVENT: 'chat:event',
+  NOTIFICATIONS_LIST: 'notifications:list',
+  NOTIFICATIONS_UNREAD_COUNT: 'notifications:unread-count',
+  NOTIFICATIONS_MARK_READ: 'notifications:mark-read',
+  NOTIFICATIONS_MARK_ALL_READ: 'notifications:mark-all-read',
+  NOTIFICATIONS_DISMISS: 'notifications:dismiss',
+  NOTIFICATIONS_REGISTER_DEVICE: 'notifications:register-device',
+  NOTIFICATIONS_UNREGISTER_DEVICE: 'notifications:unregister-device',
+  NOTIFICATIONS_PREFERENCES: 'notifications:preferences',
+  NOTIFICATIONS_SAVE_PREFERENCES: 'notifications:save-preferences',
+  /** Main -> renderer push, as CHAT_EVENT is: what the inbox watcher saw. */
+  NOTIFICATIONS_EVENT: 'notifications:event',
   LINKS_PREVIEW: 'links:preview',
   FS_EXPORT_POSTS: 'fs:export-posts',
   FS_READ_APP_INFO: 'fs:read-app-info',

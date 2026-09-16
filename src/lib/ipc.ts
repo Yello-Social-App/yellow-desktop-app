@@ -23,7 +23,11 @@ import {
   ipcFail,
   ipcResultSchema,
   linkPreviewResponseSchema,
+  markAllNotificationsReadSchema,
   messagePageSchema,
+  notificationPageSchema,
+  notificationPreferencesSchema,
+  notificationResponseSchema,
   postResponseSchema,
   profileResponseSchema,
   reactionSummarySchema,
@@ -32,6 +36,7 @@ import {
   sessionResponseSchema,
   shareLinkCopiedResponseSchema,
   stageImagesResponseSchema,
+  unreadCountSchema,
   userPostsResponseSchema,
   windowStateSchema,
   type ConversationIdRequest,
@@ -48,15 +53,18 @@ import {
   type ListCommentsRequest,
   type ListConversationsRequest,
   type ListFriendRequestsRequest,
+  type ListNotificationsRequest,
   type ListMessagesRequest,
   type LinkPreviewRequest,
   type ListReactorsRequest,
   type LoginRequest,
   type MarkReadRequest,
+  type NotificationIdRequest,
   type PageRequest,
   type PostIdRequest,
   type PublicUserRequest,
   type ReactionTargetRequest,
+  type RegisterDeviceRequest,
   type RegisterRequest,
   type RepostRequest,
   type ResendOtpRequest,
@@ -65,14 +73,19 @@ import {
   type StageImagesRequest,
   type ToggleReactionRequest,
   type TypingRequest,
+  type UnregisterDeviceRequest,
   type UpdateCommentRequest,
+  type UpdateNotificationPreferencesRequest,
   type UpdatePostRequest,
   type UserPostsRequest,
   type VerifyOtpRequest,
   type VerifyResetOtpRequest,
   type YelloBridge,
   chatEventSchema,
+  deviceResponseSchema,
+  notificationEventSchema,
   type ChatEvent,
+  type NotificationEvent,
 } from '@shared/ipc-types';
 import type { z } from 'zod';
 
@@ -124,7 +137,16 @@ async function guarded<TSchema extends z.ZodType>(
 
   const parsed = ipcResultSchema(dataSchema).safeParse(raw);
   if (!parsed.success) {
-    log.error('ipc_response_rejected', { operation, issues: parsed.error.issues.length });
+    // Field paths, not values — enough to name what disagreed without logging
+    // anything the response actually carried.
+    const fields = [
+      ...new Set(parsed.error.issues.slice(0, 8).map((issue) => issue.path.join('.') || '(root)')),
+    ].join(', ');
+    log.error('ipc_response_rejected', {
+      operation,
+      issues: parsed.error.issues.length,
+      fields,
+    });
     return ipcFail('INVALID_PAYLOAD', 'The desktop response had an unexpected shape.');
   }
 
@@ -256,6 +278,41 @@ export const ipc = {
   chatSocketState: () =>
     guarded('chat.socketState', chatSocketStateSchema, (api) => api.chat.socketState()),
 
+  listNotifications: (request: ListNotificationsRequest) =>
+    guarded('notifications.list', notificationPageSchema, (api) => api.notifications.list(request)),
+  unreadNotificationCount: () =>
+    guarded('notifications.unreadCount', unreadCountSchema, (api) =>
+      api.notifications.unreadCount(),
+    ),
+  markNotificationRead: (request: NotificationIdRequest) =>
+    guarded('notifications.markRead', notificationResponseSchema, (api) =>
+      api.notifications.markRead(request),
+    ),
+  markAllNotificationsRead: () =>
+    guarded('notifications.markAllRead', markAllNotificationsReadSchema, (api) =>
+      api.notifications.markAllRead(),
+    ),
+  dismissNotification: (request: NotificationIdRequest) =>
+    guarded('notifications.dismiss', deletedResponseSchema, (api) =>
+      api.notifications.dismiss(request),
+    ),
+  registerPushDevice: (request: RegisterDeviceRequest) =>
+    guarded('notifications.registerDevice', deviceResponseSchema, (api) =>
+      api.notifications.registerDevice(request),
+    ),
+  unregisterPushDevice: (request: UnregisterDeviceRequest) =>
+    guarded('notifications.unregisterDevice', acknowledgedResponseSchema, (api) =>
+      api.notifications.unregisterDevice(request),
+    ),
+  notificationPreferences: () =>
+    guarded('notifications.preferences', notificationPreferencesSchema, (api) =>
+      api.notifications.preferences(),
+    ),
+  saveNotificationPreferences: (request: UpdateNotificationPreferencesRequest) =>
+    guarded('notifications.savePreferences', notificationPreferencesSchema, (api) =>
+      api.notifications.savePreferences(request),
+    ),
+
   linkPreview: (request: LinkPreviewRequest) =>
     guarded('links.preview', linkPreviewResponseSchema, (api) => api.links.preview(request)),
 
@@ -292,6 +349,27 @@ export function onChatEvent(listener: (event: ChatEvent) => void): () => void {
       listener(parsed.data);
     } else {
       log.warn('chat_event_rejected', {});
+    }
+  });
+}
+
+/**
+ * Frames pushed by the inbox watcher: the unread count changing, rows arriving,
+ * and a native OS notification having been clicked. Parsed against the shared
+ * schema before the listener sees it (A08); a value that does not parse is
+ * dropped. Returns the unsubscribe, or a no-op when there is no bridge.
+ */
+export function onNotificationEvent(listener: (event: NotificationEvent) => void): () => void {
+  const api = bridge();
+  if (api === undefined) {
+    return () => undefined;
+  }
+  return api.notifications.onEvent((raw) => {
+    const parsed = notificationEventSchema.safeParse(raw);
+    if (parsed.success) {
+      listener(parsed.data);
+    } else {
+      log.warn('notification_event_rejected', {});
     }
   });
 }

@@ -10,6 +10,8 @@ import { cn } from '@/lib/cn';
 import { ipc } from '@/lib/ipc';
 import { createLogger } from '@/lib/logger';
 import { useTheme, type Theme } from '@/lib/theme';
+
+import { NotificationSettings } from './components/NotificationSettings';
 import { displayName, handleOf } from '@/lib/user-display';
 import type { AppInfoResponse } from '@shared/ipc-types';
 
@@ -120,6 +122,8 @@ export default function SettingsPage() {
             </div>
           </Card>
         </section>
+
+        <NotificationSettings />
 
         <section className="gap-sm flex flex-col">
           <h2 className="text-on-surface-variant text-caption font-semibold tracking-wider uppercase">

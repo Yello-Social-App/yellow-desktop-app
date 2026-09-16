@@ -10,6 +10,7 @@ import { useSocketStatus } from '@/features/messages/hooks';
 import { cn } from '@/lib/cn';
 import { displayName, initialsOf } from '@/lib/user-display';
 
+import { NotificationsBell } from './NotificationsBell';
 import { SignOutDialog } from './SignOutDialog';
 import { WindowControls } from './WindowControls';
 
@@ -85,6 +86,7 @@ export function Topbar({ searchQuery, onSearchChange }: TopbarProps) {
             <Wifi aria-hidden className="size-3.5" />
           )}
         </span>
+        <NotificationsBell />
         <IconButton
           label="Settings"
           size="sm"
