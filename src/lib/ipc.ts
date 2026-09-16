@@ -7,6 +7,7 @@
  * here, not a crash.
  */
 import {
+  accountListResponseSchema,
   acknowledgedResponseSchema,
   appInfoResponseSchema,
   chatMessageResponseSchema,
@@ -39,6 +40,7 @@ import {
   unreadCountSchema,
   userPostsResponseSchema,
   windowStateSchema,
+  type AccountIdRequest,
   type ConversationIdRequest,
   type CreateCommentRequest,
   type CreateConversationRequest,
@@ -183,6 +185,15 @@ export const ipc = {
   resetPassword: (request: ResetPasswordRequest) =>
     guarded('auth.resetPassword', acknowledgedResponseSchema, (api) =>
       api.auth.resetPassword(request),
+    ),
+
+  listAccounts: () =>
+    guarded('auth.listAccounts', accountListResponseSchema, (api) => api.auth.listAccounts()),
+  switchAccount: (request: AccountIdRequest) =>
+    guarded('auth.switchAccount', sessionResponseSchema, (api) => api.auth.switchAccount(request)),
+  forgetAccount: (request: AccountIdRequest) =>
+    guarded('auth.forgetAccount', acknowledgedResponseSchema, (api) =>
+      api.auth.forgetAccount(request),
     ),
 
   listFeed: (request: FeedRequest) =>

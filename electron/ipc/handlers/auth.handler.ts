@@ -13,21 +13,41 @@
  */
 import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
-import { adoptTokenPair, apiRequest, tokenPairResponseSchema } from '../../api/http-client';
+import {
+  adoptTokenPair,
+  apiRequest,
+  exchangeExplicitRefreshToken,
+  tokenPairResponseSchema,
+} from '../../api/http-client';
 import {
   accessToken,
   accessTokenExpiresAt,
+  adoptRefreshToken,
   clearTokens,
-  discardPersistedRefreshToken,
-  loadPersistedRefreshToken,
-  persistRefreshToken,
 } from '../../api/token-store';
+import {
+  MAX_REMEMBERED_ACCOUNTS,
+  activeAccountId,
+  clearActiveAccount,
+  forgetAccount,
+  hasAccount,
+  listAccounts,
+  loadVault,
+  markAccountActive,
+  rememberAccount,
+  refreshTokenFor,
+  startupRefreshToken,
+  isSecureStorageAvailable,
+  type AccountProfile,
+} from '../../api/account-vault';
 import { chatSocket } from '../../chat/socket';
 import { notificationWatcher } from '../../notifications/watcher';
 import { IPC_CHANNELS } from '../channels';
 import { registerIpcHandler } from '../register';
 
 import {
+  accountIdRequestSchema,
+  accountListResponseSchema,
   acknowledgedResponseSchema,
   emptyRequestSchema,
   forgotPasswordRequestSchema,
@@ -42,6 +62,7 @@ import {
   userSchema,
   verifyOtpRequestSchema,
   verifyResetOtpRequestSchema,
+  type AccountListResponse,
   type AcknowledgedResponse,
   type IpcResult,
   type RegisterResponse,
@@ -117,11 +138,46 @@ async function currentSession(): Promise<IpcResult<SessionResponse>> {
   // Same trigger, same reason: the inbox watcher polls with that token.
   notificationWatcher.start();
 
+  // Keep the switcher's copy of who this is current. It also completes the
+  // migration from the single-account vault, which stored a token with no idea
+  // whose it was — this profile is what finally names it.
+  const identity = profileOf(profile.data);
+  if (hasAccount(identity.userId)) {
+    await markAccountActive(identity);
+  } else if (activeAccountId() === null && startupRefreshToken() !== null) {
+    const token = startupRefreshToken();
+    if (token !== null) {
+      await rememberAccount(identity, token);
+    }
+  }
+
   return ipcOk(
     sessionResponseSchema.parse({
       session: { user: profile.data, expiresAt: accessTokenExpiresAt() ?? Date.now() },
     }),
   );
+}
+
+/** The switcher's view of a profile: enough to recognise a face, never a token. */
+function profileOf(user: z.infer<typeof userSchema>): AccountProfile {
+  return {
+    userId: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    avatarUrl: user.avatarUrl,
+  };
+}
+
+/**
+ * Tears down everything scoped to the account being left.
+ *
+ * The socket and the watcher both authenticate with the outgoing token, so
+ * they stop before it does — a re-auth or a poll racing the swap would spend
+ * the wrong account's credential (A07).
+ */
+function endSessionScopedWork(): void {
+  chatSocket.disconnect();
+  notificationWatcher.stop();
 }
 
 /** Adopts a freshly issued pair, then resolves the profile behind it. */
@@ -131,18 +187,94 @@ async function establishSession(
 ): Promise<IpcResult<SessionResponse>> {
   adoptTokenPair(pair);
 
-  if (remember) {
-    const persisted = await persistRefreshToken();
-    if (!persisted) {
-      // Not fatal: the session simply will not survive a restart.
-      log.warn('session_persist_failed', {});
-    }
-  } else {
-    // An earlier "remember me" must not outlive a later plain sign-in.
-    await discardPersistedRefreshToken();
+  const session = await currentSession();
+
+  if (!session.ok || session.data.session === null) {
+    return session;
   }
 
-  return currentSession();
+  const identity = profileOf(session.data.session.user);
+
+  if (remember) {
+    const token = refreshTokenOf(pair);
+    if (token === null) {
+      // Nothing to remember it by; the session still works, it just will not
+      // survive a restart or be switchable back to.
+      log.warn('session_persist_skipped', { reason: 'no_refresh_token' });
+    } else {
+      await rememberAccount(identity, token);
+    }
+  } else {
+    // Declining to be remembered has to erase an earlier decision to be, or
+    // the account stays switchable after the user asked that it not be.
+    await forgetAccount(identity.userId);
+  }
+
+  return session;
+}
+
+function refreshTokenOf(pair: z.infer<typeof tokenPairResponseSchema>): string | null {
+  return pair.refreshToken ?? null;
+}
+
+/**
+ * Becomes a remembered account, using the token the vault holds for it.
+ *
+ * The order matters and is the whole reason this is not three lines. The target
+ * account's token is exchanged *first*, against the live server, while the
+ * current session is still intact. Only once a usable pair comes back is
+ * anything torn down. Doing it the obvious way round — clear, then try — turns
+ * every expired stored token into a double sign-out: the user loses the account
+ * they were using as well as the one they were reaching for (A10).
+ *
+ * A token the server rejects is a session that is genuinely over, so the
+ * account is forgotten rather than left in the list to fail again.
+ */
+async function resumeAccount(userId: string): Promise<IpcResult<SessionResponse>> {
+  // Only an account this process already remembers can be resumed. The renderer
+  // names a user id and nothing else — it cannot supply a token, and a id that
+  // is not in the vault is simply not a thing that can be switched to (A01).
+  const token = refreshTokenFor(userId);
+  if (token === null) {
+    log.warn('switch_rejected_unknown_account', {});
+    return ipcFail('API', 'That account is not signed in on this device.');
+  }
+
+  const pair = await exchangeExplicitRefreshToken(token);
+  if (pair === null) {
+    // Distinguish "the server said no" from "we could not reach the server":
+    // only the former means the stored credential is spent.
+    await forgetAccount(userId);
+    log.info('switch_failed_token_rejected', {});
+    return ipcFail(
+      'UNAUTHENTICATED',
+      'That account needs to sign in again. Its saved session has expired.',
+    );
+  }
+
+  // Past this point the swap is committed: the old session's workers stop
+  // before its token is replaced underneath them.
+  endSessionScopedWork();
+  clearTokens();
+  adoptTokenPair(pair);
+
+  const session = await currentSession();
+  if (!session.ok || session.data.session === null) {
+    // Authenticated but unreadable: leave the credential in place rather than
+    // forgetting an account over one failed profile fetch.
+    log.warn('switch_profile_unreadable', {});
+    return session.ok ? ipcFail('API', 'That account could not be opened.') : session;
+  }
+
+  // `currentSession` already refreshed the snapshot; this records the token the
+  // exchange just rotated into, so the next switch has a live one.
+  const refreshed = refreshTokenOf(pair);
+  if (refreshed !== null) {
+    await rememberAccount(profileOf(session.data.session.user), refreshed);
+  }
+
+  log.info('account_switched', {});
+  return session;
 }
 
 export function registerAuthHandlers(): void {
@@ -224,8 +356,9 @@ export function registerAuthHandlers(): void {
     async (): Promise<IpcResult<SessionResponse>> => {
       // Before the tokens go: a socket re-auth racing a logout has no token to
       // find, and a poll in flight would 401 its way into a pointless refresh.
-      chatSocket.disconnect();
-      notificationWatcher.stop();
+      endSessionScopedWork();
+
+      const leaving = activeAccountId();
 
       if (accessToken() !== null) {
         // Revoke server-side, but a failure here still signs the user out locally.
@@ -238,8 +371,29 @@ export function registerAuthHandlers(): void {
       }
 
       clearTokens();
-      await discardPersistedRefreshToken();
+
+      // Signing out erases this account's stored credential rather than leaving
+      // it to age out: the point of signing out is that the token is gone.
+      if (leaving === null) {
+        await clearActiveAccount();
+      } else {
+        await forgetAccount(leaving);
+      }
       log.info('signed_out', {});
+
+      // Another remembered account means the user has somewhere to land. Falling
+      // through to it beats a sign-in screen they would answer by picking that
+      // same account — and it is the behaviour that makes signing out of one of
+      // several accounts feel like leaving a room rather than the building.
+      const [next] = listAccounts();
+      if (next !== undefined) {
+        const resumed = await resumeAccount(next.userId);
+        if (resumed.ok) {
+          log.info('signed_out_into_next_account', {});
+          return resumed;
+        }
+      }
+
       return ipcOk(EMPTY_SESSION);
     },
   );
@@ -252,14 +406,62 @@ export function registerAuthHandlers(): void {
         return currentSession();
       }
 
-      // Cold start: a remembered refresh token is exchanged by the 401 retry
-      // path on the first authenticated call.
-      const remembered = await loadPersistedRefreshToken();
-      if (!remembered) {
+      // Cold start: read the vault, then let the 401 retry path exchange the
+      // remembered token on the first authenticated call.
+      await loadVault();
+      const remembered = startupRefreshToken();
+      if (remembered === null) {
         return ipcOk(EMPTY_SESSION);
       }
 
+      adoptRefreshToken(remembered);
       return currentSession();
+    },
+  );
+
+  registerIpcHandler(
+    IPC_CHANNELS.AUTH_LIST_ACCOUNTS,
+    emptyRequestSchema,
+    async (): Promise<IpcResult<AccountListResponse>> => {
+      await loadVault();
+      const active = activeAccountId();
+      return ipcOk(
+        accountListResponseSchema.parse({
+          accounts: listAccounts().map((account) => ({
+            ...account,
+            isActive: account.userId === active,
+          })),
+          canRemember: isSecureStorageAvailable(),
+          maxAccounts: MAX_REMEMBERED_ACCOUNTS,
+        }),
+      );
+    },
+  );
+
+  registerIpcHandler(
+    IPC_CHANNELS.AUTH_SWITCH_ACCOUNT,
+    accountIdRequestSchema,
+    async ({ userId }): Promise<IpcResult<SessionResponse>> => {
+      if (userId === activeAccountId() && accessToken() !== null) {
+        // Already there. Re-running the swap would spend a refresh for nothing.
+        return currentSession();
+      }
+      return resumeAccount(userId);
+    },
+  );
+
+  registerIpcHandler(
+    IPC_CHANNELS.AUTH_FORGET_ACCOUNT,
+    accountIdRequestSchema,
+    async ({ userId }): Promise<IpcResult<AcknowledgedResponse>> => {
+      if (userId === activeAccountId()) {
+        // Removing the account you are using is a sign-out, and sign-out has
+        // server-side revocation to do. Refuse rather than half-do it.
+        return ipcFail('API', 'Sign out of this account instead of removing it.');
+      }
+      await forgetAccount(userId);
+      log.info('account_removed', {});
+      return ipcOk(ACKNOWLEDGED);
     },
   );
 

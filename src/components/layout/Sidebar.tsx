@@ -12,15 +12,14 @@ import {
 import type { ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { useCurrentUser } from '@/features/auth/hooks';
+
+import { AccountMenu } from './AccountMenu';
 import { usePendingRequestCount } from '@/features/friends/hooks';
 import { useUnreadNotificationCount } from '@/features/notifications/hooks';
 import { useUnreadMessageCount } from '@/features/messages/hooks';
 import { cn } from '@/lib/cn';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
 
 interface NavItem {
   to: string;
@@ -48,10 +47,10 @@ function badgeLabel(count: number): string {
 /**
  * The navigation rail: large pill links, a live count on Messages (unread),
  * Notifications (unread rows) and Friends (requests waiting), the one filled
- * "Post" button, and the signed-in identity anchored at the bottom.
+ * "Post" button, and the signed-in identity anchored at the bottom — which is
+ * also the account switcher.
  */
 export function Sidebar() {
-  const user = useCurrentUser();
   const navigate = useNavigate();
   const unreadMessages = useUnreadMessageCount();
   const pendingRequests = usePendingRequestCount();
@@ -121,27 +120,7 @@ export function Sidebar() {
         </Button>
       </div>
 
-      {user !== null && (
-        <NavLink
-          to="/profile"
-          className="hover:bg-surface-container-low transition-tone gap-sm mt-auto flex items-center rounded-full p-2"
-        >
-          <Avatar
-            initials={initialsOf(user)}
-            name={displayName(user)}
-            imageUrl={user.avatarUrl}
-            size="md"
-          />
-          <span className="min-w-0">
-            <span className="text-on-surface block truncate text-[15px] font-semibold">
-              {displayName(user)}
-            </span>
-            <span className="text-on-surface-variant block truncate text-[13px]">
-              {handleOf(user)}
-            </span>
-          </span>
-        </NavLink>
-      )}
+      <AccountMenu />
     </aside>
   );
 }

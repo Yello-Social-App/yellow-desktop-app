@@ -16,6 +16,7 @@ import {
   verifyResetOtp,
   type AuthError,
 } from './api';
+import { useAccountsStore } from './accounts-store';
 import { useAuthStore, type AuthStatus } from './store';
 
 export function useAuthStatus(): AuthStatus {
@@ -90,10 +91,21 @@ function useSubmission<TArgs extends unknown[], TData>(
   return { submit, isSubmitting, error, clearError };
 }
 
+/**
+ * Signing in, either as the first account or as an additional one.
+ *
+ * The two differ only at the end: a plain sign-in adopts the session and the
+ * router takes it from there, while one that was adding an account restarts the
+ * renderer, because every other store still holds the previous account's data.
+ */
 export function useLogin() {
   const adoptSession = useAuthStore((state) => state.adoptSession);
   const onSuccess = useCallback(
     (session: Session | null) => {
+      if (session !== null && useAccountsStore.getState().isAddingAccount) {
+        useAccountsStore.getState().completeAddAccount();
+        return;
+      }
       adoptSession(session);
     },
     [adoptSession],
@@ -109,6 +121,10 @@ export function useVerifyOtp() {
   const adoptSession = useAuthStore((state) => state.adoptSession);
   const onSuccess = useCallback(
     (session: Session | null) => {
+      if (session !== null && useAccountsStore.getState().isAddingAccount) {
+        useAccountsStore.getState().completeAddAccount();
+        return;
+      }
       adoptSession(session);
     },
     [adoptSession],

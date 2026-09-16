@@ -898,6 +898,45 @@ export type LinkPreviewRequest = z.infer<typeof linkPreviewRequestSchema>;
 export type LinkPreview = z.infer<typeof linkPreviewSchema>;
 export type LinkPreviewResponse = z.infer<typeof linkPreviewResponseSchema>;
 
+/* -- account switching -- */
+
+/**
+ * A remembered account, as the renderer is allowed to see it.
+ *
+ * Note what is absent, and deliberately so: there is no token, and no field
+ * from which one could be derived. Switching is addressed by `userId` alone,
+ * and the main process will only act on an id its own vault already holds — the
+ * renderer can name an account, never authenticate as one (OWASP A01/A02).
+ */
+export const accountSummarySchema = z.object({
+  userId: z.string().min(1).max(64),
+  username: z.string().min(1).max(64),
+  fullName: optionalText(200),
+  avatarUrl: optionalText(2048),
+  /** The account this session is currently signed in as. */
+  isActive: z.boolean(),
+});
+
+export const accountListResponseSchema = z.object({
+  accounts: z.array(accountSummarySchema).max(10),
+  /**
+   * Whether the OS keychain can encrypt a credential at rest. False on a Linux
+   * desktop with no Secret Service, where accounts cannot be remembered at all
+   * — the switcher says so rather than offering a button that silently does
+   * nothing.
+   */
+  canRemember: z.boolean(),
+  maxAccounts: z.number().int().positive().max(20),
+});
+
+export const accountIdRequestSchema = z.object({
+  userId: z.string().min(1).max(64),
+});
+
+export type AccountSummary = z.infer<typeof accountSummarySchema>;
+export type AccountListResponse = z.infer<typeof accountListResponseSchema>;
+export type AccountIdRequest = z.infer<typeof accountIdRequestSchema>;
+
 /* -- notifications -- */
 
 /**
@@ -1265,6 +1304,9 @@ export interface YelloBridge {
     forgotPassword(request: ForgotPasswordRequest): Promise<IpcResult<AcknowledgedResponse>>;
     verifyResetOtp(request: VerifyResetOtpRequest): Promise<IpcResult<AcknowledgedResponse>>;
     resetPassword(request: ResetPasswordRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    listAccounts(): Promise<IpcResult<AccountListResponse>>;
+    switchAccount(request: AccountIdRequest): Promise<IpcResult<SessionResponse>>;
+    forgetAccount(request: AccountIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
   };
   readonly feed: {
     list(request: FeedRequest): Promise<IpcResult<FeedResponse>>;

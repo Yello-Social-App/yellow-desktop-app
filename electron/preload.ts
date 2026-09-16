@@ -18,6 +18,8 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from './ipc/channels';
 
 import type {
+  AccountIdRequest,
+  AccountListResponse,
   AcknowledgedResponse,
   AppInfoResponse,
   ChatMessageResponse,
@@ -116,6 +118,11 @@ const bridge: YelloBridge = {
       invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_VERIFY_RESET_OTP, request),
     resetPassword: (request: ResetPasswordRequest) =>
       invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_RESET_PASSWORD, request),
+    listAccounts: () => invoke<AccountListResponse>(IPC_CHANNELS.AUTH_LIST_ACCOUNTS),
+    switchAccount: (request: AccountIdRequest) =>
+      invoke<SessionResponse>(IPC_CHANNELS.AUTH_SWITCH_ACCOUNT, request),
+    forgetAccount: (request: AccountIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_FORGET_ACCOUNT, request),
   },
   feed: {
     list: (request: FeedRequest) => invoke<FeedResponse>(IPC_CHANNELS.FEED_LIST, request),
