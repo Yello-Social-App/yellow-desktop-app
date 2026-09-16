@@ -6,6 +6,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-16
+
+Adds the notification inbox and switching between accounts, and gives link
+previews a card everywhere a link can appear.
+
+### Added
+
+- **Notifications.** The inbox from yello-notify: a bell in the top bar with
+  an unread count and a panel of recent activity, a full Notifications screen
+  with All and Unread tabs and cursor paging, and a count on the nav rail.
+  Rows can be opened (which acknowledges them and follows the link), marked
+  read individually or all at once, and dismissed. Clicking a row goes to the
+  post, comment thread, profile or conversation it is about; a row whose type
+  this build does not recognise still renders from the server's own wording,
+  it just does not navigate.
+- **Desktop alerts.** A native OS notification when something arrives while
+  Yello is in the background, plus a count on the taskbar or dock icon.
+  Clicking the alert brings the window back and opens what it is about.
+  Notifications are delivered over FCM, which a desktop client cannot
+  receive, so the main process polls the inbox instead — often while the
+  window has focus, rarely while it does not, and immediately when focus
+  returns.
+- **Notification preferences.** Settings → Notifications turns desktop alerts
+  off entirely or per activity type. A muted type stops the alert only: the
+  row still arrives in the inbox and still counts as unread, which is how the
+  service defines a mute, and the wording says so.
+- **Switching between accounts.** The identity block at the foot of the nav
+  rail lists the accounts this device remembers and moves between them in one
+  click without a password. "Add another account" signs in alongside the
+  current session; "Sign out" falls through to another remembered account
+  when there is one. Up to five accounts are kept, and only those signed in
+  with "Remember me" — the others deliberately leave no credential behind.
+  Removing an account erases its stored credential immediately.
+- **Link previews everywhere.** Chat messages, community posts and showcase
+  project pages now draw the same preview card the feed does. The card in a
+  quoted repost grew from a small side thumbnail to a full-width image, and
+  the repost composer shows the quoted post's link instead of dropping it.
+
+### Changed
+
+- Link preview cards come in three sizes chosen by where they sit, rather
+  than one compact flag: a thumbnail beside the text in comments and chat, a
+  2:1 image above it in quoted reposts and community posts, and a 1.91:1
+  image on a post's own card. GitHub keeps the side-by-side treatment at
+  every size, because its card image reads badly enlarged.
+- Opening the notification panel or screen always asks the server, rather
+  than showing what the first fetch of the session found.
+
+### Fixed
+
+- A malformed timestamp anywhere — in a post, comment, message, friend row or
+  notification — blanked that whole screen with "Something went wrong".
+  `Intl` throws on an invalid date rather than returning something unusable,
+  and these are formatted during render. Unreadable times now show as a dash
+  and the screen survives.
+- One unexpected field in one notification no longer empties the entire
+  inbox: rows are parsed individually and only the bad one is dropped.
+
+### Security
+
+- Remembered accounts are stored in one vault encrypted through the OS
+  keychain (`safeStorage`), written owner-only, and never reachable from the
+  renderer — no IPC channel returns a token. Holding several refresh tokens
+  rather than one widens what a single compromised vault would expose, so the
+  list is capped at five, only accounts the user opted into are stored, and
+  signing out erases that account's token rather than letting it age out.
+- Switching proves the target account's token against the server before
+  ending the current session, so an expired saved session cannot sign the
+  user out of the account they were already using.
+- A successful switch restarts the renderer, so no store can carry one
+  account's posts or direct messages into another's session.
+- Deep links from a notification are built through an allowlist: the value
+  must be a recognised key for that notification type and must look like an
+  id before it becomes a route.
+- Failed responses log the field names that failed validation, never the
+  values.
+
 ## [0.3.0] - 2026-09-15
 
 Moves to the live deployment at `api.yello.cachewraith.com`, adds real-time
