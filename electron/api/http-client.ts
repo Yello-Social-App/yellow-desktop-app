@@ -38,6 +38,7 @@ import { z } from 'zod';
 import { createLogger } from '../../shared/logger';
 import { ipcFail, ipcOk, type IpcResult } from '../../shared/ipc-types';
 
+import { noteActiveRefreshToken } from './account-vault';
 import { apiEnvelopeSchema, apiErrorEnvelopeSchema } from './envelope';
 import { ENDPOINTS } from './endpoints';
 import {
@@ -208,10 +209,59 @@ export function adoptTokenPair(pair: z.infer<typeof tokenPairSchema>): number {
     accessTokenExpiresAt: expiresAt,
     refreshToken: pair.refreshToken ?? null,
   });
+
+  // Refresh tokens rotate, so the remembered copy has to follow the live one.
+  // A vault holding a spent token would not be insecure, but the next switch
+  // to that account would fail and read to the user as a revoked session.
+  if (pair.refreshToken !== undefined) {
+    noteActiveRefreshToken(pair.refreshToken);
+  }
   return expiresAt;
 }
 
+/**
+ * Exchanges a specific refresh token without touching the live session.
+ *
+ * This is what makes switching accounts safe to attempt: the target account's
+ * token is proven first, and only a success tears down the session the user
+ * currently has. Exchanging through the shared path instead would have a failed
+ * switch leave them signed out of both (A10).
+ */
+export async function exchangeExplicitRefreshToken(
+  token: string,
+): Promise<z.infer<typeof tokenPairSchema> | null> {
+  let response;
+  try {
+    response = await requireClient().post(
+      ENDPOINTS.auth.refresh,
+      { refreshToken: token },
+      // The interceptor would otherwise attach the *current* account's access
+      // token to a call that is about a different account entirely.
+      { headers: { Authorization: undefined } },
+    );
+  } catch (error) {
+    const reason = error instanceof AxiosError ? error.code : undefined;
+    log.warn('account_refresh_errored', { reason });
+    return null;
+  }
+
+  if (response.status >= 400) {
+    log.info('account_refresh_rejected', { status: response.status });
+    return null;
+  }
+
+  const envelope = apiEnvelopeSchema.safeParse(response.data);
+  const pair = envelope.success ? tokenPairSchema.safeParse(envelope.data.data) : null;
+  return pair?.success === true ? pair.data : null;
+}
+
 export const tokenPairResponseSchema = tokenPairSchema;
+
+/** The first few failing field paths, joined — field names only, never values. */
+function describeIssuePaths(error: z.ZodError): string {
+  const paths = error.issues.slice(0, 8).map((issue) => issue.path.join('.') || '(root)');
+  return [...new Set(paths)].join(', ');
+}
 
 function describeFailure(status: number, body: unknown): IpcResult<never> {
   const parsed = apiErrorEnvelopeSchema.safeParse(body);
@@ -300,7 +350,14 @@ export async function apiRequest<TSchema extends z.ZodType>(
 
   const payload = schema.safeParse(raw);
   if (!payload.success) {
-    log.error('api_payload_rejected', { url, issues: payload.error.issues.length });
+    // The field *paths* that failed, not their values: a count alone makes a
+    // rejected response undiagnosable, and the values are the part that could
+    // carry PII (A09).
+    log.error('api_payload_rejected', {
+      url,
+      issues: payload.error.issues.length,
+      fields: describeIssuePaths(payload.error),
+    });
     return ipcFail('API', 'The server returned an unexpected response.');
   }
 

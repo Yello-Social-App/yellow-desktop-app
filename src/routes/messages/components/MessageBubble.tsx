@@ -2,11 +2,13 @@ import { AlertCircle, Check, CheckCheck, Clock } from 'lucide-react';
 import { memo } from 'react';
 import type { Author } from '@shared/ipc-types';
 
+import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
 import { Avatar } from '@/components/ui/Avatar';
 import { useComposer } from '@/features/messages/hooks';
 import type { ThreadMessage } from '@/features/messages/types';
 import { cn } from '@/lib/cn';
+import { extractLinks } from '@/lib/links';
 import { clockTime } from '@/lib/relative-time';
 import { displayName, initialsOf } from '@/lib/user-display';
 
@@ -26,6 +28,11 @@ interface MessageBubbleProps {
  * Sent bubbles are filled brand yellow with a squared bottom-right corner;
  * received bubbles are the tonal surface with a squared bottom-left. A run
  * from one sender shares one avatar and closes up.
+ *
+ * A link gets its card *below* the bubble rather than inside it: the sent
+ * bubble is filled brand yellow, and a surface-toned card sitting on that
+ * reads as a mistake. Below, it aligns with the bubble and belongs to it
+ * without fighting the fill.
  */
 export const MessageBubble = memo(function MessageBubble({
   message,
@@ -37,6 +44,10 @@ export const MessageBubble = memo(function MessageBubble({
 }: MessageBubbleProps) {
   const { retry } = useComposer();
   const isFailed = message.delivery === 'failed';
+  // Only the first link, and only once the line has actually been sent: a
+  // message still in flight can still fail, and unfurling it would spend a
+  // fetch on text that may never exist.
+  const [firstLink] = message.delivery === 'sent' ? extractLinks(message.body) : [];
 
   return (
     <div
@@ -80,6 +91,12 @@ export const MessageBubble = memo(function MessageBubble({
             className={isMine ? '[&_a]:text-on-primary-container [&_a]:underline' : ''}
           />
         </div>
+        {firstLink !== undefined && (
+          <span className="mt-1 block w-full max-w-[320px]">
+            <LinkPreviewCard url={firstLink} size="sm" />
+          </span>
+        )}
+
         <span
           className={cn(
             'text-on-surface-variant flex items-center gap-1 px-1 text-[11px] transition-opacity',

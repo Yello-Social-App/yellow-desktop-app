@@ -2,11 +2,13 @@ import { ArrowBigDown, ArrowBigUp, MessageCircle, Share2 } from 'lucide-react';
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
 
+import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
 import { Avatar } from '@/components/ui/Avatar';
 import { useCommunitiesStore } from '@/features/communities/store';
 import type { Community, CommunityPost } from '@/features/communities/types';
 import { cn } from '@/lib/cn';
+import { extractLinks } from '@/lib/links';
 import { relativeTime } from '@/lib/relative-time';
 import { displayName, initialsOf } from '@/lib/user-display';
 
@@ -27,6 +29,7 @@ export const CommunityPostCard = memo(function CommunityPostCard({
   inCommunity = false,
 }: CommunityPostCardProps) {
   const vote = useCommunitiesStore((state) => state.vote);
+  const [firstLink] = extractLinks(post.body);
 
   return (
     <article className="bg-surface-container-lowest border-outline-variant hover:border-outline/40 transition-tone flex gap-3 rounded-2xl border p-3 pl-2">
@@ -104,6 +107,8 @@ export const CommunityPostCard = memo(function CommunityPostCard({
         <p className="text-on-surface-variant line-clamp-3 text-[14px] leading-relaxed whitespace-pre-wrap">
           <RichText text={post.body} />
         </p>
+
+        {firstLink !== undefined && <LinkPreviewCard url={firstLink} size="md" />}
 
         <div className="text-on-surface-variant -ml-2 flex items-center gap-1 pt-1 text-[13px] font-medium">
           <span className="hover:bg-surface-container-high transition-tone flex items-center gap-1.5 rounded-full px-2.5 py-1.5">

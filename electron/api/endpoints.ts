@@ -9,6 +9,8 @@ export const API_VERSION = 'v1';
 
 const base = `/${API_VERSION}`;
 const chat = '/ws';
+/** The notify service: a third mount on the same host, own version segment. */
+const notify = '/notifications/v1';
 
 /**
  * Path segments are always percent-encoded here rather than at the call site,
@@ -62,6 +64,20 @@ export const ENDPOINTS = {
     accept: (userId: string) => `${base}/friends/requests/${seg(userId)}/accept`,
     decline: (userId: string) => `${base}/friends/requests/${seg(userId)}/decline`,
     remove: (userId: string) => `${base}/friends/${seg(userId)}`,
+  },
+  notifications: {
+    /**
+     * Slash-less on purpose: the trailing-slash form answers 307 to this one,
+     * and a redirect is a round trip spent for nothing.
+     */
+    list: notify,
+    unreadCount: `${notify}/unread-count`,
+    read: (notificationId: string) => `${notify}/${seg(notificationId)}/read`,
+    readAll: `${notify}/read-all`,
+    remove: (notificationId: string) => `${notify}/${seg(notificationId)}`,
+    devices: `${notify}/devices`,
+    unregisterDevice: `${notify}/devices/unregister`,
+    preferences: `${notify}/preferences`,
   },
   chat: {
     conversations: `${chat}/conversations`,

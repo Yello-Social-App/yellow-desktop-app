@@ -18,6 +18,8 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from './ipc/channels';
 
 import type {
+  AccountIdRequest,
+  AccountListResponse,
   AcknowledgedResponse,
   AppInfoResponse,
   ChatMessageResponse,
@@ -33,6 +35,7 @@ import type {
   DiscardImagesRequest,
   DeleteCommentRequest,
   DeletedResponse,
+  DeviceResponse,
   ExportPostsRequest,
   ExportPostsResponse,
   FeedRequest,
@@ -48,10 +51,16 @@ import type {
   ListMessagesRequest,
   LinkPreviewRequest,
   LinkPreviewResponse,
+  ListNotificationsRequest,
   ListReactorsRequest,
   LoginRequest,
+  MarkAllNotificationsRead,
   MarkReadRequest,
   MessagePage,
+  NotificationIdRequest,
+  NotificationPage,
+  NotificationPreferences,
+  NotificationResponse,
   PageRequest,
   PostIdRequest,
   PostResponse,
@@ -60,6 +69,7 @@ import type {
   ReactionSummary,
   ReactionTargetRequest,
   ReactorPage,
+  RegisterDeviceRequest,
   RegisterRequest,
   RegisterResponse,
   RepostRequest,
@@ -72,7 +82,10 @@ import type {
   StageImagesResponse,
   ToggleReactionRequest,
   TypingRequest,
+  UnreadCount,
+  UnregisterDeviceRequest,
   UpdateCommentRequest,
+  UpdateNotificationPreferencesRequest,
   UpdatePostRequest,
   UserPostsRequest,
   UserPostsResponse,
@@ -105,6 +118,11 @@ const bridge: YelloBridge = {
       invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_VERIFY_RESET_OTP, request),
     resetPassword: (request: ResetPasswordRequest) =>
       invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_RESET_PASSWORD, request),
+    listAccounts: () => invoke<AccountListResponse>(IPC_CHANNELS.AUTH_LIST_ACCOUNTS),
+    switchAccount: (request: AccountIdRequest) =>
+      invoke<SessionResponse>(IPC_CHANNELS.AUTH_SWITCH_ACCOUNT, request),
+    forgetAccount: (request: AccountIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_FORGET_ACCOUNT, request),
   },
   feed: {
     list: (request: FeedRequest) => invoke<FeedResponse>(IPC_CHANNELS.FEED_LIST, request),
@@ -194,6 +212,33 @@ const bridge: YelloBridge = {
       ipcRenderer.on(IPC_CHANNELS.CHAT_EVENT, handler);
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.CHAT_EVENT, handler);
+      };
+    },
+  },
+  notifications: {
+    list: (request: ListNotificationsRequest) =>
+      invoke<NotificationPage>(IPC_CHANNELS.NOTIFICATIONS_LIST, request),
+    unreadCount: () => invoke<UnreadCount>(IPC_CHANNELS.NOTIFICATIONS_UNREAD_COUNT),
+    markRead: (request: NotificationIdRequest) =>
+      invoke<NotificationResponse>(IPC_CHANNELS.NOTIFICATIONS_MARK_READ, request),
+    markAllRead: () => invoke<MarkAllNotificationsRead>(IPC_CHANNELS.NOTIFICATIONS_MARK_ALL_READ),
+    dismiss: (request: NotificationIdRequest) =>
+      invoke<DeletedResponse>(IPC_CHANNELS.NOTIFICATIONS_DISMISS, request),
+    registerDevice: (request: RegisterDeviceRequest) =>
+      invoke<DeviceResponse>(IPC_CHANNELS.NOTIFICATIONS_REGISTER_DEVICE, request),
+    unregisterDevice: (request: UnregisterDeviceRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.NOTIFICATIONS_UNREGISTER_DEVICE, request),
+    preferences: () => invoke<NotificationPreferences>(IPC_CHANNELS.NOTIFICATIONS_PREFERENCES),
+    savePreferences: (request: UpdateNotificationPreferencesRequest) =>
+      invoke<NotificationPreferences>(IPC_CHANNELS.NOTIFICATIONS_SAVE_PREFERENCES, request),
+    onEvent: (listener: (event: unknown) => void) => {
+      // As with chat: the IpcRendererEvent carries the sender and stays here.
+      const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(IPC_CHANNELS.NOTIFICATIONS_EVENT, handler);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATIONS_EVENT, handler);
       };
     },
   },
