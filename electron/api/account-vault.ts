@@ -73,6 +73,21 @@ export interface AccountProfile {
   avatarUrl?: string | undefined;
 }
 
+/** The switcher's view of a profile: enough to recognise a face, never a token. */
+export function accountProfileOf(user: {
+  id: string;
+  username: string;
+  fullName?: string | undefined;
+  avatarUrl?: string | undefined;
+}): AccountProfile {
+  return {
+    userId: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    avatarUrl: user.avatarUrl,
+  };
+}
+
 const EMPTY_VAULT: Vault = { version: 1, activeUserId: null, accounts: [] };
 
 let vault: Vault = EMPTY_VAULT;
@@ -265,6 +280,10 @@ export async function rememberAccount(
 /**
  * Marks an account active without touching its token, and refreshes its
  * profile snapshot so the switcher does not show a stale name or avatar.
+ *
+ * The snapshot is replaced, not merged: the profile passed in is always a
+ * fresh server read, so a name or avatar it lacks has been cleared, and
+ * keeping the old one would show a photo the user just removed.
  */
 export async function markAccountActive(profile: AccountProfile): Promise<void> {
   vault = {
@@ -273,10 +292,11 @@ export async function markAccountActive(profile: AccountProfile): Promise<void> 
     accounts: vault.accounts.map((account) =>
       account.userId === profile.userId
         ? {
-            ...account,
+            userId: account.userId,
             username: profile.username,
             ...(profile.fullName === undefined ? {} : { fullName: profile.fullName }),
             ...(profile.avatarUrl === undefined ? {} : { avatarUrl: profile.avatarUrl }),
+            refreshToken: account.refreshToken,
             lastUsedAt: Date.now(),
           }
         : account,

@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The account switcher no longer keeps showing a photo or name that was
+  removed from the account.
+
 ## [0.4.0] - 2026-09-16
 
 Adds the notification inbox and switching between accounts, and gives link

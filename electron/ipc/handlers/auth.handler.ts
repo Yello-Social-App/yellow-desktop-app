@@ -27,6 +27,7 @@ import {
 } from '../../api/token-store';
 import {
   MAX_REMEMBERED_ACCOUNTS,
+  accountProfileOf,
   activeAccountId,
   clearActiveAccount,
   forgetAccount,
@@ -38,7 +39,6 @@ import {
   refreshTokenFor,
   startupRefreshToken,
   isSecureStorageAvailable,
-  type AccountProfile,
 } from '../../api/account-vault';
 import { chatSocket } from '../../chat/socket';
 import { notificationWatcher } from '../../notifications/watcher';
@@ -141,7 +141,7 @@ async function currentSession(): Promise<IpcResult<SessionResponse>> {
   // Keep the switcher's copy of who this is current. It also completes the
   // migration from the single-account vault, which stored a token with no idea
   // whose it was — this profile is what finally names it.
-  const identity = profileOf(profile.data);
+  const identity = accountProfileOf(profile.data);
   if (hasAccount(identity.userId)) {
     await markAccountActive(identity);
   } else if (activeAccountId() === null && startupRefreshToken() !== null) {
@@ -156,16 +156,6 @@ async function currentSession(): Promise<IpcResult<SessionResponse>> {
       session: { user: profile.data, expiresAt: accessTokenExpiresAt() ?? Date.now() },
     }),
   );
-}
-
-/** The switcher's view of a profile: enough to recognise a face, never a token. */
-function profileOf(user: z.infer<typeof userSchema>): AccountProfile {
-  return {
-    userId: user.id,
-    username: user.username,
-    fullName: user.fullName,
-    avatarUrl: user.avatarUrl,
-  };
 }
 
 /**
@@ -193,7 +183,7 @@ async function establishSession(
     return session;
   }
 
-  const identity = profileOf(session.data.session.user);
+  const identity = accountProfileOf(session.data.session.user);
 
   if (remember) {
     const token = refreshTokenOf(pair);
@@ -270,7 +260,7 @@ async function resumeAccount(userId: string): Promise<IpcResult<SessionResponse>
   // exchange just rotated into, so the next switch has a live one.
   const refreshed = refreshTokenOf(pair);
   if (refreshed !== null) {
-    await rememberAccount(profileOf(session.data.session.user), refreshed);
+    await rememberAccount(accountProfileOf(session.data.session.user), refreshed);
   }
 
   log.info('account_switched', {});
