@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Edit your profile.** "Edit profile" on your own profile changes your
+  photo, cover image, username, name and bio. Only what you changed is sent,
+  so an untouched username does not spend the once-a-week change. Profiles now
+  show their cover image.
+
 ### Changed
 
 - Settings → About no longer shows the API address, and the renderer is no

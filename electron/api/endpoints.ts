@@ -31,6 +31,7 @@ export const ENDPOINTS = {
     resetPassword: `${base}/auth/reset-password`,
   },
   users: {
+    /** GET reads the caller's own profile; POST edits it (JSON, or multipart with images). */
     me: `${base}/users/me`,
     byId: (userId: string) => `${base}/users/${seg(userId)}`,
     posts: (userId: string) => `${base}/users/${seg(userId)}/posts`,

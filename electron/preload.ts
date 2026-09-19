@@ -84,6 +84,7 @@ import type {
   TypingRequest,
   UnreadCount,
   UnregisterDeviceRequest,
+  UpdateProfileRequest,
   UpdateCommentRequest,
   UpdateNotificationPreferencesRequest,
   UpdatePostRequest,
@@ -186,6 +187,8 @@ const bridge: YelloBridge = {
       invoke<UserPostsResponse>(IPC_CHANNELS.PROFILE_LIST_POSTS, request),
     getUser: (request: PublicUserRequest) =>
       invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_GET_USER, request),
+    update: (request: UpdateProfileRequest) =>
+      invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_UPDATE, request),
   },
   chat: {
     listConversations: (request: ListConversationsRequest) =>

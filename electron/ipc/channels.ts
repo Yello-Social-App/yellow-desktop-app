@@ -47,6 +47,7 @@ export const IPC_CHANNELS = {
   FRIENDS_UNBLOCK: 'friends:unblock',
   PROFILE_LIST_POSTS: 'profile:list-posts',
   PROFILE_GET_USER: 'profile:get-user',
+  PROFILE_UPDATE: 'profile:update',
   CHAT_LIST_CONVERSATIONS: 'chat:list-conversations',
   CHAT_CREATE_CONVERSATION: 'chat:create-conversation',
   CHAT_GET_CONVERSATION: 'chat:get-conversation',

@@ -1,14 +1,19 @@
 /**
- * Profile hooks: one user's timeline, and another user's public profile.
+ * Profile hooks: one user's timeline, another user's public profile, and
+ * saving an edit of your own.
  */
-import type { Post, User } from '@shared/ipc-types';
+import type { Post, UpdateProfileRequest, User } from '@shared/ipc-types';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useAccountsStore } from '@/features/auth/accounts-store';
+import { useAuthStore } from '@/features/auth/store';
 import type { PostSink } from '@/features/feed/post-actions';
 import { mirrorCommentCountToFeed, mirroredToFeed } from '@/features/feed/store';
+import { useUsersStore } from '@/features/users/store';
 import { PROFILE_POSTS_PAGE_SIZE } from '@/lib/constants';
+import type { Result } from '@/lib/result';
 
-import { fetchUser, fetchUserPosts } from './api';
+import { fetchUser, fetchUserPosts, updateProfile, type ProfileError } from './api';
 
 export type ProfilePostsStatus = 'loading' | 'ready' | 'error';
 
@@ -205,4 +210,31 @@ export function usePublicProfile(userId: string | undefined): PublicProfileState
     return { user: loaded.user, status: 'ready', error: null, reload };
   }
   return { user: null, status: 'loading', error: null, reload };
+}
+
+/**
+ * Saves an edit of the caller's own profile, then hands the server's answer to
+ * every copy of it: the session (top bar, own profile), the user directory
+ * (chat names and faces), and the account switcher.
+ */
+export function useSaveProfile(): (
+  request: UpdateProfileRequest,
+) => Promise<Result<User, ProfileError>> {
+  const adoptUser = useAuthStore((state) => state.adoptUser);
+
+  return useCallback(
+    async (request) => {
+      const result = await updateProfile(request);
+      if (result.ok) {
+        adoptUser(result.data);
+        useUsersStore.getState().prime([result.data]);
+        const accounts = useAccountsStore.getState();
+        if (accounts.status !== 'idle') {
+          void accounts.load();
+        }
+      }
+      return result;
+    },
+    [adoptUser],
+  );
 }

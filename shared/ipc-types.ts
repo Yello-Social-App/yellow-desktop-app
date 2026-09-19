@@ -39,6 +39,7 @@ export const userSchema = z.object({
   username: z.string().min(1).max(64),
   fullName: optionalText(200),
   avatarUrl: optionalText(2048),
+  coverUrl: optionalText(2048),
   bio: optionalText(1000),
   status: optionalText(64),
   createdAt: optionalText(64),
@@ -398,7 +399,7 @@ export const feedResponseSchema = z.object({
 export const POST_MAX_IMAGES = 10;
 
 /**
- * Attaching an image is two steps, the same shape the avatar upload uses: the
+ * Attaching an image is two steps, for a post and for a profile photo alike: the
  * main process opens the OS picker, validates and holds the bytes, and hands
  * back an opaque token plus a thumbnail to show. The renderer never names a
  * path, so it cannot make the app read a file of its choosing (A01), and never
@@ -422,9 +423,16 @@ export const stagedImageSchema = z.object({
  * staged overall; an editor also has to leave room for the images the post
  * already has.
  */
+/**
+ * What the pick is for. A post takes several; an avatar or a cover is one
+ * image, so the picker opens single-select with a title that says which.
+ */
+export const IMAGE_PURPOSES = ['post', 'avatar', 'cover'] as const;
+
 export const stageImagesRequestSchema = z
   .object({
     limit: z.number().int().min(1).max(POST_MAX_IMAGES).optional(),
+    purpose: z.enum(IMAGE_PURPOSES).optional(),
   })
   .optional();
 
@@ -622,7 +630,35 @@ export const userPostsResponseSchema = z.object({
   last: z.boolean(),
 });
 
+/**
+ * Editing the caller's own profile. Every field is optional: absent leaves it
+ * as it is, `null` clears it (the username excepted — it can never be blank).
+ * Images arrive as staging tokens, never paths or bytes (A01), and a remove
+ * flag is ignored by the server when a new file is sent with it.
+ */
+export const USERNAME_MIN_LENGTH = 3;
+export const USERNAME_MAX_LENGTH = 32;
+export const USERNAME_PATTERN = /^[a-zA-Z0-9_.]+$/;
+export const PROFILE_FULL_NAME_MAX = 100;
+export const PROFILE_BIO_MAX = 500;
+
+export const updateProfileRequestSchema = z.object({
+  username: z
+    .string()
+    .min(USERNAME_MIN_LENGTH)
+    .max(USERNAME_MAX_LENGTH)
+    .regex(USERNAME_PATTERN)
+    .optional(),
+  fullName: z.string().trim().min(1).max(PROFILE_FULL_NAME_MAX).nullable().optional(),
+  bio: z.string().trim().min(1).max(PROFILE_BIO_MAX).nullable().optional(),
+  avatarToken: z.string().min(1).max(64).optional(),
+  removeAvatar: z.literal(true).optional(),
+  coverToken: z.string().min(1).max(64).optional(),
+  removeCover: z.literal(true).optional(),
+});
+
 export type ProfileResponse = z.infer<typeof profileResponseSchema>;
+export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
 export type UserPostsRequest = z.infer<typeof userPostsRequestSchema>;
 export type UserPostsResponse = z.infer<typeof userPostsResponseSchema>;
 
@@ -1274,6 +1310,7 @@ export type FeedResponse = z.infer<typeof feedResponseSchema>;
 export type CreatePostRequest = z.infer<typeof createPostRequestSchema>;
 export type StagedImage = z.infer<typeof stagedImageSchema>;
 export type StageImagesRequest = z.infer<typeof stageImagesRequestSchema>;
+export type ImagePurpose = (typeof IMAGE_PURPOSES)[number];
 export type StageImagesResponse = z.infer<typeof stageImagesResponseSchema>;
 export type DiscardImagesRequest = z.infer<typeof discardImagesRequestSchema>;
 export type PostResponse = z.infer<typeof postResponseSchema>;
@@ -1347,6 +1384,7 @@ export interface YelloBridge {
   readonly profile: {
     listPosts(request: UserPostsRequest): Promise<IpcResult<UserPostsResponse>>;
     getUser(request: PublicUserRequest): Promise<IpcResult<ProfileResponse>>;
+    update(request: UpdateProfileRequest): Promise<IpcResult<ProfileResponse>>;
   };
   readonly chat: {
     listConversations(request: ListConversationsRequest): Promise<IpcResult<ConversationPage>>;

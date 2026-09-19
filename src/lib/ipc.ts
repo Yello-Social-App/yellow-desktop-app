@@ -76,6 +76,7 @@ import {
   type ToggleReactionRequest,
   type TypingRequest,
   type UnregisterDeviceRequest,
+  type UpdateProfileRequest,
   type UpdateCommentRequest,
   type UpdateNotificationPreferencesRequest,
   type UpdatePostRequest,
@@ -265,6 +266,8 @@ export const ipc = {
     guarded('profile.listPosts', userPostsResponseSchema, (api) => api.profile.listPosts(request)),
   getUser: (request: PublicUserRequest) =>
     guarded('profile.getUser', profileResponseSchema, (api) => api.profile.getUser(request)),
+  updateProfile: (request: UpdateProfileRequest) =>
+    guarded('profile.update', profileResponseSchema, (api) => api.profile.update(request)),
 
   listConversations: (request: ListConversationsRequest) =>
     guarded('chat.listConversations', conversationPageSchema, (api) =>

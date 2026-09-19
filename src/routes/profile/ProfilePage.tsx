@@ -1,4 +1,5 @@
-import { PenLine, TriangleAlert } from 'lucide-react';
+import { PenLine, Pencil, TriangleAlert } from 'lucide-react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -9,14 +10,16 @@ import { useFriendList, useFriendsLoader } from '@/features/friends/hooks';
 import { useProfilePosts } from '@/features/profile/hooks';
 import { PostCard } from '@/routes/feed/components/PostCard';
 
+import { EditProfileDialog } from './components/EditProfileDialog';
 import { ProfileHeader } from './components/ProfileHeader';
 
 /**
- * The signed-in user's own profile: identity and their timeline. The API has
- * no profile edit, so there is nothing here to change.
+ * The signed-in user's own profile: identity, their timeline, and the way in
+ * to editing both photos, the username, name and bio.
  */
 export default function ProfilePage() {
   const user = useCurrentUser();
+  const [isEditing, setIsEditing] = useState(false);
   useFriendsLoader();
   const friends = useFriendList('friends');
   const {
@@ -27,6 +30,7 @@ export default function ProfilePage() {
     hasMore,
     isLoadingMore,
     loadMore,
+    reload,
     sink,
     adjustCommentCount,
   } = useProfilePosts(user?.id, { isOwnProfile: true });
@@ -47,7 +51,33 @@ export default function ProfilePage() {
         <h1 className="font-heading text-h1 text-on-surface px-lg py-3">Profile</h1>
       </header>
 
-      <ProfileHeader user={user} postCount={totalPosts} friendCount={friends.total} />
+      <ProfileHeader
+        user={user}
+        postCount={totalPosts}
+        friendCount={friends.total}
+        action={
+          <Button
+            variant="outline"
+            leadingIcon={<Pencil className="size-4" />}
+            onClick={() => {
+              setIsEditing(true);
+            }}
+          >
+            Edit profile
+          </Button>
+        }
+      />
+
+      {isEditing && (
+        <EditProfileDialog
+          user={user}
+          onClose={() => {
+            setIsEditing(false);
+          }}
+          // Posts carry their author's name and photo as they were when read.
+          onSaved={reload}
+        />
+      )}
 
       <section className="flex flex-col">
         <h2 className="text-on-surface-variant px-lg text-caption pt-md pb-sm font-semibold tracking-wider uppercase">
