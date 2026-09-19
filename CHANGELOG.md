@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-19
+
+Communities, the showcase and people search now run on the API, you can edit
+your own profile, and Linux installs update themselves with
+`yello-desktop-app update`.
+
 ### Added
 
 - **Communities, for real.** The directory, community pages, joining and
