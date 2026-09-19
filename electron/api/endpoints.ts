@@ -66,6 +66,17 @@ export const ENDPOINTS = {
     decline: (userId: string) => `${base}/friends/requests/${seg(userId)}/decline`,
     remove: (userId: string) => `${base}/friends/${seg(userId)}`,
   },
+  communities: {
+    list: `${base}/communities`,
+    bySlug: (slug: string) => `${base}/communities/${seg(slug)}`,
+    /** Join (POST) and leave (DELETE); both idempotent. */
+    membership: (slug: string) => `${base}/communities/${seg(slug)}/membership`,
+    posts: (slug: string) => `${base}/communities/${seg(slug)}/posts`,
+  },
+  communityPosts: {
+    frontPage: `${base}/community-posts`,
+    vote: (postId: string) => `${base}/community-posts/${seg(postId)}/vote`,
+  },
   notifications: {
     /**
      * Slash-less on purpose: the trailing-slash form answers 307 to this one,

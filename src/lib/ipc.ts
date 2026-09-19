@@ -14,6 +14,11 @@ import {
   chatSocketStateSchema,
   commentPageSchema,
   commentResponseSchema,
+  communityPageSchema,
+  communityPostPageSchema,
+  communityPostResponseSchema,
+  communityPostVoteSchema,
+  communityResponseSchema,
   conversationPageSchema,
   conversationResponseSchema,
   deletedResponseSchema,
@@ -41,8 +46,10 @@ import {
   userPostsResponseSchema,
   windowStateSchema,
   type AccountIdRequest,
+  type CommunitySlugRequest,
   type ConversationIdRequest,
   type CreateCommentRequest,
+  type CreateCommunityPostRequest,
   type CreateConversationRequest,
   type CreatePostRequest,
   type DeleteCommentRequest,
@@ -53,8 +60,11 @@ import {
   type FriendUserRequest,
   type IpcResult,
   type ListCommentsRequest,
+  type ListCommunitiesRequest,
+  type ListCommunityPostsRequest,
   type ListConversationsRequest,
   type ListFriendRequestsRequest,
+  type ListFrontPagePostsRequest,
   type ListNotificationsRequest,
   type ListMessagesRequest,
   type LinkPreviewRequest,
@@ -83,6 +93,7 @@ import {
   type UserPostsRequest,
   type VerifyOtpRequest,
   type VerifyResetOtpRequest,
+  type VoteCommunityPostRequest,
   type YelloBridge,
   chatEventSchema,
   deviceResponseSchema,
@@ -326,6 +337,29 @@ export const ipc = {
     guarded('notifications.savePreferences', notificationPreferencesSchema, (api) =>
       api.notifications.savePreferences(request),
     ),
+
+  listCommunities: (request: ListCommunitiesRequest) =>
+    guarded('communities.list', communityPageSchema, (api) => api.communities.list(request)),
+  getCommunity: (request: CommunitySlugRequest) =>
+    guarded('communities.get', communityResponseSchema, (api) => api.communities.get(request)),
+  joinCommunity: (request: CommunitySlugRequest) =>
+    guarded('communities.join', communityResponseSchema, (api) => api.communities.join(request)),
+  leaveCommunity: (request: CommunitySlugRequest) =>
+    guarded('communities.leave', communityResponseSchema, (api) => api.communities.leave(request)),
+  listCommunityPosts: (request: ListCommunityPostsRequest) =>
+    guarded('communities.listPosts', communityPostPageSchema, (api) =>
+      api.communities.listPosts(request),
+    ),
+  listFrontPagePosts: (request: ListFrontPagePostsRequest) =>
+    guarded('communities.frontPage', communityPostPageSchema, (api) =>
+      api.communities.frontPage(request),
+    ),
+  createCommunityPost: (request: CreateCommunityPostRequest) =>
+    guarded('communities.createPost', communityPostResponseSchema, (api) =>
+      api.communities.createPost(request),
+    ),
+  voteCommunityPost: (request: VoteCommunityPostRequest) =>
+    guarded('communities.vote', communityPostVoteSchema, (api) => api.communities.vote(request)),
 
   linkPreview: (request: LinkPreviewRequest) =>
     guarded('links.preview', linkPreviewResponseSchema, (api) => api.links.preview(request)),

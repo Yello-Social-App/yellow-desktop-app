@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Communities, for real.** The directory, community pages, joining and
+  leaving, posting and voting now run against the API instead of sample data.
+  Discover and Joined search by name, slug or tag on the server and page with
+  "Show more"; post lists page by cursor and sort by Hot, New or Top on the
+  front page and inside each community. Home's Communities tab shows posts from
+  the communities you joined. Only members can start a thread — the composer
+  offers to join first — and a vote shows instantly, then settles to the
+  server's score.
 - **Edit your profile.** "Edit profile" on your own profile changes your
   photo, cover image, username, name and bio. Only what you changed is sent,
   so an untouched username does not spend the once-a-week change. Profiles now
@@ -15,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The "online" count on communities is hidden: the service does not track
+  presence yet.
 - Settings → About no longer shows the API address, and the renderer is no
   longer told it.
 

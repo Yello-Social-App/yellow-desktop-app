@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useFriendList, useFriendsLoader } from '@/features/friends/hooks';
+import { useCommunityDirectory } from '@/features/communities/hooks';
 import { useCommunitiesStore } from '@/features/communities/store';
 import { useFriendsStore } from '@/features/friends/store';
 import { useShowcaseStore } from '@/features/showcase/store';
@@ -19,6 +20,8 @@ import { displayName, handleOf, initialsOf } from '@/lib/user-display';
 import { formatCount } from '@/lib/format';
 
 const MAX_ROWS = 4;
+/** Popular communities: one small page, read once. */
+const RAIL_SUGGESTIONS = 3;
 
 function RailCard({
   title,
@@ -75,11 +78,12 @@ function PersonRow({
 }
 
 /**
- * The context column. Everything here comes from stores the sidebar badges
- * already load, so it costs no extra calls: the caller's own numbers, requests
- * waiting on an answer, who is on the socket now, recent conversations, and
- * requests still out. Cards that would be empty are not drawn — except the
- * first two, so the column is never blank.
+ * The context column. Most of it comes from stores the sidebar badges already
+ * load, so it costs no extra calls: the caller's own numbers, requests waiting
+ * on an answer, who is on the socket now, recent conversations, and requests
+ * still out. Popular communities not yet joined are one three-row page, read
+ * once per session. Cards that would be empty are not drawn — except the first
+ * two, so the column is never blank.
  */
 interface RightRailProps {
   /** Folded away, animated, while a screen uses its slot. */
@@ -98,14 +102,15 @@ export function RightRail({ isCollapsed = false }: RightRailProps) {
   const cancelRequest = useFriendsStore((state) => state.cancelRequest);
   const online = useMessagesStore((state) => state.socket.onlineUserIds);
   const { rows: conversations } = useConversationRows();
-  const communities = useCommunitiesStore((state) => state.communities);
-  const toggleJoin = useCommunitiesStore((state) => state.toggleJoin);
+  const popular = useCommunityDirectory({
+    sort: 'popular',
+    membership: 'not_joined',
+    size: RAIL_SUGGESTIONS,
+  }).items;
   const projects = useShowcaseStore((state) => state.projects);
-  const popular = [...communities]
-    .filter((c) => !c.isJoined)
-    .sort((a, b) => b.members - a.members)
-    .slice(0, 3);
   const trending = [...projects].sort((a, b) => b.likes - a.likes).slice(0, 3);
+  const joinCommunity = useCommunitiesStore((state) => state.setMembership);
+  const joiningSlugs = useCommunitiesStore((state) => state.pendingIds);
   const { direct, isStarting } = useStartConversation();
 
   const onlineFriends = friends.entries.filter((entry) => online.includes(entry.user.id));
@@ -351,13 +356,14 @@ export function RightRail({ isCollapsed = false }: RightRailProps) {
                       {community.name}
                     </Link>
                     <span className="text-on-surface-variant block truncate text-[12px]">
-                      {formatCount(community.members)} members
+                      {formatCount(community.memberCount)} members
                     </span>
                   </span>
                   <Button
                     size="sm"
+                    isLoading={joiningSlugs.has(community.slug)}
                     onClick={() => {
-                      toggleJoin(community.slug);
+                      void joinCommunity(community.slug, true);
                     }}
                   >
                     Join

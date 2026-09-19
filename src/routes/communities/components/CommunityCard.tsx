@@ -2,7 +2,7 @@ import { Check, Plus, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/Button';
-import { useCommunitiesStore } from '@/features/communities/store';
+import { useMembership } from '@/features/communities/hooks';
 import type { Community } from '@/features/communities/types';
 import { formatCount } from '@/lib/format';
 import { coverClass } from '@/mocks/people';
@@ -13,7 +13,7 @@ interface CommunityCardProps {
 
 /** One community: a slice of its cover, the emoji mark, name, stats, join. */
 export function CommunityCard({ community }: CommunityCardProps) {
-  const toggleJoin = useCommunitiesStore((state) => state.toggleJoin);
+  const { isBusy, toggle } = useMembership(community.slug);
 
   return (
     <article className="bg-surface-container-lowest border-outline-variant hover:border-outline/40 transition-tone flex flex-col overflow-hidden rounded-2xl border">
@@ -35,21 +35,27 @@ export function CommunityCard({ community }: CommunityCardProps) {
         <div className="text-on-surface-variant mt-auto flex items-center justify-between gap-2 pt-1 text-[12px]">
           <span className="flex items-center gap-1">
             <Users aria-hidden className="size-3.5" />
-            {formatCount(community.members)}
-            <span aria-hidden>·</span>
-            <span className="text-tertiary">{community.online} online</span>
+            {formatCount(community.memberCount)}
+            {/* The service does not count presence yet, and says so with null. */}
+            {community.onlineCount !== null && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="text-tertiary">{community.onlineCount} online</span>
+              </>
+            )}
           </span>
           <Button
             size="sm"
-            variant={community.isJoined ? 'outline' : 'primary'}
+            variant={community.isMember ? 'outline' : 'primary'}
+            isLoading={isBusy}
             leadingIcon={
-              community.isJoined ? <Check className="size-3.5" /> : <Plus className="size-3.5" />
+              community.isMember ? <Check className="size-3.5" /> : <Plus className="size-3.5" />
             }
             onClick={() => {
-              toggleJoin(community.slug);
+              toggle(!community.isMember);
             }}
           >
-            {community.isJoined ? 'Joined' : 'Join'}
+            {community.isMember ? 'Joined' : 'Join'}
           </Button>
         </div>
       </div>

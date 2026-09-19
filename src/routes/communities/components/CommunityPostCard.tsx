@@ -6,7 +6,7 @@ import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
 import { Avatar } from '@/components/ui/Avatar';
 import { useCommunitiesStore } from '@/features/communities/store';
-import type { Community, CommunityPost } from '@/features/communities/types';
+import type { CommunityPost } from '@/features/communities/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { relativeTime } from '@/lib/relative-time';
@@ -14,7 +14,6 @@ import { displayName, initialsOf } from '@/lib/user-display';
 
 interface CommunityPostCardProps {
   post: CommunityPost;
-  community: Community | undefined;
   /** Hide the community chip when the card already sits inside that community. */
   inCommunity?: boolean;
 }
@@ -25,10 +24,11 @@ interface CommunityPostCardProps {
  */
 export const CommunityPostCard = memo(function CommunityPostCard({
   post,
-  community,
   inCommunity = false,
 }: CommunityPostCardProps) {
   const vote = useCommunitiesStore((state) => state.vote);
+  const isVoting = useCommunitiesStore((state) => state.pendingIds.has(post.id));
+  const { community } = post;
   const [firstLink] = extractLinks(post.body);
 
   return (
@@ -38,8 +38,9 @@ export const CommunityPostCard = memo(function CommunityPostCard({
           type="button"
           aria-label="Upvote"
           aria-pressed={post.viewerVote === 1}
+          disabled={isVoting}
           onClick={() => {
-            vote(post.id, 1);
+            void vote(post.id, 1);
           }}
           className={cn(
             'transition-tone grid size-8 place-items-center rounded-full',
@@ -64,8 +65,9 @@ export const CommunityPostCard = memo(function CommunityPostCard({
           type="button"
           aria-label="Downvote"
           aria-pressed={post.viewerVote === -1}
+          disabled={isVoting}
           onClick={() => {
-            vote(post.id, -1);
+            void vote(post.id, -1);
           }}
           className={cn(
             'transition-tone grid size-8 place-items-center rounded-full',
@@ -80,12 +82,12 @@ export const CommunityPostCard = memo(function CommunityPostCard({
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 py-1">
         <div className="text-on-surface-variant flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px]">
-          {!inCommunity && community !== undefined && (
+          {!inCommunity && (
             <Link
               to={`/c/${community.slug}`}
               className="bg-info-fixed text-on-info-fixed flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold hover:brightness-110"
             >
-              <span aria-hidden>{community.emoji}</span>
+              {community.emoji !== '' && <span aria-hidden>{community.emoji}</span>}
               c/{community.slug}
             </Link>
           )}

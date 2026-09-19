@@ -26,10 +26,17 @@ import type {
   ChatSocketState,
   CommentPage,
   CommentResponse,
+  CommunityPage,
+  CommunityPostPage,
+  CommunityPostResponse,
+  CommunityPostVote,
+  CommunityResponse,
+  CommunitySlugRequest,
   ConversationIdRequest,
   ConversationPage,
   ConversationResponse,
   CreateCommentRequest,
+  CreateCommunityPostRequest,
   CreateConversationRequest,
   CreatePostRequest,
   DiscardImagesRequest,
@@ -46,8 +53,11 @@ import type {
   FriendUserRequest,
   IpcResult,
   ListCommentsRequest,
+  ListCommunitiesRequest,
+  ListCommunityPostsRequest,
   ListConversationsRequest,
   ListFriendRequestsRequest,
+  ListFrontPagePostsRequest,
   ListMessagesRequest,
   LinkPreviewRequest,
   LinkPreviewResponse,
@@ -92,6 +102,7 @@ import type {
   UserPostsResponse,
   VerifyOtpRequest,
   VerifyResetOtpRequest,
+  VoteCommunityPostRequest,
   WindowState,
   YelloBridge,
 } from '../shared/ipc-types';
@@ -244,6 +255,24 @@ const bridge: YelloBridge = {
         ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATIONS_EVENT, handler);
       };
     },
+  },
+  communities: {
+    list: (request: ListCommunitiesRequest) =>
+      invoke<CommunityPage>(IPC_CHANNELS.COMMUNITIES_LIST, request),
+    get: (request: CommunitySlugRequest) =>
+      invoke<CommunityResponse>(IPC_CHANNELS.COMMUNITIES_GET, request),
+    join: (request: CommunitySlugRequest) =>
+      invoke<CommunityResponse>(IPC_CHANNELS.COMMUNITIES_JOIN, request),
+    leave: (request: CommunitySlugRequest) =>
+      invoke<CommunityResponse>(IPC_CHANNELS.COMMUNITIES_LEAVE, request),
+    listPosts: (request: ListCommunityPostsRequest) =>
+      invoke<CommunityPostPage>(IPC_CHANNELS.COMMUNITIES_LIST_POSTS, request),
+    frontPage: (request: ListFrontPagePostsRequest) =>
+      invoke<CommunityPostPage>(IPC_CHANNELS.COMMUNITIES_FRONT_PAGE, request),
+    createPost: (request: CreateCommunityPostRequest) =>
+      invoke<CommunityPostResponse>(IPC_CHANNELS.COMMUNITIES_CREATE_POST, request),
+    vote: (request: VoteCommunityPostRequest) =>
+      invoke<CommunityPostVote>(IPC_CHANNELS.COMMUNITIES_VOTE, request),
   },
   links: {
     preview: (request: LinkPreviewRequest) =>

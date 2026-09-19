@@ -1237,6 +1237,216 @@ export const notificationResponseSchema = z.object({ notification: notificationS
 export type NotificationEvent = z.infer<typeof notificationEventSchema>;
 export type NotificationResponse = z.infer<typeof notificationResponseSchema>;
 
+/* -- communities & showcase: shared pieces -- */
+
+const nonNegativeCount = z
+  .number()
+  .int()
+  .nonnegative()
+  .nullish()
+  .transform((value) => value ?? 0);
+
+const flag = z
+  .boolean()
+  .nullish()
+  .transform((value) => value ?? false);
+
+const textList = (itemMax: number, listMax: number) =>
+  z
+    .array(z.string().max(itemMax))
+    .max(listMax)
+    .nullish()
+    .transform((value) => value ?? []);
+
+/**
+ * An array whose rows are parsed one at a time, dropping the ones that fail —
+ * the lesson the notification inbox taught: one row with a field this build
+ * does not expect must cost that row, not blank the whole list (A10).
+ */
+function rowsOf<TSchema extends z.ZodType>(item: TSchema, max: number) {
+  return z
+    .array(z.unknown())
+    .max(max)
+    .nullish()
+    .transform((value) =>
+      (value ?? []).flatMap((row) => {
+        const parsed = item.safeParse(row);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    );
+}
+
+/** An offset page, parsed row by row. */
+function lenientPageOf<TSchema extends z.ZodType>(item: TSchema) {
+  return pageOf(item).extend({ content: rowsOf(item, 200) });
+}
+
+/** A cursor page: pass `nextCursor` back as `cursor`, with the same sort. */
+function cursorPageOf<TSchema extends z.ZodType>(item: TSchema) {
+  return z.object({
+    content: rowsOf(item, 200),
+    nextCursor: z
+      .string()
+      .max(512)
+      .nullish()
+      .transform((value) => value ?? null),
+    hasMore: flag,
+  });
+}
+
+export const COMMUNITY_PAGE_SIZE_MAX = 50;
+const pageNumber = z.number().int().min(0).max(1000);
+const pageSize = z.number().int().min(1).max(COMMUNITY_PAGE_SIZE_MAX);
+const cursorParam = z.string().max(512).optional();
+
+/* -- communities -- */
+
+/**
+ * A slug is the community's path key, in a route here and a segment upstream.
+ * Held to the server's own alphabet on both directions: a request cannot
+ * address anything but a slug, and a response cannot put anything else into
+ * an in-app link (A01/A05).
+ */
+export const COMMUNITY_SLUG_PATTERN = /^[a-z0-9-]{3,32}$/;
+const communitySlugSchema = z.string().regex(COMMUNITY_SLUG_PATTERN);
+
+export const COMMUNITY_SORTS = ['popular', 'newest', 'name'] as const;
+export const COMMUNITY_MEMBERSHIPS = ['joined', 'not_joined'] as const;
+export const COMMUNITY_POST_SORTS = ['hot', 'new', 'top'] as const;
+export const COMMUNITY_POST_SCOPES = ['all', 'joined'] as const;
+export const COMMUNITY_SEARCH_MAX = 64;
+export const COMMUNITY_POST_TITLE_MAX = 200;
+export const COMMUNITY_POST_BODY_MAX = 5000;
+export const COMMUNITY_TAG_MAX = 64;
+
+export const communitySchema = z.object({
+  id: z.string().min(1).max(64),
+  slug: communitySlugSchema,
+  name: z.string().min(1).max(200),
+  tagline: optionalText(500).transform((value) => value ?? ''),
+  description: optionalText(10_000).transform((value) => value ?? ''),
+  emoji: optionalText(32).transform((value) => value ?? ''),
+  /** Post flairs; a new post's tag must be exactly one of these. */
+  tags: textList(COMMUNITY_TAG_MAX, 50),
+  rules: textList(1000, 50),
+  memberCount: nonNegativeCount,
+  /** Always null for now: the number is hidden rather than shown as a zero. */
+  onlineCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((value) => value ?? null),
+  createdAt: timestamp,
+  isMember: flag,
+});
+
+export const communitySummarySchema = z.object({
+  slug: communitySlugSchema,
+  name: z.string().min(1).max(200),
+  emoji: optionalText(32).transform((value) => value ?? ''),
+});
+
+export const COMMUNITY_VOTES = [-1, 0, 1] as const;
+export const communityVoteSchema = z.union([z.literal(-1), z.literal(0), z.literal(1)]);
+
+/** Read leniently: an out-of-range vote is no vote, not a void row. */
+const viewerVoteSchema = z
+  .number()
+  .int()
+  .nullish()
+  .transform((value): Vote => (value === 1 || value === -1 ? value : 0));
+
+export const communityPostSchema = z.object({
+  id: z.string().min(1).max(64),
+  community: communitySummarySchema,
+  author: authorSchema,
+  title: z.string().min(1).max(500),
+  body: optionalText(COMMUNITY_POST_BODY_MAX * 2).transform((value) => value ?? ''),
+  tag: z.string().max(COMMUNITY_TAG_MAX),
+  /** Upvotes minus downvotes; may be negative. */
+  score: z
+    .number()
+    .int()
+    .nullish()
+    .transform((value) => value ?? 0),
+  commentCount: nonNegativeCount,
+  createdAt: timestamp,
+  viewerVote: viewerVoteSchema,
+  isOwner: flag,
+});
+
+export const communityPageSchema = lenientPageOf(communitySchema);
+export const communityPostPageSchema = cursorPageOf(communityPostSchema);
+
+export const communityResponseSchema = z.object({ community: communitySchema });
+export const communityPostResponseSchema = z.object({ post: communityPostSchema });
+
+export const communityPostVoteSchema = z.object({
+  id: z.string().min(1).max(64),
+  score: z.number().int(),
+  viewerVote: viewerVoteSchema,
+});
+
+export const listCommunitiesRequestSchema = z.object({
+  /** Name or slug (contains) or a tag (exact); blank means no filter. */
+  q: z.string().trim().max(COMMUNITY_SEARCH_MAX).optional(),
+  membership: z.enum(COMMUNITY_MEMBERSHIPS).optional(),
+  sort: z.enum(COMMUNITY_SORTS),
+  page: pageNumber,
+  size: pageSize,
+});
+
+export const communitySlugRequestSchema = z.object({ slug: communitySlugSchema });
+
+export const listCommunityPostsRequestSchema = z.object({
+  slug: communitySlugSchema,
+  sort: z.enum(COMMUNITY_POST_SORTS),
+  size: pageSize,
+  cursor: cursorParam,
+});
+
+/** The front page across communities; `joined` narrows to the caller's own. */
+export const listFrontPagePostsRequestSchema = z.object({
+  scope: z.enum(COMMUNITY_POST_SCOPES),
+  sort: z.enum(COMMUNITY_POST_SORTS),
+  size: pageSize,
+  cursor: cursorParam,
+});
+
+export const createCommunityPostRequestSchema = z.object({
+  slug: communitySlugSchema,
+  title: z.string().trim().min(1).max(COMMUNITY_POST_TITLE_MAX),
+  body: z.string().trim().max(COMMUNITY_POST_BODY_MAX),
+  tag: z.string().min(1).max(COMMUNITY_TAG_MAX),
+});
+
+/** An absolute vote, never a toggle: a retry or a double click lands the same. */
+export const voteCommunityPostRequestSchema = z.object({
+  postId: z.string().min(1).max(64),
+  value: communityVoteSchema,
+});
+
+export type Vote = (typeof COMMUNITY_VOTES)[number];
+export type CommunitySort = (typeof COMMUNITY_SORTS)[number];
+export type CommunityMembership = (typeof COMMUNITY_MEMBERSHIPS)[number];
+export type CommunityPostSort = (typeof COMMUNITY_POST_SORTS)[number];
+export type CommunityPostScope = (typeof COMMUNITY_POST_SCOPES)[number];
+export type Community = z.infer<typeof communitySchema>;
+export type CommunitySummary = z.infer<typeof communitySummarySchema>;
+export type CommunityPost = z.infer<typeof communityPostSchema>;
+export type CommunityPage = z.infer<typeof communityPageSchema>;
+export type CommunityPostPage = z.infer<typeof communityPostPageSchema>;
+export type CommunityResponse = z.infer<typeof communityResponseSchema>;
+export type CommunityPostResponse = z.infer<typeof communityPostResponseSchema>;
+export type CommunityPostVote = z.infer<typeof communityPostVoteSchema>;
+export type ListCommunitiesRequest = z.infer<typeof listCommunitiesRequestSchema>;
+export type CommunitySlugRequest = z.infer<typeof communitySlugRequestSchema>;
+export type ListCommunityPostsRequest = z.infer<typeof listCommunityPostsRequestSchema>;
+export type ListFrontPagePostsRequest = z.infer<typeof listFrontPagePostsRequestSchema>;
+export type CreateCommunityPostRequest = z.infer<typeof createCommunityPostRequestSchema>;
+export type VoteCommunityPostRequest = z.infer<typeof voteCommunityPostRequestSchema>;
+
 /* -- files & window -- */
 
 export const postExportEntrySchema = z.object({
@@ -1422,6 +1632,16 @@ export interface YelloBridge {
      * `notificationEventSchema` before use.
      */
     onEvent(listener: (event: unknown) => void): () => void;
+  };
+  readonly communities: {
+    list(request: ListCommunitiesRequest): Promise<IpcResult<CommunityPage>>;
+    get(request: CommunitySlugRequest): Promise<IpcResult<CommunityResponse>>;
+    join(request: CommunitySlugRequest): Promise<IpcResult<CommunityResponse>>;
+    leave(request: CommunitySlugRequest): Promise<IpcResult<CommunityResponse>>;
+    listPosts(request: ListCommunityPostsRequest): Promise<IpcResult<CommunityPostPage>>;
+    frontPage(request: ListFrontPagePostsRequest): Promise<IpcResult<CommunityPostPage>>;
+    createPost(request: CreateCommunityPostRequest): Promise<IpcResult<CommunityPostResponse>>;
+    vote(request: VoteCommunityPostRequest): Promise<IpcResult<CommunityPostVote>>;
   };
   readonly links: {
     preview(request: LinkPreviewRequest): Promise<IpcResult<LinkPreviewResponse>>;

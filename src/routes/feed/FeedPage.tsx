@@ -1,5 +1,5 @@
 import { TriangleAlert } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 
 import type { AppShellContext } from '@/components/layout/AppShell';
@@ -13,9 +13,8 @@ import {
   useVisiblePosts,
 } from '@/features/feed/hooks';
 
-import { useCommunitiesStore } from '@/features/communities/store';
 import { cn } from '@/lib/cn';
-import { CommunityPostCard } from '@/routes/communities/components/CommunityPostCard';
+import { CommunityFeedTab } from '@/routes/communities/components/CommunityFeedTab';
 import { StoriesBar } from '@/routes/home/components/StoriesBar';
 
 import { PostComposer } from './components/PostComposer';
@@ -35,13 +34,6 @@ export default function FeedPage() {
   const adjustCommentCount = useFeedCommentCount();
   const viewer = useCurrentUser();
   const [tab, setTab] = useState<HomeTab>('feed');
-  const communities = useCommunitiesStore((state) => state.communities);
-  const communityPosts = useCommunitiesStore((state) => state.posts);
-  const joinedPosts = useMemo(() => {
-    const joined = new Set(communities.filter((c) => c.isJoined).map((c) => c.slug));
-    return communityPosts.filter((p) => joined.has(p.communitySlug));
-  }, [communities, communityPosts]);
-  const bySlug = useMemo(() => new Map(communities.map((c) => [c.slug, c])), [communities]);
 
   return (
     <div className="flex w-full flex-col">
@@ -81,20 +73,7 @@ export default function FeedPage() {
 
       <StoriesBar />
 
-      {tab === 'communities' && (
-        <ul className="stagger flex flex-col gap-3 p-4">
-          {joinedPosts.length === 0 && (
-            <li className="text-on-surface-variant py-10 text-center text-[14px]">
-              Join a community to see its posts here.
-            </li>
-          )}
-          {joinedPosts.map((post) => (
-            <li key={post.id} className="animate-fade-up">
-              <CommunityPostCard post={post} community={bySlug.get(post.communitySlug)} />
-            </li>
-          ))}
-        </ul>
-      )}
+      {tab === 'communities' && <CommunityFeedTab />}
 
       {tab === 'feed' && (
         <>
