@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Settings → About no longer shows the API address, and the renderer is no
+  longer told it.
+
 ### Fixed
 
 - Switching conversations no longer replays the page animation on the whole

@@ -175,7 +175,6 @@ export default function SettingsPage() {
           <Card className="divide-outline-variant flex flex-col divide-y">
             {[
               { label: 'App version', value: appInfo?.appVersion },
-              { label: 'API', value: appInfo?.apiBaseUrl },
               { label: 'Electron', value: appInfo?.electronVersion },
               { label: 'Chromium', value: appInfo?.chromeVersion },
               { label: 'Platform', value: appInfo && `${appInfo.platform} (${appInfo.arch})` },

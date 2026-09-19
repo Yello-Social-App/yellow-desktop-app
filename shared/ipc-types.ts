@@ -1232,7 +1232,6 @@ export const appInfoResponseSchema = z.object({
   platform: z.string(),
   arch: z.string(),
   secureStorageAvailable: z.boolean(),
-  apiBaseUrl: z.string(),
 });
 
 export const windowStateSchema = z.object({

@@ -12,7 +12,6 @@ import path from 'node:path';
 import { app, dialog, BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 
 import { createLogger } from '../../../shared/logger';
-import { apiBaseUrl } from '../../api/http-client';
 import { isSecureStorageAvailable } from '../../api/token-store';
 import { IPC_CHANNELS } from '../channels';
 import { registerIpcHandler } from '../register';
@@ -95,7 +94,6 @@ export function registerFsHandlers(): void {
           platform: process.platform,
           arch: process.arch,
           secureStorageAvailable: isSecureStorageAvailable(),
-          apiBaseUrl: apiBaseUrl(),
         }),
       ),
   );
