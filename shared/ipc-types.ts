@@ -1465,6 +1465,131 @@ export type ListFrontPagePostsRequest = z.infer<typeof listFrontPagePostsRequest
 export type CreateCommunityPostRequest = z.infer<typeof createCommunityPostRequestSchema>;
 export type VoteCommunityPostRequest = z.infer<typeof voteCommunityPostRequestSchema>;
 
+/* -- showcase -- */
+
+export const PROJECT_SORTS = ['trending', 'newest', 'stars'] as const;
+/** The server's closed set: a project's cover is one of these, nothing else. */
+export const PROJECT_EMOJIS = ['🚀', '🧩', '🗺️', '🧾', '🤖', '🎨', '📱', '🛠️', '📚', '🎮'] as const;
+export const PROJECT_NAME_MAX = 60;
+export const PROJECT_TAGLINE_MAX = 120;
+export const PROJECT_DESCRIPTION_MAX = 2000;
+export const PROJECT_TECH_MAX = 6;
+export const PROJECT_TECH_NAME_MAX = 24;
+export const PROJECT_URL_MAX = 2048;
+export const PROJECT_TECH_LIMIT_MAX = 20;
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A project link is rendered as an `href`, so it is held to https here too,
+ * not only on submit: a `javascript:` or `data:` value that reached the list
+ * some other way reads as no link at all (A05).
+ */
+const projectLinkSchema = z
+  .string()
+  .max(PROJECT_URL_MAX)
+  .nullish()
+  .transform((value) =>
+    value === null || value === undefined || !isHttpsUrl(value) ? undefined : value,
+  );
+
+export const projectSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().min(1).max(200),
+  tagline: optionalText(500).transform((value) => value ?? ''),
+  description: optionalText(PROJECT_DESCRIPTION_MAX * 2).transform((value) => value ?? ''),
+  emoji: optionalText(32).transform((value) => value ?? ''),
+  tech: textList(64, 20),
+  author: authorSchema,
+  repoUrl: projectLinkSchema,
+  liveUrl: projectLinkSchema,
+  /** Null when the repo is not on GitHub, absent, or not checked yet. */
+  starCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((value) => value ?? null),
+  likeCount: nonNegativeCount,
+  viewCount: nonNegativeCount,
+  createdAt: timestamp,
+  isLiked: flag,
+  isFeatured: flag,
+  isOwner: flag,
+});
+
+export const projectPageSchema = lenientPageOf(projectSchema);
+export const projectResponseSchema = z.object({ project: projectSchema });
+
+export const projectLikeSchema = z.object({
+  id: z.string().min(1).max(64),
+  likeCount: z.number().int().nonnegative(),
+  isLiked: z.boolean(),
+});
+
+export const techCountSchema = z.object({
+  name: z.string().min(1).max(64),
+  projectCount: nonNegativeCount,
+});
+
+/** The wire answer is a bare array; this reads it row by row in the main process. */
+export const techCountRowsSchema = rowsOf(techCountSchema, PROJECT_TECH_LIMIT_MAX);
+/** What crosses to the renderer: the rows, wrapped. */
+export const techCountListSchema = z.object({
+  items: z.array(techCountSchema).max(PROJECT_TECH_LIMIT_MAX),
+});
+
+export const listProjectsRequestSchema = z.object({
+  sort: z.enum(PROJECT_SORTS),
+  /** Exact tech name, case-insensitive. */
+  tech: z.string().trim().min(1).max(PROJECT_TECH_NAME_MAX).optional(),
+  featured: z.boolean().optional(),
+  page: pageNumber,
+  size: pageSize,
+});
+
+export const listProjectTechRequestSchema = z.object({
+  limit: z.number().int().min(1).max(PROJECT_TECH_LIMIT_MAX),
+});
+
+export const projectIdRequestSchema = z.object({
+  projectId: z.string().min(1).max(64),
+});
+
+const projectUrlRequestSchema = z
+  .url({ protocol: /^https$/ })
+  .max(PROJECT_URL_MAX)
+  .optional();
+
+export const publishProjectRequestSchema = z.object({
+  name: z.string().trim().min(1).max(PROJECT_NAME_MAX),
+  tagline: z.string().trim().min(1).max(PROJECT_TAGLINE_MAX),
+  description: z.string().trim().max(PROJECT_DESCRIPTION_MAX),
+  emoji: z.enum(PROJECT_EMOJIS),
+  tech: z.array(z.string().trim().min(1).max(PROJECT_TECH_NAME_MAX)).max(PROJECT_TECH_MAX),
+  repoUrl: projectUrlRequestSchema,
+  liveUrl: projectUrlRequestSchema,
+});
+
+export type ProjectSort = (typeof PROJECT_SORTS)[number];
+export type ProjectEmoji = (typeof PROJECT_EMOJIS)[number];
+export type Project = z.infer<typeof projectSchema>;
+export type ProjectPage = z.infer<typeof projectPageSchema>;
+export type ProjectResponse = z.infer<typeof projectResponseSchema>;
+export type ProjectLike = z.infer<typeof projectLikeSchema>;
+export type TechCount = z.infer<typeof techCountSchema>;
+export type TechCountList = z.infer<typeof techCountListSchema>;
+export type ListProjectsRequest = z.infer<typeof listProjectsRequestSchema>;
+export type ListProjectTechRequest = z.infer<typeof listProjectTechRequestSchema>;
+export type ProjectIdRequest = z.infer<typeof projectIdRequestSchema>;
+export type PublishProjectRequest = z.infer<typeof publishProjectRequestSchema>;
+
 /* -- files & window -- */
 
 export const postExportEntrySchema = z.object({
@@ -1661,6 +1786,15 @@ export interface YelloBridge {
     frontPage(request: ListFrontPagePostsRequest): Promise<IpcResult<CommunityPostPage>>;
     createPost(request: CreateCommunityPostRequest): Promise<IpcResult<CommunityPostResponse>>;
     vote(request: VoteCommunityPostRequest): Promise<IpcResult<CommunityPostVote>>;
+  };
+  readonly showcase: {
+    list(request: ListProjectsRequest): Promise<IpcResult<ProjectPage>>;
+    tech(request: ListProjectTechRequest): Promise<IpcResult<TechCountList>>;
+    get(request: ProjectIdRequest): Promise<IpcResult<ProjectResponse>>;
+    recordView(request: ProjectIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    publish(request: PublishProjectRequest): Promise<IpcResult<ProjectResponse>>;
+    like(request: ProjectIdRequest): Promise<IpcResult<ProjectLike>>;
+    unlike(request: ProjectIdRequest): Promise<IpcResult<ProjectLike>>;
   };
   readonly links: {
     preview(request: LinkPreviewRequest): Promise<IpcResult<LinkPreviewResponse>>;

@@ -78,6 +78,14 @@ export const ENDPOINTS = {
     frontPage: `${base}/community-posts`,
     vote: (postId: string) => `${base}/community-posts/${seg(postId)}/vote`,
   },
+  projects: {
+    list: `${base}/projects`,
+    tech: `${base}/projects/tech`,
+    byId: (projectId: string) => `${base}/projects/${seg(projectId)}`,
+    views: (projectId: string) => `${base}/projects/${seg(projectId)}/views`,
+    /** Like (POST) and unlike (DELETE); both idempotent. */
+    like: (projectId: string) => `${base}/projects/${seg(projectId)}/like`,
+  },
   notifications: {
     /**
      * Slash-less on purpose: the trailing-slash form answers 307 to this one,

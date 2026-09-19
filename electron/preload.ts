@@ -62,6 +62,8 @@ import type {
   LinkPreviewRequest,
   LinkPreviewResponse,
   ListNotificationsRequest,
+  ListProjectTechRequest,
+  ListProjectsRequest,
   ListReactorsRequest,
   LoginRequest,
   MarkAllNotificationsRead,
@@ -74,6 +76,11 @@ import type {
   PageRequest,
   PostIdRequest,
   PostResponse,
+  ProjectIdRequest,
+  ProjectLike,
+  ProjectPage,
+  ProjectResponse,
+  PublishProjectRequest,
   ProfileResponse,
   PublicUserRequest,
   ReactionSummary,
@@ -91,6 +98,7 @@ import type {
   ShareLinkCopiedResponse,
   StageImagesRequest,
   StageImagesResponse,
+  TechCountList,
   ToggleReactionRequest,
   TypingRequest,
   UnreadCount,
@@ -276,6 +284,20 @@ const bridge: YelloBridge = {
       invoke<CommunityPostResponse>(IPC_CHANNELS.COMMUNITIES_CREATE_POST, request),
     vote: (request: VoteCommunityPostRequest) =>
       invoke<CommunityPostVote>(IPC_CHANNELS.COMMUNITIES_VOTE, request),
+  },
+  showcase: {
+    list: (request: ListProjectsRequest) =>
+      invoke<ProjectPage>(IPC_CHANNELS.SHOWCASE_LIST, request),
+    tech: (request: ListProjectTechRequest) =>
+      invoke<TechCountList>(IPC_CHANNELS.SHOWCASE_TECH, request),
+    get: (request: ProjectIdRequest) => invoke<ProjectResponse>(IPC_CHANNELS.SHOWCASE_GET, request),
+    recordView: (request: ProjectIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.SHOWCASE_RECORD_VIEW, request),
+    publish: (request: PublishProjectRequest) =>
+      invoke<ProjectResponse>(IPC_CHANNELS.SHOWCASE_PUBLISH, request),
+    like: (request: ProjectIdRequest) => invoke<ProjectLike>(IPC_CHANNELS.SHOWCASE_LIKE, request),
+    unlike: (request: ProjectIdRequest) =>
+      invoke<ProjectLike>(IPC_CHANNELS.SHOWCASE_UNLIKE, request),
   },
   links: {
     preview: (request: LinkPreviewRequest) =>

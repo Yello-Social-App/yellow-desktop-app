@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the communities you joined. Only members can start a thread — the composer
   offers to join first — and a vote shows instantly, then settles to the
   server's score.
+- **Showcase, for real.** The grid, the featured strip, the tech filter chips,
+  project pages, likes and publishing are backed by the API. Opening a project
+  counts one view per session. GitHub stars are hidden until the server has
+  checked the repository, rather than shown as zero.
+- The right rail's popular communities and trending projects come from the
+  API, and joining from the rail replaces the card with the next suggestion.
 - **People search, for real.** The top bar and the Friends screen search
   everyone by name or @username on the server, in its relevance order, with
   "Show more". Picking someone in the top bar opens their profile, and every
@@ -27,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Project links must be `https://`. The form says so as you type, and a link
+  from the server that is not https is not drawn as a link at all.
 - The "online" count on communities is hidden: the service does not track
   presence yet.
 - Settings → About no longer shows the API address, and the renderer is no

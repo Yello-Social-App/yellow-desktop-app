@@ -33,6 +33,7 @@ import { registerNotificationHandlers } from './ipc/handlers/notifications.handl
 import { registerPostHandlers } from './ipc/handlers/posts.handler';
 import { registerProfileHandlers } from './ipc/handlers/profile.handler';
 import { registerReactionHandlers } from './ipc/handlers/reactions.handler';
+import { registerShowcaseHandlers } from './ipc/handlers/showcase.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
 import { chatSocket } from './chat/socket';
 import { notificationWatcher } from './notifications/watcher';
@@ -280,6 +281,7 @@ function bootstrap(): void {
       registerChatHandlers();
       registerNotificationHandlers();
       registerCommunityHandlers();
+      registerShowcaseHandlers();
       registerProfileHandlers();
       registerWindowHandlers();
 

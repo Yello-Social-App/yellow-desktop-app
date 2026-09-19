@@ -35,6 +35,9 @@ import {
   notificationPreferencesSchema,
   notificationResponseSchema,
   postResponseSchema,
+  projectLikeSchema,
+  projectPageSchema,
+  projectResponseSchema,
   profileResponseSchema,
   reactionSummarySchema,
   reactorPageSchema,
@@ -42,6 +45,7 @@ import {
   sessionResponseSchema,
   shareLinkCopiedResponseSchema,
   stageImagesResponseSchema,
+  techCountListSchema,
   unreadCountSchema,
   userPostsResponseSchema,
   windowStateSchema,
@@ -66,6 +70,8 @@ import {
   type ListFriendRequestsRequest,
   type ListFrontPagePostsRequest,
   type ListNotificationsRequest,
+  type ListProjectTechRequest,
+  type ListProjectsRequest,
   type ListMessagesRequest,
   type LinkPreviewRequest,
   type ListReactorsRequest,
@@ -74,6 +80,8 @@ import {
   type NotificationIdRequest,
   type PageRequest,
   type PostIdRequest,
+  type ProjectIdRequest,
+  type PublishProjectRequest,
   type PublicUserRequest,
   type ReactionTargetRequest,
   type RegisterDeviceRequest,
@@ -365,6 +373,23 @@ export const ipc = {
     ),
   voteCommunityPost: (request: VoteCommunityPostRequest) =>
     guarded('communities.vote', communityPostVoteSchema, (api) => api.communities.vote(request)),
+
+  listProjects: (request: ListProjectsRequest) =>
+    guarded('showcase.list', projectPageSchema, (api) => api.showcase.list(request)),
+  listProjectTech: (request: ListProjectTechRequest) =>
+    guarded('showcase.tech', techCountListSchema, (api) => api.showcase.tech(request)),
+  getProject: (request: ProjectIdRequest) =>
+    guarded('showcase.get', projectResponseSchema, (api) => api.showcase.get(request)),
+  recordProjectView: (request: ProjectIdRequest) =>
+    guarded('showcase.recordView', acknowledgedResponseSchema, (api) =>
+      api.showcase.recordView(request),
+    ),
+  publishProject: (request: PublishProjectRequest) =>
+    guarded('showcase.publish', projectResponseSchema, (api) => api.showcase.publish(request)),
+  likeProject: (request: ProjectIdRequest) =>
+    guarded('showcase.like', projectLikeSchema, (api) => api.showcase.like(request)),
+  unlikeProject: (request: ProjectIdRequest) =>
+    guarded('showcase.unlike', projectLikeSchema, (api) => api.showcase.unlike(request)),
 
   linkPreview: (request: LinkPreviewRequest) =>
     guarded('links.preview', linkPreviewResponseSchema, (api) => api.links.preview(request)),
