@@ -49,6 +49,19 @@ linux:
   # under its own name and icon rather than as a generic Electron window.
   syncDesktopName: true
 
+# The Microsoft Store package. Microsoft signs what the Store distributes, so
+# installing from the Store shows no SmartScreen warning; the plain .exe above
+# stays unsigned and still does. The identity values come from Partner Center
+# (Product management -> Product identity) once the app name is reserved; the
+# release workflow passes them in from repository variables, so this file holds
+# only what does not depend on the account. Tiles are in build/appx.
+appx:
+  applicationId: Yello
+  displayName: Yello
+  backgroundColor: '#F4C542'
+  languages:
+    - en-US
+
 nsis:
   oneClick: false
   perMachine: false

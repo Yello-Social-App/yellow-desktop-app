@@ -14,6 +14,7 @@ import { app } from 'electron';
 
 import { createLogger } from '../shared/logger';
 import { isDevRuntime } from './security/origins';
+import { loadUpdaterModule } from './updater-module';
 
 const log = createLogger('updater');
 
@@ -28,9 +29,15 @@ export function initialiseAutoUpdater(): void {
     return;
   }
 
+  // A Store install is updated by the Store, and its files are read-only.
+  if (process.windowsStore) {
+    log.info('updater_skipped', { reason: 'microsoft_store' });
+    return;
+  }
+
   void (async () => {
     try {
-      const { autoUpdater } = await import('electron-updater');
+      const { autoUpdater } = await loadUpdaterModule();
 
       autoUpdater.autoDownload = false;
       autoUpdater.autoInstallOnAppQuit = true;

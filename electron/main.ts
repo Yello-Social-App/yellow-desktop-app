@@ -40,6 +40,7 @@ import { notificationWatcher } from './notifications/watcher';
 import { createLogger } from '../shared/logger';
 import { buildApplicationMenu } from './menu';
 import { initialiseAutoUpdater } from './autoUpdater';
+import { isUpdateCommand, runUpdateCommand } from './cli/update-command';
 import { applyContentSecurityPolicy } from './security/csp';
 import { applyNavigationPolicy, applyPermissionPolicy } from './security/permissions';
 import {
@@ -217,6 +218,22 @@ function preferSecretServiceBackend(): void {
 }
 
 function bootstrap(): void {
+  // `yello-desktop-app update` is a terminal command, not a launch: no window,
+  // and ahead of the single-instance lock so it works while Yello is open.
+  if (isUpdateCommand()) {
+    void app
+      .whenReady()
+      .then(runUpdateCommand)
+      .catch((error: unknown) => {
+        process.stderr.write(`Update failed: ${String(error)}\n`);
+        return 1;
+      })
+      .then((code) => {
+        app.exit(code);
+      });
+    return;
+  }
+
   // Must run before the app is ready so safeStorage picks the backend up.
   preferSecretServiceBackend();
 

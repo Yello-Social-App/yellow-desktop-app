@@ -112,6 +112,32 @@ jobs:
           # then macOS will warn on first launch.
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      # The Microsoft Store package, for upload in Partner Center rather than
+      # to the GitHub release: it is only useful through the Store, which signs
+      # it. Skipped until the repository variables hold the identity Partner
+      # Center assigned (Product management -> Product identity).
+      - name: Build the Microsoft Store package
+        if: matrix.platform == 'windows' && vars.APPX_IDENTITY_NAME != ''
+        shell: pwsh
+        run: >-
+          npx electron-builder --win appx --publish never
+          "-c.appx.identityName=$env:APPX_IDENTITY_NAME"
+          "-c.appx.publisher=$env:APPX_PUBLISHER"
+          "-c.appx.publisherDisplayName=$env:APPX_PUBLISHER_DISPLAY_NAME"
+        env:
+          APPX_IDENTITY_NAME: ${{ vars.APPX_IDENTITY_NAME }}
+          APPX_PUBLISHER: ${{ vars.APPX_PUBLISHER }}
+          APPX_PUBLISHER_DISPLAY_NAME: ${{ vars.APPX_PUBLISHER_DISPLAY_NAME }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Keep the Store package as a workflow artifact
+        if: matrix.platform == 'windows' && vars.APPX_IDENTITY_NAME != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: microsoft-store-package
+          path: release/*.appx
+          if-no-files-found: error
+
   publish:
     name: Publish the release
     needs: build
