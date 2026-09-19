@@ -1,15 +1,33 @@
-import { Ban, Send, TriangleAlert, UserPlus, Users } from 'lucide-react';
+import { Ban, Compass, Search, Send, TriangleAlert, UserPlus, Users } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/Input';
 import { RowSkeleton } from '@/components/ui/Skeleton';
 import { useFriendList, useFriendsLoader } from '@/features/friends/hooks';
 import { useFriendsStore, type ListName } from '@/features/friends/store';
+import { usePeopleSearch } from '@/features/people/hooks';
+import { normalizeQuery } from '@/features/people/search';
+import { PEOPLE_QUERY_MAX, type SearchScope } from '@/features/people/types';
 import { cn } from '@/lib/cn';
 
+import { DiscoverPanel } from './components/DiscoverPanel';
 import { FriendRow } from './components/FriendRow';
+import { PeopleSearchResults, SearchScopeBar } from './components/PeopleSearchResults';
+
+/** A list tab, or the suggestions. */
+type FriendsTab = ListName | 'discover';
+
+function peopleQueryFrom(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null || !('peopleQuery' in state)) {
+    return null;
+  }
+  const { peopleQuery } = state;
+  return typeof peopleQuery === 'string' ? peopleQuery.slice(0, PEOPLE_QUERY_MAX) : null;
+}
 
 interface Tab {
   name: ListName;
@@ -63,58 +81,104 @@ const TABS: readonly Tab[] = [
   },
 ];
 
+const DISCOVER_TAB = {
+  name: 'discover',
+  label: 'Discover',
+  icon: <Compass className="size-4" />,
+} as const;
+
 /**
  * Friends, the requests in both directions, and blocks.
  *
  * Four tabs rather than four routes: every list comes from one store —
  * accepting a request moves a row from one to another — and a tab keeps that
  * visible without a navigation.
+ *
+ * The people search runs on `GET /users/search`; Discover stays on the sample
+ * directory until a suggestions endpoint exists. While a search has text, its
+ * results take over the screen and the tabs give way to the scope chips;
+ * clearing it brings the tab back.
  */
 export default function FriendsPage() {
   useFriendsLoader();
-  const [active, setActive] = useState<ListName>('friends');
+  const location = useLocation();
+  const [active, setActive] = useState<FriendsTab>('friends');
+  const [query, setQuery] = useState(() => peopleQueryFrom(location.state) ?? '');
+  const [scope, setScope] = useState<SearchScope>('everyone');
+  // A handed-over search can arrive while this screen is already open, which
+  // does not remount it; adopting it during render avoids a flash of the old one.
+  const [seenLocationKey, setSeenLocationKey] = useState(location.key);
+  if (location.key !== seenLocationKey) {
+    setSeenLocationKey(location.key);
+    const handedOver = peopleQueryFrom(location.state);
+    if (handedOver !== null) {
+      setQuery(handedOver);
+    }
+  }
+
   const error = useFriendsStore((state) => state.error);
   const clearError = useFriendsStore((state) => state.clearError);
   const loadMore = useFriendsStore((state) => state.loadMore);
   const received = useFriendList('received');
-  const list = useFriendList(active);
-  const tab = TABS.find((item) => item.name === active) ?? TABS[0];
+  const tab = TABS.find((item) => item.name === active);
+  const list = useFriendList(tab?.name ?? 'friends');
+  const isSearching = normalizeQuery(query) !== '';
+  const search = usePeopleSearch(query, scope);
 
   return (
     <div className="flex w-full flex-col">
       <header className="glass border-outline-variant sticky top-0 z-10 border-b">
         <h1 className="font-heading text-h1 text-on-surface px-lg pt-3 pb-2">Friends</h1>
-        <div role="tablist" aria-label="Friends lists" className="px-sm flex">
-          {TABS.map((item) => {
-            const isSelected = item.name === active;
-            const count = item.name === 'received' ? received.total : 0;
-            return (
-              <button
-                key={item.name}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                onClick={() => {
-                  setActive(item.name);
-                }}
-                className={cn(
-                  'hover:bg-surface-container-low transition-tone relative flex flex-1 items-center justify-center gap-1.5 py-3 text-[14px]',
-                  isSelected ? 'text-on-surface font-bold' : 'text-on-surface-variant font-medium',
-                )}
-              >
-                {item.icon}
-                {item.label}
-                {count > 0 && <Badge tone="count">{String(count)}</Badge>}
-                {isSelected && (
-                  <span
-                    aria-hidden
-                    className="bg-primary-container absolute inset-x-6 bottom-0 h-1 rounded-full"
-                  />
-                )}
-              </button>
-            );
-          })}
+        <div className="px-lg pb-3">
+          <Input
+            type="search"
+            aria-label="Search people"
+            placeholder="Search people by name or @username"
+            maxLength={PEOPLE_QUERY_MAX}
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+            }}
+            leadingIcon={<Search className="size-4" />}
+          />
         </div>
+        {isSearching ? (
+          <SearchScopeBar search={search} scope={scope} onScopeChange={setScope} />
+        ) : (
+          <div role="tablist" aria-label="Friends lists" className="px-sm flex">
+            {[...TABS, DISCOVER_TAB].map((item) => {
+              const isSelected = item.name === active;
+              const count = item.name === 'received' ? received.total : 0;
+              return (
+                <button
+                  key={item.name}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    setActive(item.name);
+                  }}
+                  className={cn(
+                    'hover:bg-surface-container-low transition-tone relative flex flex-1 items-center justify-center gap-1.5 py-3 text-[14px]',
+                    isSelected
+                      ? 'text-on-surface font-bold'
+                      : 'text-on-surface-variant font-medium',
+                  )}
+                >
+                  {item.icon}
+                  {item.label}
+                  {count > 0 && <Badge tone="count">{String(count)}</Badge>}
+                  {isSelected && (
+                    <span
+                      aria-hidden
+                      className="bg-primary-container absolute inset-x-6 bottom-0 h-1 rounded-full"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </header>
 
       {error !== null && (
@@ -130,19 +194,28 @@ export default function FriendsPage() {
         </p>
       )}
 
-      {(list.status === 'loading' || list.status === 'idle') && (
-        <div className="divide-hairline flex flex-col" aria-busy>
-          <RowSkeleton />
-          <RowSkeleton />
-          <RowSkeleton />
-        </div>
-      )}
+      {isSearching && <PeopleSearchResults search={search} query={query} scope={scope} />}
 
-      {list.status === 'ready' && list.entries.length === 0 && tab !== undefined && (
-        <EmptyState icon={tab.icon} title={tab.empty.title} description={tab.empty.description} />
-      )}
+      {!isSearching && active === 'discover' && <DiscoverPanel />}
 
-      {list.status === 'ready' && list.entries.length > 0 && tab !== undefined && (
+      {!isSearching &&
+        tab !== undefined &&
+        (list.status === 'loading' || list.status === 'idle') && (
+          <div className="divide-hairline flex flex-col" aria-busy>
+            <RowSkeleton />
+            <RowSkeleton />
+            <RowSkeleton />
+          </div>
+        )}
+
+      {!isSearching &&
+        list.status === 'ready' &&
+        list.entries.length === 0 &&
+        tab !== undefined && (
+          <EmptyState icon={tab.icon} title={tab.empty.title} description={tab.empty.description} />
+        )}
+
+      {!isSearching && list.status === 'ready' && list.entries.length > 0 && tab !== undefined && (
         <>
           <ul className="stagger divide-hairline flex flex-col">
             {list.entries.map((entry) => (
@@ -158,7 +231,7 @@ export default function FriendsPage() {
                 variant="secondary"
                 isLoading={list.isLoadingMore}
                 onClick={() => {
-                  void loadMore(active);
+                  void loadMore(tab.name);
                 }}
               >
                 {list.isLoadingMore ? 'Loading…' : 'Show more'}

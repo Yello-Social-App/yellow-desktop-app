@@ -48,6 +48,7 @@ export const IPC_CHANNELS = {
   PROFILE_LIST_POSTS: 'profile:list-posts',
   PROFILE_GET_USER: 'profile:get-user',
   PROFILE_UPDATE: 'profile:update',
+  PROFILE_SEARCH_USERS: 'profile:search-users',
   CHAT_LIST_CONVERSATIONS: 'chat:list-conversations',
   CHAT_CREATE_CONVERSATION: 'chat:create-conversation',
   CHAT_GET_CONVERSATION: 'chat:get-conversation',

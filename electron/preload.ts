@@ -83,6 +83,7 @@ import type {
   RegisterRequest,
   RegisterResponse,
   RepostRequest,
+  SearchUsersRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
   SendChatMessageRequest,
@@ -200,6 +201,8 @@ const bridge: YelloBridge = {
       invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_GET_USER, request),
     update: (request: UpdateProfileRequest) =>
       invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_UPDATE, request),
+    searchUsers: (request: SearchUsersRequest) =>
+      invoke<FriendEntryPage>(IPC_CHANNELS.PROFILE_SEARCH_USERS, request),
   },
   chat: {
     listConversations: (request: ListConversationsRequest) =>

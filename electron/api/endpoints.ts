@@ -33,6 +33,7 @@ export const ENDPOINTS = {
   users: {
     /** GET reads the caller's own profile; POST edits it (JSON, or multipart with images). */
     me: `${base}/users/me`,
+    search: `${base}/users/search`,
     byId: (userId: string) => `${base}/users/${seg(userId)}`,
     posts: (userId: string) => `${base}/users/${seg(userId)}/posts`,
     block: (userId: string) => `${base}/users/${seg(userId)}/block`,

@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the communities you joined. Only members can start a thread — the composer
   offers to join first — and a vote shows instantly, then settles to the
   server's score.
+- **People search, for real.** The top bar and the Friends screen search
+  everyone by name or @username on the server, in its relevance order, with
+  "Show more". Picking someone in the top bar opens their profile, and every
+  result carries working friend controls. Search starts at two characters.
 - **Edit your profile.** "Edit profile" on your own profile changes your
   photo, cover image, username, name and bio. Only what you changed is sent,
   so an untouched username does not spend the once-a-week change. Profiles now

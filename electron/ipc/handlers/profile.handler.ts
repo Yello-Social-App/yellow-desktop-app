@@ -1,5 +1,5 @@
 /**
- * Profiles: reading one, and editing the caller's own.
+ * Profiles: reading one, searching for people, and editing the caller's own.
  *
  * `GET /users/{id}` returns a narrower record than `/users/me` — no email, no
  * status — plus `friendStatus`, the viewer's relationship as the server sees
@@ -9,6 +9,8 @@
  * picker), so the renderer hands back tokens and never a path or the bytes
  * (OWASP A01).
  */
+import { z } from 'zod';
+
 import { createLogger } from '../../../shared/logger';
 import { accountProfileOf, hasAccount, markAccountActive } from '../../api/account-vault';
 import { ENDPOINTS } from '../../api/endpoints';
@@ -19,15 +21,19 @@ import type { ImagePart } from '../image-picker';
 import { discardStagedImages, resolveStagedImages } from '../staged-images';
 
 import {
+  authorSchema,
+  friendEntryPageSchema,
   ipcOk,
   pageOf,
   postSchema,
   profileResponseSchema,
   publicUserRequestSchema,
+  searchUsersRequestSchema,
   updateProfileRequestSchema,
   userPostsRequestSchema,
   userPostsResponseSchema,
   userSchema,
+  type FriendEntryPage,
   type IpcResult,
   type ProfileResponse,
   type UpdateProfileRequest,
@@ -37,6 +43,11 @@ import {
 const log = createLogger('ipc.profile');
 
 const postPageSchema = pageOf(postSchema);
+
+/** A search row is a user with the viewer's `friendStatus` flattened in. */
+const searchResultPageSchema = pageOf(
+  authorSchema.extend({ friendStatus: z.string().max(32).nullish() }),
+);
 
 /** The text fields an edit may carry, with absent ones left out entirely. */
 function textFieldsOf(request: UpdateProfileRequest): Record<string, string | null> {
@@ -137,6 +148,35 @@ export function registerProfileHandlers(): void {
           totalElements: result.data.totalElements,
           totalPages: result.data.totalPages,
           last: result.data.last,
+        }),
+      );
+    },
+  );
+
+  registerIpcHandler(
+    IPC_CHANNELS.PROFILE_SEARCH_USERS,
+    searchUsersRequestSchema,
+    async ({ query, page }): Promise<IpcResult<FriendEntryPage>> => {
+      // `q` goes as a query parameter, which axios encodes; the text is never
+      // spliced into the path (A05).
+      const result = await apiRequest({
+        method: 'get',
+        url: ENDPOINTS.users.search,
+        schema: searchResultPageSchema,
+        params: { q: query, page },
+      });
+
+      if (!result.ok) {
+        return result;
+      }
+
+      return ipcOk(
+        friendEntryPageSchema.parse({
+          ...result.data,
+          content: result.data.content.map(({ friendStatus, ...user }) => ({
+            user,
+            friendStatus,
+          })),
         }),
       );
     },

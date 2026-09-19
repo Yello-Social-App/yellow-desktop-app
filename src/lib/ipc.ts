@@ -79,6 +79,7 @@ import {
   type RegisterDeviceRequest,
   type RegisterRequest,
   type RepostRequest,
+  type SearchUsersRequest,
   type ResendOtpRequest,
   type ResetPasswordRequest,
   type SendChatMessageRequest,
@@ -279,6 +280,10 @@ export const ipc = {
     guarded('profile.getUser', profileResponseSchema, (api) => api.profile.getUser(request)),
   updateProfile: (request: UpdateProfileRequest) =>
     guarded('profile.update', profileResponseSchema, (api) => api.profile.update(request)),
+  searchUsers: (request: SearchUsersRequest) =>
+    guarded('profile.searchUsers', friendEntryPageSchema, (api) =>
+      api.profile.searchUsers(request),
+    ),
 
   listConversations: (request: ListConversationsRequest) =>
     guarded('chat.listConversations', conversationPageSchema, (api) =>

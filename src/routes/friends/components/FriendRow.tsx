@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
 
+import { HighlightMatch } from '@/components/content/HighlightMatch';
 import { Avatar } from '@/components/ui/Avatar';
 import { useRelationship } from '@/features/friends/hooks';
 import type { FriendEntry } from '@/features/friends/types';
@@ -11,16 +12,22 @@ import { displayName, handleOf, initialsOf } from '@/lib/user-display';
 
 interface FriendRowProps {
   entry: FriendEntry;
-  /** What the timestamp means on this list. */
-  sinceLabel: string;
+  /** What the timestamp means on this list; search rows carry none. */
+  sinceLabel?: string;
+  /** What was searched for, drawn highlighted in the name and handle. */
+  query?: string;
 }
 
 /**
  * One person. `entry.user` is always the *other* party, never the caller, and
  * the controls read from the server's `friendStatus` — so the same row
- * serves every tab.
+ * serves every tab, and the people search.
  */
-export const FriendRow = memo(function FriendRow({ entry, sinceLabel }: FriendRowProps) {
+export const FriendRow = memo(function FriendRow({
+  entry,
+  sinceLabel = '',
+  query = '',
+}: FriendRowProps) {
   const person = entry.user;
   const name = displayName(person);
   const control = useRelationship(person.id, entry.friendStatus);
@@ -43,10 +50,10 @@ export const FriendRow = memo(function FriendRow({ entry, sinceLabel }: FriendRo
           to={`/users/${person.id}`}
           className="text-on-surface block truncate text-[15px] font-bold hover:underline"
         >
-          {name}
+          <HighlightMatch text={name} query={query} />
         </Link>
         <p className="text-on-surface-variant truncate text-[13px]">
-          {handleOf(person)}
+          <HighlightMatch text={handleOf(person)} query={query} />
           {entry.since !== undefined && ` · ${sinceLabel} ${relativeTime(entry.since)}`}
         </p>
       </div>

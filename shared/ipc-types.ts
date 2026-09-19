@@ -657,8 +657,26 @@ export const updateProfileRequestSchema = z.object({
   removeCover: z.literal(true).optional(),
 });
 
+/* -- people search -- */
+
+/** The server's bounds on `q`; anything shorter is not sent at all. */
+export const USER_SEARCH_QUERY_MIN = 2;
+export const USER_SEARCH_QUERY_MAX = 100;
+
+/**
+ * Matches on full name and username only — email is neither searched nor
+ * returned. Answered as a friend-entry page, since each row is exactly a
+ * user plus the viewer's `friendStatus`, and the friends rows already draw
+ * that shape.
+ */
+export const searchUsersRequestSchema = z.object({
+  query: z.string().trim().min(USER_SEARCH_QUERY_MIN).max(USER_SEARCH_QUERY_MAX),
+  page: z.number().int().min(0).max(1000),
+});
+
 export type ProfileResponse = z.infer<typeof profileResponseSchema>;
 export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
+export type SearchUsersRequest = z.infer<typeof searchUsersRequestSchema>;
 export type UserPostsRequest = z.infer<typeof userPostsRequestSchema>;
 export type UserPostsResponse = z.infer<typeof userPostsResponseSchema>;
 
@@ -1595,6 +1613,7 @@ export interface YelloBridge {
     listPosts(request: UserPostsRequest): Promise<IpcResult<UserPostsResponse>>;
     getUser(request: PublicUserRequest): Promise<IpcResult<ProfileResponse>>;
     update(request: UpdateProfileRequest): Promise<IpcResult<ProfileResponse>>;
+    searchUsers(request: SearchUsersRequest): Promise<IpcResult<FriendEntryPage>>;
   };
   readonly chat: {
     listConversations(request: ListConversationsRequest): Promise<IpcResult<ConversationPage>>;
