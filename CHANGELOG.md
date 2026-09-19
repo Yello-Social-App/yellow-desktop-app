@@ -30,6 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   photo, cover image, username, name and bio. Only what you changed is sent,
   so an untouched username does not spend the once-a-week change. Profiles now
   show their cover image.
+- **`yello-desktop-app update` on Linux.** An app installed from the `.deb`,
+  `.rpm` or `.pacman` package upgrades itself from a terminal: it downloads the
+  latest release for the same format, checks it against the release's
+  checksum, and installs it over the old version with the distribution's own
+  tool under `sudo`. Nothing is uninstalled first, and settings and saved
+  sign-ins stay. An AppImage updates the same way, without a password.
+- A Microsoft Store package is built on release, for publishing Yello through
+  the Store. A Store install carries Microsoft's signature, so Windows shows no
+  SmartScreen warning, and the Store keeps it updated.
 
 ### Changed
 

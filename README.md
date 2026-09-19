@@ -28,7 +28,48 @@ Every tagged release carries installers for all three platforms on the
 | Windows                         | `.exe` (NSIS installer) |
 
 They are unsigned, so macOS Gatekeeper and Windows SmartScreen will both warn on
-first launch until signing certificates are added to the release workflow.
+first launch until signing certificates are added to the release workflow. On
+Windows, installing from the Microsoft Store avoids the warning: Microsoft signs
+what the Store distributes, and the Store keeps the app updated.
+
+### Updating on Linux
+
+An app installed from the `.deb`, `.rpm` or `.pacman` package updates itself
+from a terminal:
+
+```sh
+yello-desktop-app update
+```
+
+It downloads the latest release's package for the same format, checks it
+against the checksum the release publishes, and installs it over the old one
+with the distribution's own tool (`dpkg`, `zypper`/`dnf`/`yum`, or `pacman`)
+under `sudo`, which asks for your password in the terminal. Nothing is removed
+first, and your settings and saved sign-ins are kept. Restart Yello afterwards
+if it was open. An AppImage updates the same way, run as
+`./Yello-<version>.AppImage update`, and needs no password.
+
+The command exists from 0.5.0 on. To get there from an older version, install
+the 0.5.0 package over the old one once, for example
+`sudo pacman -U yello-desktop-app-0.5.0.pacman` or
+`sudo apt install ./yello-desktop-app_0.5.0_amd64.deb`. That is an upgrade
+too, not a reinstall.
+
+### Publishing to the Microsoft Store
+
+The release workflow builds a Store package (`.appx`) once three repository
+variables hold the identity Partner Center assigns when the app name is
+reserved (Product management -> Product identity):
+
+| Variable                      | Partner Center field                    |
+| ----------------------------- | --------------------------------------- |
+| `APPX_IDENTITY_NAME`          | Package/Identity/Name                   |
+| `APPX_PUBLISHER`              | Package/Identity/Publisher (`CN=…`)     |
+| `APPX_PUBLISHER_DISPLAY_NAME` | Package/Properties/PublisherDisplayName |
+
+The package is attached to the release workflow run as the
+`microsoft-store-package` artifact; upload it to a new submission in Partner
+Center.
 
 ## Running it from source
 
