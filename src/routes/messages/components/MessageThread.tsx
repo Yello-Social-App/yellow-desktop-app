@@ -178,7 +178,11 @@ export function MessageThread({ row }: MessageThreadProps) {
           </p>
         )}
 
-        <div className="mt-auto flex flex-col gap-0.5">{lines}</div>
+        {/* Keyed on the conversation: opening another thread fades its
+            transcript in, and nothing else on the screen moves. */}
+        <div key={row.conversation.id} className="animate-fade-in mt-auto flex flex-col gap-0.5">
+          {lines}
+        </div>
         <div ref={endRef} />
       </div>
 

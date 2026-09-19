@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Switching conversations no longer replays the page animation on the whole
+  Messages screen; only the new thread's messages fade in.
+- The message box stays pinned at the bottom of the thread instead of
+  scrolling away with a long conversation.
 - The account switcher no longer keeps showing a photo or name that was
   removed from the account.
 
