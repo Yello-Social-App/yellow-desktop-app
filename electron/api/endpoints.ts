@@ -31,7 +31,9 @@ export const ENDPOINTS = {
     resetPassword: `${base}/auth/reset-password`,
   },
   users: {
+    /** GET reads the caller's own profile; POST edits it (JSON, or multipart with images). */
     me: `${base}/users/me`,
+    search: `${base}/users/search`,
     byId: (userId: string) => `${base}/users/${seg(userId)}`,
     posts: (userId: string) => `${base}/users/${seg(userId)}/posts`,
     block: (userId: string) => `${base}/users/${seg(userId)}/block`,
@@ -64,6 +66,25 @@ export const ENDPOINTS = {
     accept: (userId: string) => `${base}/friends/requests/${seg(userId)}/accept`,
     decline: (userId: string) => `${base}/friends/requests/${seg(userId)}/decline`,
     remove: (userId: string) => `${base}/friends/${seg(userId)}`,
+  },
+  communities: {
+    list: `${base}/communities`,
+    bySlug: (slug: string) => `${base}/communities/${seg(slug)}`,
+    /** Join (POST) and leave (DELETE); both idempotent. */
+    membership: (slug: string) => `${base}/communities/${seg(slug)}/membership`,
+    posts: (slug: string) => `${base}/communities/${seg(slug)}/posts`,
+  },
+  communityPosts: {
+    frontPage: `${base}/community-posts`,
+    vote: (postId: string) => `${base}/community-posts/${seg(postId)}/vote`,
+  },
+  projects: {
+    list: `${base}/projects`,
+    tech: `${base}/projects/tech`,
+    byId: (projectId: string) => `${base}/projects/${seg(projectId)}`,
+    views: (projectId: string) => `${base}/projects/${seg(projectId)}/views`,
+    /** Like (POST) and unlike (DELETE); both idempotent. */
+    like: (projectId: string) => `${base}/projects/${seg(projectId)}/like`,
   },
   notifications: {
     /**

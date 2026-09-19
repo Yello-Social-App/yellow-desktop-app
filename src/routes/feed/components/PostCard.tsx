@@ -240,7 +240,19 @@ export const PostCard = memo(function PostCard({
         )}
 
         {post.originalPost !== null && post.originalPost !== undefined && (
-          <blockquote className="border-outline-variant hover:bg-surface-container-low transition-tone gap-xs p-md flex flex-col rounded-2xl border">
+          // The whole quote opens the original, as the text of a post opens the
+          // post; a link inside it (the author, a URL, a link card) keeps its
+          // own destination, and selecting text is not a click. The timestamp
+          // is the keyboard's link to the same place.
+          <blockquote
+            onClick={(event) => {
+              const target = event.target as HTMLElement;
+              if (target.closest('a') === null && window.getSelection()?.toString() === '') {
+                void navigate(`/posts/${post.originalPost?.id ?? ''}`);
+              }
+            }}
+            className="border-outline-variant hover:bg-surface-container-low transition-tone gap-xs p-md flex cursor-pointer flex-col rounded-2xl border"
+          >
             <span className="gap-xs flex items-center text-[13px]">
               <Avatar
                 initials={initialsOf(post.originalPost.author)}
@@ -248,11 +260,17 @@ export const PostCard = memo(function PostCard({
                 imageUrl={post.originalPost.author.avatarUrl}
                 size="xs"
               />
-              <span className="text-on-surface font-semibold">
+              <Link
+                to={`/users/${post.originalPost.author.id}`}
+                className="text-on-surface font-semibold hover:underline"
+              >
                 {displayName(post.originalPost.author)}
-              </span>
+              </Link>
               <span className="text-on-surface-variant">
-                {handleOf(post.originalPost.author)} · {relativeTime(post.originalPost.createdAt)}
+                {handleOf(post.originalPost.author)} ·{' '}
+                <Link to={`/posts/${post.originalPost.id}`} className="hover:underline">
+                  {relativeTime(post.originalPost.createdAt)}
+                </Link>
               </span>
             </span>
             {post.originalPost.content !== '' && (

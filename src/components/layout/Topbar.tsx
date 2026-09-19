@@ -1,16 +1,16 @@
-import { LogOut, Search, Settings, Wifi, WifiOff } from 'lucide-react';
+import { LogOut, Settings, Wifi, WifiOff } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { IconButton } from '@/components/ui/IconButton';
-import { Input } from '@/components/ui/Input';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useSocketStatus } from '@/features/messages/hooks';
 import { cn } from '@/lib/cn';
 import { displayName, initialsOf } from '@/lib/user-display';
 
 import { NotificationsBell } from './NotificationsBell';
+import { QuickSearch } from './QuickSearch';
 import { SignOutDialog } from './SignOutDialog';
 import { WindowControls } from './WindowControls';
 
@@ -52,17 +52,7 @@ export function Topbar({ searchQuery, onSearchChange }: TopbarProps) {
           </span>
         </Link>
         <div className="app-no-drag max-w-search hidden min-w-0 flex-1 md:block">
-          <Input
-            type="search"
-            aria-label="Search posts"
-            placeholder="Search"
-            value={searchQuery}
-            onChange={(event) => {
-              onSearchChange(event.target.value);
-            }}
-            leadingIcon={<Search className="size-4" />}
-            className="text-body-sm h-9 rounded-full pl-10"
-          />
+          <QuickSearch query={searchQuery} onQueryChange={onSearchChange} />
         </div>
       </div>
 

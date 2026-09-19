@@ -14,6 +14,11 @@ import {
   chatSocketStateSchema,
   commentPageSchema,
   commentResponseSchema,
+  communityPageSchema,
+  communityPostPageSchema,
+  communityPostResponseSchema,
+  communityPostVoteSchema,
+  communityResponseSchema,
   conversationPageSchema,
   conversationResponseSchema,
   deletedResponseSchema,
@@ -30,6 +35,9 @@ import {
   notificationPreferencesSchema,
   notificationResponseSchema,
   postResponseSchema,
+  projectLikeSchema,
+  projectPageSchema,
+  projectResponseSchema,
   profileResponseSchema,
   reactionSummarySchema,
   reactorPageSchema,
@@ -37,12 +45,15 @@ import {
   sessionResponseSchema,
   shareLinkCopiedResponseSchema,
   stageImagesResponseSchema,
+  techCountListSchema,
   unreadCountSchema,
   userPostsResponseSchema,
   windowStateSchema,
   type AccountIdRequest,
+  type CommunitySlugRequest,
   type ConversationIdRequest,
   type CreateCommentRequest,
+  type CreateCommunityPostRequest,
   type CreateConversationRequest,
   type CreatePostRequest,
   type DeleteCommentRequest,
@@ -53,9 +64,14 @@ import {
   type FriendUserRequest,
   type IpcResult,
   type ListCommentsRequest,
+  type ListCommunitiesRequest,
+  type ListCommunityPostsRequest,
   type ListConversationsRequest,
   type ListFriendRequestsRequest,
+  type ListFrontPagePostsRequest,
   type ListNotificationsRequest,
+  type ListProjectTechRequest,
+  type ListProjectsRequest,
   type ListMessagesRequest,
   type LinkPreviewRequest,
   type ListReactorsRequest,
@@ -64,11 +80,14 @@ import {
   type NotificationIdRequest,
   type PageRequest,
   type PostIdRequest,
+  type ProjectIdRequest,
+  type PublishProjectRequest,
   type PublicUserRequest,
   type ReactionTargetRequest,
   type RegisterDeviceRequest,
   type RegisterRequest,
   type RepostRequest,
+  type SearchUsersRequest,
   type ResendOtpRequest,
   type ResetPasswordRequest,
   type SendChatMessageRequest,
@@ -76,12 +95,14 @@ import {
   type ToggleReactionRequest,
   type TypingRequest,
   type UnregisterDeviceRequest,
+  type UpdateProfileRequest,
   type UpdateCommentRequest,
   type UpdateNotificationPreferencesRequest,
   type UpdatePostRequest,
   type UserPostsRequest,
   type VerifyOtpRequest,
   type VerifyResetOtpRequest,
+  type VoteCommunityPostRequest,
   type YelloBridge,
   chatEventSchema,
   deviceResponseSchema,
@@ -265,6 +286,12 @@ export const ipc = {
     guarded('profile.listPosts', userPostsResponseSchema, (api) => api.profile.listPosts(request)),
   getUser: (request: PublicUserRequest) =>
     guarded('profile.getUser', profileResponseSchema, (api) => api.profile.getUser(request)),
+  updateProfile: (request: UpdateProfileRequest) =>
+    guarded('profile.update', profileResponseSchema, (api) => api.profile.update(request)),
+  searchUsers: (request: SearchUsersRequest) =>
+    guarded('profile.searchUsers', friendEntryPageSchema, (api) =>
+      api.profile.searchUsers(request),
+    ),
 
   listConversations: (request: ListConversationsRequest) =>
     guarded('chat.listConversations', conversationPageSchema, (api) =>
@@ -323,6 +350,46 @@ export const ipc = {
     guarded('notifications.savePreferences', notificationPreferencesSchema, (api) =>
       api.notifications.savePreferences(request),
     ),
+
+  listCommunities: (request: ListCommunitiesRequest) =>
+    guarded('communities.list', communityPageSchema, (api) => api.communities.list(request)),
+  getCommunity: (request: CommunitySlugRequest) =>
+    guarded('communities.get', communityResponseSchema, (api) => api.communities.get(request)),
+  joinCommunity: (request: CommunitySlugRequest) =>
+    guarded('communities.join', communityResponseSchema, (api) => api.communities.join(request)),
+  leaveCommunity: (request: CommunitySlugRequest) =>
+    guarded('communities.leave', communityResponseSchema, (api) => api.communities.leave(request)),
+  listCommunityPosts: (request: ListCommunityPostsRequest) =>
+    guarded('communities.listPosts', communityPostPageSchema, (api) =>
+      api.communities.listPosts(request),
+    ),
+  listFrontPagePosts: (request: ListFrontPagePostsRequest) =>
+    guarded('communities.frontPage', communityPostPageSchema, (api) =>
+      api.communities.frontPage(request),
+    ),
+  createCommunityPost: (request: CreateCommunityPostRequest) =>
+    guarded('communities.createPost', communityPostResponseSchema, (api) =>
+      api.communities.createPost(request),
+    ),
+  voteCommunityPost: (request: VoteCommunityPostRequest) =>
+    guarded('communities.vote', communityPostVoteSchema, (api) => api.communities.vote(request)),
+
+  listProjects: (request: ListProjectsRequest) =>
+    guarded('showcase.list', projectPageSchema, (api) => api.showcase.list(request)),
+  listProjectTech: (request: ListProjectTechRequest) =>
+    guarded('showcase.tech', techCountListSchema, (api) => api.showcase.tech(request)),
+  getProject: (request: ProjectIdRequest) =>
+    guarded('showcase.get', projectResponseSchema, (api) => api.showcase.get(request)),
+  recordProjectView: (request: ProjectIdRequest) =>
+    guarded('showcase.recordView', acknowledgedResponseSchema, (api) =>
+      api.showcase.recordView(request),
+    ),
+  publishProject: (request: PublishProjectRequest) =>
+    guarded('showcase.publish', projectResponseSchema, (api) => api.showcase.publish(request)),
+  likeProject: (request: ProjectIdRequest) =>
+    guarded('showcase.like', projectLikeSchema, (api) => api.showcase.like(request)),
+  unlikeProject: (request: ProjectIdRequest) =>
+    guarded('showcase.unlike', projectLikeSchema, (api) => api.showcase.unlike(request)),
 
   linkPreview: (request: LinkPreviewRequest) =>
     guarded('links.preview', linkPreviewResponseSchema, (api) => api.links.preview(request)),

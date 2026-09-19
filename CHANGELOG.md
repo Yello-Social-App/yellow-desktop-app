@@ -6,6 +6,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Communities, for real.** The directory, community pages, joining and
+  leaving, posting and voting now run against the API instead of sample data.
+  Discover and Joined search by name, slug or tag on the server and page with
+  "Show more"; post lists page by cursor and sort by Hot, New or Top on the
+  front page and inside each community. Home's Communities tab shows posts from
+  the communities you joined. Only members can start a thread — the composer
+  offers to join first — and a vote shows instantly, then settles to the
+  server's score.
+- **Showcase, for real.** The grid, the featured strip, the tech filter chips,
+  project pages, likes and publishing are backed by the API. Opening a project
+  counts one view per session. GitHub stars are hidden until the server has
+  checked the repository, rather than shown as zero.
+- The right rail's popular communities and trending projects come from the
+  API, and joining from the rail replaces the card with the next suggestion.
+- **People search, for real.** The top bar and the Friends screen search
+  everyone by name or @username on the server, in its relevance order, with
+  "Show more". Picking someone in the top bar opens their profile, and every
+  result carries working friend controls. Search starts at two characters.
+- **Edit your profile.** "Edit profile" on your own profile changes your
+  photo, cover image, username, name and bio. Only what you changed is sent,
+  so an untouched username does not spend the once-a-week change. Profiles now
+  show their cover image.
+
+### Changed
+
+- Project links must be `https://`. The form says so as you type, and a link
+  from the server that is not https is not drawn as a link at all.
+- The "online" count on communities is hidden: the service does not track
+  presence yet.
+- Settings → About no longer shows the API address, and the renderer is no
+  longer told it.
+
+### Fixed
+
+- Switching conversations no longer replays the page animation on the whole
+  Messages screen; only the new thread's messages fade in.
+- The message box stays pinned at the bottom of the thread instead of
+  scrolling away with a long conversation.
+- A repost's quoted post opens the original when clicked, and its author and
+  time are links.
+- The account switcher no longer keeps showing a photo or name that was
+  removed from the account.
+
 ## [0.4.0] - 2026-09-16
 
 Adds the notification inbox and switching between accounts, and gives link

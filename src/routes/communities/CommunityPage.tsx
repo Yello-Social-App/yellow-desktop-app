@@ -4,24 +4,28 @@ import { Link, useParams } from 'react-router-dom';
 
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { SampleBadge } from '@/components/ui/SampleBadge';
+import { InlineAlert } from '@/components/ui/InlineAlert';
+import { Spinner } from '@/components/ui/Spinner';
+import { useCommunity, useCommunityPostFeed, useMembership } from '@/features/communities/hooks';
 import { useCommunitiesStore } from '@/features/communities/store';
-import { coverClass } from '@/mocks/people';
-import { calendarDay } from '@/lib/relative-time';
-
+import {
+  communityFeed,
+  type Community,
+  type CommunityPostSort,
+} from '@/features/communities/types';
 import { formatCount } from '@/lib/format';
-import { CommunityPostCard } from './components/CommunityPostCard';
+import { calendarDay } from '@/lib/relative-time';
+import { coverClass } from '@/mocks/people';
+
 import { NewCommunityPostDialog } from './components/NewCommunityPostDialog';
+import { PostFeed, PostSortPicker } from './components/PostFeed';
 
 /** One community: its banner and about block, then its posts. */
 export default function CommunityPage() {
   const { slug } = useParams<{ slug: string }>();
-  const community = useCommunitiesStore((state) => state.communities.find((c) => c.slug === slug));
-  const posts = useCommunitiesStore((state) => state.posts);
-  const toggleJoin = useCommunitiesStore((state) => state.toggleJoin);
-  const [isComposing, setIsComposing] = useState(false);
+  const { community, lookup, reload } = useCommunity(slug);
 
-  if (community === undefined) {
+  if (lookup.status === 'missing') {
     return (
       <EmptyState
         icon={<Users className="size-6" />}
@@ -36,7 +40,31 @@ export default function CommunityPage() {
     );
   }
 
-  const own = posts.filter((p) => p.communitySlug === community.slug);
+  if (community === undefined) {
+    return lookup.status === 'error' ? (
+      <InlineAlert
+        message={lookup.error ?? 'This community could not be loaded.'}
+        actionLabel="Retry"
+        onAction={reload}
+      />
+    ) : (
+      <div className="flex justify-center py-16">
+        <Spinner />
+      </div>
+    );
+  }
+
+  // Keyed by slug so moving between communities starts each one fresh.
+  return <CommunityView key={community.slug} community={community} />;
+}
+
+function CommunityView({ community }: { community: Community }) {
+  const [sort, setSort] = useState<CommunityPostSort>('hot');
+  const [isComposing, setIsComposing] = useState(false);
+  const feed = useCommunityPostFeed(communityFeed(community.slug), sort);
+  const { isBusy, toggle } = useMembership(community.slug);
+  const error = useCommunitiesStore((state) => state.error);
+  const clearError = useCommunitiesStore((state) => state.clearError);
 
   return (
     <div className="flex w-full flex-col">
@@ -49,7 +77,6 @@ export default function CommunityPage() {
           <ArrowLeft className="size-5" />
         </Link>
         <h1 className="font-heading text-h1 text-on-surface truncate">{community.name}</h1>
-        <SampleBadge />
       </header>
 
       <div className={`h-28 ${coverClass(community.slug)}`} />
@@ -69,15 +96,16 @@ export default function CommunityPage() {
               Post
             </Button>
             <Button
-              variant={community.isJoined ? 'outline' : 'primary'}
+              variant={community.isMember ? 'outline' : 'primary'}
+              isLoading={isBusy}
               leadingIcon={
-                community.isJoined ? <Check className="size-4" /> : <Plus className="size-4" />
+                community.isMember ? <Check className="size-4" /> : <Plus className="size-4" />
               }
               onClick={() => {
-                toggleJoin(community.slug);
+                toggle(!community.isMember);
               }}
             >
-              {community.isJoined ? 'Joined' : 'Join'}
+              {community.isMember ? 'Joined' : 'Join'}
             </Button>
           </div>
         </div>
@@ -85,10 +113,22 @@ export default function CommunityPage() {
           {community.name}
         </h2>
         <p className="text-on-surface-variant text-[14px]">
-          c/{community.slug} · {formatCount(community.members)} members ·{' '}
-          <span className="text-tertiary">{community.online} online</span>
+          c/{community.slug} · {formatCount(community.memberCount)} members
+          {community.onlineCount !== null && (
+            <>
+              {' · '}
+              <span className="text-tertiary">{community.onlineCount} online</span>
+            </>
+          )}
         </p>
-        <p className="text-on-surface mt-3 text-[15px] leading-relaxed">{community.description}</p>
+        {community.tagline !== '' && (
+          <p className="text-on-surface-variant mt-1 text-[14px]">{community.tagline}</p>
+        )}
+        {community.description !== '' && (
+          <p className="text-on-surface mt-3 text-[15px] leading-relaxed whitespace-pre-wrap">
+            {community.description}
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap gap-1.5">
           {community.tags.map((tag) => (
             <span
@@ -102,34 +142,37 @@ export default function CommunityPage() {
             Since {calendarDay(community.createdAt)}
           </span>
         </div>
-        <details className="group mt-3">
-          <summary className="text-on-surface-variant hover:text-on-surface flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold">
-            <ScrollText aria-hidden className="size-4" />
-            Rules ({community.rules.length})
-          </summary>
-          <ol className="text-on-surface-variant mt-2 list-decimal space-y-1 pl-6 text-[13px]">
-            {community.rules.map((rule) => (
-              <li key={rule}>{rule}</li>
-            ))}
-          </ol>
-        </details>
+        {community.rules.length > 0 && (
+          <details className="group mt-3">
+            <summary className="text-on-surface-variant hover:text-on-surface flex cursor-pointer items-center gap-1.5 text-[13px] font-semibold">
+              <ScrollText aria-hidden className="size-4" />
+              Rules ({community.rules.length})
+            </summary>
+            <ol className="text-on-surface-variant mt-2 list-decimal space-y-1 pl-6 text-[13px]">
+              {community.rules.map((rule, index) => (
+                <li key={`${String(index)}-${rule}`}>{rule}</li>
+              ))}
+            </ol>
+          </details>
+        )}
       </div>
 
-      {own.length === 0 ? (
-        <EmptyState
-          icon={<PenLine className="size-6" />}
-          title="Nothing posted yet"
-          description="Be the first to start a thread here."
-        />
-      ) : (
-        <ul className="stagger flex flex-col gap-3 p-4">
-          {own.map((post) => (
-            <li key={post.id} className="animate-fade-up">
-              <CommunityPostCard post={post} community={community} inCommunity />
-            </li>
-          ))}
-        </ul>
+      {error !== null && (
+        <InlineAlert message={error} actionLabel="Dismiss" onAction={clearError} />
       )}
+
+      <PostSortPicker value={sort} onChange={setSort} className="mx-4 mt-4" />
+      <PostFeed
+        feed={feed}
+        inCommunity
+        empty={
+          <EmptyState
+            icon={<PenLine className="size-6" />}
+            title="Nothing posted yet"
+            description="Be the first to start a thread here."
+          />
+        }
+      />
 
       {isComposing && (
         <NewCommunityPostDialog

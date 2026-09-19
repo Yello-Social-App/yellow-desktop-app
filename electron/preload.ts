@@ -26,10 +26,17 @@ import type {
   ChatSocketState,
   CommentPage,
   CommentResponse,
+  CommunityPage,
+  CommunityPostPage,
+  CommunityPostResponse,
+  CommunityPostVote,
+  CommunityResponse,
+  CommunitySlugRequest,
   ConversationIdRequest,
   ConversationPage,
   ConversationResponse,
   CreateCommentRequest,
+  CreateCommunityPostRequest,
   CreateConversationRequest,
   CreatePostRequest,
   DiscardImagesRequest,
@@ -46,12 +53,17 @@ import type {
   FriendUserRequest,
   IpcResult,
   ListCommentsRequest,
+  ListCommunitiesRequest,
+  ListCommunityPostsRequest,
   ListConversationsRequest,
   ListFriendRequestsRequest,
+  ListFrontPagePostsRequest,
   ListMessagesRequest,
   LinkPreviewRequest,
   LinkPreviewResponse,
   ListNotificationsRequest,
+  ListProjectTechRequest,
+  ListProjectsRequest,
   ListReactorsRequest,
   LoginRequest,
   MarkAllNotificationsRead,
@@ -64,6 +76,11 @@ import type {
   PageRequest,
   PostIdRequest,
   PostResponse,
+  ProjectIdRequest,
+  ProjectLike,
+  ProjectPage,
+  ProjectResponse,
+  PublishProjectRequest,
   ProfileResponse,
   PublicUserRequest,
   ReactionSummary,
@@ -73,6 +90,7 @@ import type {
   RegisterRequest,
   RegisterResponse,
   RepostRequest,
+  SearchUsersRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
   SendChatMessageRequest,
@@ -80,10 +98,12 @@ import type {
   ShareLinkCopiedResponse,
   StageImagesRequest,
   StageImagesResponse,
+  TechCountList,
   ToggleReactionRequest,
   TypingRequest,
   UnreadCount,
   UnregisterDeviceRequest,
+  UpdateProfileRequest,
   UpdateCommentRequest,
   UpdateNotificationPreferencesRequest,
   UpdatePostRequest,
@@ -91,6 +111,7 @@ import type {
   UserPostsResponse,
   VerifyOtpRequest,
   VerifyResetOtpRequest,
+  VoteCommunityPostRequest,
   WindowState,
   YelloBridge,
 } from '../shared/ipc-types';
@@ -186,6 +207,10 @@ const bridge: YelloBridge = {
       invoke<UserPostsResponse>(IPC_CHANNELS.PROFILE_LIST_POSTS, request),
     getUser: (request: PublicUserRequest) =>
       invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_GET_USER, request),
+    update: (request: UpdateProfileRequest) =>
+      invoke<ProfileResponse>(IPC_CHANNELS.PROFILE_UPDATE, request),
+    searchUsers: (request: SearchUsersRequest) =>
+      invoke<FriendEntryPage>(IPC_CHANNELS.PROFILE_SEARCH_USERS, request),
   },
   chat: {
     listConversations: (request: ListConversationsRequest) =>
@@ -241,6 +266,38 @@ const bridge: YelloBridge = {
         ipcRenderer.removeListener(IPC_CHANNELS.NOTIFICATIONS_EVENT, handler);
       };
     },
+  },
+  communities: {
+    list: (request: ListCommunitiesRequest) =>
+      invoke<CommunityPage>(IPC_CHANNELS.COMMUNITIES_LIST, request),
+    get: (request: CommunitySlugRequest) =>
+      invoke<CommunityResponse>(IPC_CHANNELS.COMMUNITIES_GET, request),
+    join: (request: CommunitySlugRequest) =>
+      invoke<CommunityResponse>(IPC_CHANNELS.COMMUNITIES_JOIN, request),
+    leave: (request: CommunitySlugRequest) =>
+      invoke<CommunityResponse>(IPC_CHANNELS.COMMUNITIES_LEAVE, request),
+    listPosts: (request: ListCommunityPostsRequest) =>
+      invoke<CommunityPostPage>(IPC_CHANNELS.COMMUNITIES_LIST_POSTS, request),
+    frontPage: (request: ListFrontPagePostsRequest) =>
+      invoke<CommunityPostPage>(IPC_CHANNELS.COMMUNITIES_FRONT_PAGE, request),
+    createPost: (request: CreateCommunityPostRequest) =>
+      invoke<CommunityPostResponse>(IPC_CHANNELS.COMMUNITIES_CREATE_POST, request),
+    vote: (request: VoteCommunityPostRequest) =>
+      invoke<CommunityPostVote>(IPC_CHANNELS.COMMUNITIES_VOTE, request),
+  },
+  showcase: {
+    list: (request: ListProjectsRequest) =>
+      invoke<ProjectPage>(IPC_CHANNELS.SHOWCASE_LIST, request),
+    tech: (request: ListProjectTechRequest) =>
+      invoke<TechCountList>(IPC_CHANNELS.SHOWCASE_TECH, request),
+    get: (request: ProjectIdRequest) => invoke<ProjectResponse>(IPC_CHANNELS.SHOWCASE_GET, request),
+    recordView: (request: ProjectIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.SHOWCASE_RECORD_VIEW, request),
+    publish: (request: PublishProjectRequest) =>
+      invoke<ProjectResponse>(IPC_CHANNELS.SHOWCASE_PUBLISH, request),
+    like: (request: ProjectIdRequest) => invoke<ProjectLike>(IPC_CHANNELS.SHOWCASE_LIKE, request),
+    unlike: (request: ProjectIdRequest) =>
+      invoke<ProjectLike>(IPC_CHANNELS.SHOWCASE_UNLIKE, request),
   },
   links: {
     preview: (request: LinkPreviewRequest) =>

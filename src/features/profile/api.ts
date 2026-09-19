@@ -1,10 +1,14 @@
 /**
- * Profile reads, as seen by the renderer: one allowlisted IPC call each.
- *
- * There is no profile edit or avatar upload on this API, so there is nothing
- * here that writes.
+ * Profiles as seen by the renderer — reads, and the caller's own edit: one
+ * allowlisted IPC call each.
  */
-import type { IpcError, User, UserPostsResponse } from '@shared/ipc-types';
+import type {
+  IpcError,
+  StagedImage,
+  UpdateProfileRequest,
+  User,
+  UserPostsResponse,
+} from '@shared/ipc-types';
 
 import { ipc } from '@/lib/ipc';
 import { fail, ok, type Result } from '@/lib/result';
@@ -28,4 +32,31 @@ export async function fetchUserPosts(
 ): Promise<Result<UserPostsResponse, ProfileError>> {
   const result = await ipc.listUserPosts({ userId, page, size });
   return result.ok ? ok(result.data) : fail(result.error);
+}
+
+/** Edits the caller's own profile; answers with the profile as it now stands. */
+export async function updateProfile(
+  request: UpdateProfileRequest,
+): Promise<Result<User, ProfileError>> {
+  const result = await ipc.updateProfile(request);
+  return result.ok ? ok(result.data.user) : fail(result.error);
+}
+
+/**
+ * Opens the OS picker for one profile photo or cover and stages it for
+ * preview. `null` when the picker was dismissed, which is not an error.
+ */
+export async function stageProfileImage(
+  purpose: 'avatar' | 'cover',
+): Promise<Result<StagedImage | null, ProfileError>> {
+  const result = await ipc.stageImages({ purpose });
+  return result.ok ? ok(result.data.images[0] ?? null) : fail(result.error);
+}
+
+/** Frees a staged photo the user replaced, removed, or never saved. */
+export async function discardProfileImages(tokens: readonly string[]): Promise<void> {
+  if (tokens.length === 0) {
+    return;
+  }
+  await ipc.discardImages({ tokens: [...tokens] });
 }

@@ -1,8 +1,11 @@
-import { Plus, Sparkles } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { LayoutGrid, Plus, Sparkles } from 'lucide-react';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
-import { SampleBadge } from '@/components/ui/SampleBadge';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { InlineAlert } from '@/components/ui/InlineAlert';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { useProjectList, useProjectTech } from '@/features/showcase/hooks';
 import { useShowcaseStore } from '@/features/showcase/store';
 import type { ShowcaseSort } from '@/features/showcase/types';
 import { cn } from '@/lib/cn';
@@ -16,47 +19,24 @@ const SORTS: readonly { value: ShowcaseSort; label: string }[] = [
   { value: 'stars', label: 'Most starred' },
 ];
 
+const FEATURED_STRIP_SIZE = 10;
+
 /** The showcase: a featured strip, then the grid with sort and tech filters. */
 export default function ShowcasePage() {
-  const projects = useShowcaseStore((state) => state.projects);
   const [sort, setSort] = useState<ShowcaseSort>('trending');
-  const [tech, setTech] = useState<string | null>(null);
+  const [tech, setTech] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const techs = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const project of projects) {
-      for (const item of project.tech) {
-        counts.set(item, (counts.get(item) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name]) => name);
-  }, [projects]);
-
-  const sorted = useMemo(() => {
-    const filtered = tech === null ? projects : projects.filter((p) => p.tech.includes(tech));
-    return [...filtered].sort((a, b) => {
-      if (sort === 'newest') {
-        return b.createdAt.localeCompare(a.createdAt);
-      }
-      if (sort === 'stars') {
-        return b.stars - a.stars;
-      }
-      return b.likes + b.views / 50 - (a.likes + a.views / 50);
-    });
-  }, [projects, sort, tech]);
-
-  const featured = projects.filter((p) => p.featured);
+  const techs = useProjectTech();
+  const featured = useProjectList({ sort: 'trending', featured: true, size: FEATURED_STRIP_SIZE });
+  const grid = useProjectList({ sort, tech });
+  const error = useShowcaseStore((state) => state.error);
+  const clearError = useShowcaseStore((state) => state.clearError);
 
   return (
     <div className="flex w-full flex-col">
       <header className="glass border-outline-variant sticky top-0 z-10 border-b">
         <div className="flex items-center gap-3 px-5 py-3">
           <h1 className="font-heading text-h1 text-on-surface">Showcase</h1>
-          <SampleBadge />
           <Button
             size="sm"
             leadingIcon={<Plus className="size-4" />}
@@ -70,14 +50,18 @@ export default function ShowcasePage() {
         </div>
       </header>
 
-      {featured.length > 0 && tech === null && (
+      {error !== null && (
+        <InlineAlert message={error} actionLabel="Dismiss" onAction={clearError} />
+      )}
+
+      {featured.projects.length > 0 && tech === undefined && (
         <section className="border-outline-variant border-b py-4">
           <h2 className="text-on-surface-variant flex items-center gap-1.5 px-5 pb-3 text-[11px] font-semibold tracking-wider uppercase">
             <Sparkles aria-hidden className="text-primary size-3.5" />
             Featured this week
           </h2>
           <ul className="flex gap-3 overflow-x-auto px-5 pb-1">
-            {featured.map((project) => (
+            {featured.projects.map((project) => (
               <li key={project.id}>
                 <ProjectCard project={project} featured />
               </li>
@@ -115,32 +99,64 @@ export default function ShowcasePage() {
         <div className="flex flex-wrap gap-1.5">
           {techs.map((item) => (
             <button
-              key={item}
+              key={item.name}
               type="button"
-              aria-pressed={tech === item}
+              aria-pressed={tech === item.name}
+              title={`${String(item.projectCount)} projects`}
               onClick={() => {
-                setTech(tech === item ? null : item);
+                setTech(tech === item.name ? undefined : item.name);
               }}
               className={cn(
                 'transition-tone rounded-full px-2.5 py-1 text-[12px] font-semibold',
-                tech === item
+                tech === item.name
                   ? 'bg-violet text-on-violet'
                   : 'bg-surface-container-high text-on-surface-variant hover:text-on-surface',
               )}
             >
-              {item}
+              {item.name}
             </button>
           ))}
         </div>
       </div>
 
-      <ul className="stagger grid grid-cols-1 gap-3 p-5 sm:grid-cols-2">
-        {sorted.map((project) => (
-          <li key={project.id} className="animate-fade-up">
-            <ProjectCard project={project} />
-          </li>
-        ))}
-      </ul>
+      {grid.projects.length === 0 && (grid.status === 'loading' || grid.status === 'idle') ? (
+        <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2" aria-busy>
+          <Skeleton className="h-60 rounded-2xl" />
+          <Skeleton className="h-60 rounded-2xl" />
+        </div>
+      ) : grid.projects.length === 0 && grid.status === 'error' ? (
+        <InlineAlert
+          message={grid.error ?? 'Projects could not be loaded.'}
+          actionLabel="Retry"
+          onAction={grid.reload}
+        />
+      ) : grid.projects.length === 0 ? (
+        <EmptyState
+          icon={<LayoutGrid className="size-6" />}
+          title={tech === undefined ? 'No projects yet' : `No ${tech} projects yet`}
+          description="Built something? Be the first to show it."
+        />
+      ) : (
+        <>
+          <ul className="stagger grid grid-cols-1 gap-3 p-5 sm:grid-cols-2">
+            {grid.projects.map((project) => (
+              <li key={project.id} className="animate-fade-up">
+                <ProjectCard project={project} />
+              </li>
+            ))}
+          </ul>
+          {grid.error !== null && (
+            <InlineAlert message={grid.error} actionLabel="Retry" onAction={grid.loadMore} />
+          )}
+          {grid.hasMore && grid.error === null && (
+            <div className="pb-lg flex justify-center">
+              <Button variant="secondary" isLoading={grid.isLoadingMore} onClick={grid.loadMore}>
+                {grid.isLoadingMore ? 'Loading…' : 'Show more'}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
 
       {isSubmitting && (
         <SubmitProjectDialog

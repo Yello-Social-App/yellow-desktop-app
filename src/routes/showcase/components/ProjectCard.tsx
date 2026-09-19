@@ -3,7 +3,7 @@ import { memo } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
-import { useShowcaseStore } from '@/features/showcase/store';
+import { useProjectLike } from '@/features/showcase/hooks';
 import type { Project } from '@/features/showcase/types';
 import { cn } from '@/lib/cn';
 import { coverClass } from '@/mocks/people';
@@ -22,7 +22,7 @@ export const ProjectCard = memo(function ProjectCard({
   project,
   featured = false,
 }: ProjectCardProps) {
-  const toggleLike = useShowcaseStore((state) => state.toggleLike);
+  const like = useProjectLike(project.id);
 
   return (
     <article
@@ -42,7 +42,7 @@ export const ProjectCard = memo(function ProjectCard({
         <span className="text-[48px] drop-shadow-lg transition-transform duration-500 group-hover/card:scale-110">
           {project.emoji}
         </span>
-        {project.featured && (
+        {project.isFeatured && (
           <span className="absolute top-2 left-2 rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur">
             Featured
           </span>
@@ -82,33 +82,32 @@ export const ProjectCard = memo(function ProjectCard({
             {displayName(project.author)}
           </span>
           <span className="text-on-surface-variant ml-auto flex items-center gap-2 text-[12px] tabular-nums">
-            <span className="flex items-center gap-0.5" title="GitHub stars">
-              <Star aria-hidden className="size-3.5" />
-              {formatCount(project.stars)}
-            </span>
+            {/* Null until the repo is checked, or when it is not on GitHub. */}
+            {project.starCount !== null && (
+              <span className="flex items-center gap-0.5" title="GitHub stars">
+                <Star aria-hidden className="size-3.5" />
+                {formatCount(project.starCount)}
+              </span>
+            )}
             <span className="flex items-center gap-0.5" title="Views">
               <Eye aria-hidden className="size-3.5" />
-              {formatCount(project.views)}
+              {formatCount(project.viewCount)}
             </span>
             <button
               type="button"
-              aria-pressed={project.viewerLiked}
-              aria-label={project.viewerLiked ? 'Unlike' : 'Like'}
-              onClick={() => {
-                toggleLike(project.id);
-              }}
+              aria-pressed={project.isLiked}
+              aria-label={project.isLiked ? 'Unlike' : 'Like'}
+              disabled={like.isBusy}
+              onClick={like.toggle}
               className={cn(
                 'transition-tone flex items-center gap-0.5 rounded-full px-1.5 py-0.5',
-                project.viewerLiked
+                project.isLiked
                   ? 'text-secondary'
                   : 'hover:bg-secondary-fixed hover:text-secondary',
               )}
             >
-              <Heart
-                aria-hidden
-                className={cn('size-3.5', project.viewerLiked && 'fill-current')}
-              />
-              {formatCount(project.likes)}
+              <Heart aria-hidden className={cn('size-3.5', project.isLiked && 'fill-current')} />
+              {formatCount(project.likeCount)}
             </button>
           </span>
         </div>

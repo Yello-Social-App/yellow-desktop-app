@@ -1,5 +1,5 @@
 import { CalendarDays } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { User } from '@shared/ipc-types';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -16,7 +16,34 @@ interface ProfileHeaderProps {
 }
 
 /**
- * The banner-and-identity block: a dark brand gradient, the avatar
+ * The cover image, over the brand gradient it replaces — which also shows
+ * through when the image fails to load, as the avatar falls back to initials.
+ */
+function Cover({ url }: { url: string | undefined }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showImage = url !== undefined && failedUrl !== url;
+
+  return (
+    <div
+      aria-hidden
+      className="from-primary-fixed-dim via-surface-container to-surface-container-low relative h-36 w-full overflow-hidden bg-gradient-to-br"
+    >
+      {showImage && (
+        <img
+          src={url}
+          alt=""
+          className="size-full object-cover"
+          onError={() => {
+            setFailedUrl(url);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The banner-and-identity block: the cover (or a brand gradient), the avatar
  * overlapping it, then name, handle, bio and the joined date.
  */
 export function ProfileHeader({
@@ -28,10 +55,7 @@ export function ProfileHeader({
 }: ProfileHeaderProps) {
   return (
     <header className="border-outline-variant border-b">
-      <div
-        aria-hidden
-        className="from-primary-fixed-dim via-surface-container to-surface-container-low h-36 w-full bg-gradient-to-br"
-      />
+      <Cover url={user.coverUrl} />
 
       <div className="px-lg pb-lg">
         <div className="gap-md -mt-12 flex items-end justify-between">

@@ -1,5 +1,4 @@
 import { ArrowLeft, ExternalLink, Eye, GitBranch, Heart, Star } from 'lucide-react';
-import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
@@ -7,8 +6,11 @@ import { RichText } from '@/components/content/RichText';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { SampleBadge } from '@/components/ui/SampleBadge';
+import { InlineAlert } from '@/components/ui/InlineAlert';
+import { Spinner } from '@/components/ui/Spinner';
+import { useProject, useProjectLike } from '@/features/showcase/hooks';
 import { useShowcaseStore } from '@/features/showcase/store';
+import type { Project } from '@/features/showcase/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { coverClass } from '@/mocks/people';
@@ -20,17 +22,9 @@ import { formatCount } from '@/lib/format';
 /** One project, in full. */
 export default function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const project = useShowcaseStore((state) => state.projects.find((p) => p.id === projectId));
-  const toggleLike = useShowcaseStore((state) => state.toggleLike);
-  const view = useShowcaseStore((state) => state.view);
+  const { project, lookup, reload } = useProject(projectId);
 
-  useEffect(() => {
-    if (projectId !== undefined) {
-      view(projectId);
-    }
-  }, [projectId, view]);
-
-  if (project === undefined) {
+  if (lookup.status === 'missing') {
     return (
       <EmptyState
         icon={<Star className="size-6" />}
@@ -45,7 +39,28 @@ export default function ProjectPage() {
     );
   }
 
-  // Computed past the not-found return, so `project` is known to exist.
+  if (project === undefined) {
+    return lookup.status === 'error' ? (
+      <InlineAlert
+        message={lookup.error ?? 'This project could not be loaded.'}
+        actionLabel="Retry"
+        onAction={reload}
+      />
+    ) : (
+      <div className="flex justify-center py-16">
+        <Spinner />
+      </div>
+    );
+  }
+
+  return <ProjectView project={project} />;
+}
+
+function ProjectView({ project }: { project: Project }) {
+  const like = useProjectLike(project.id);
+  const error = useShowcaseStore((state) => state.error);
+  const clearError = useShowcaseStore((state) => state.clearError);
+
   const [descriptionLink] = extractLinks(project.description);
 
   const external = (href: string, label: string, icon: React.ReactNode) => (
@@ -72,8 +87,11 @@ export default function ProjectPage() {
           <ArrowLeft className="size-5" />
         </Link>
         <h1 className="font-heading text-h1 text-on-surface truncate">{project.name}</h1>
-        <SampleBadge />
       </header>
+
+      {error !== null && (
+        <InlineAlert message={error} actionLabel="Dismiss" onAction={clearError} />
+      )}
 
       <div className={cn('grid h-52 place-items-center', coverClass(project.id))}>
         <span className="text-[84px] drop-shadow-2xl">{project.emoji}</span>
@@ -93,23 +111,24 @@ export default function ProjectPage() {
           {project.liveUrl !== undefined &&
             external(project.liveUrl, 'Live site', <ExternalLink className="size-4" />)}
           <Button
-            variant={project.viewerLiked ? 'secondary' : 'primary'}
-            leadingIcon={<Heart className={cn('size-4', project.viewerLiked && 'fill-current')} />}
-            onClick={() => {
-              toggleLike(project.id);
-            }}
-            className={project.viewerLiked ? 'text-secondary' : ''}
+            variant={project.isLiked ? 'secondary' : 'primary'}
+            leadingIcon={<Heart className={cn('size-4', project.isLiked && 'fill-current')} />}
+            disabled={like.isBusy}
+            onClick={like.toggle}
+            className={project.isLiked ? 'text-secondary' : ''}
           >
-            {project.viewerLiked ? 'Liked' : 'Like'} · {formatCount(project.likes)}
+            {project.isLiked ? 'Liked' : 'Like'} · {formatCount(project.likeCount)}
           </Button>
           <span className="text-on-surface-variant ml-auto flex items-center gap-3 text-[13px] tabular-nums">
-            <span className="flex items-center gap-1">
-              <Star aria-hidden className="size-4" />
-              {formatCount(project.stars)}
-            </span>
-            <span className="flex items-center gap-1">
+            {project.starCount !== null && (
+              <span className="flex items-center gap-1" title="GitHub stars">
+                <Star aria-hidden className="size-4" />
+                {formatCount(project.starCount)}
+              </span>
+            )}
+            <span className="flex items-center gap-1" title="Views">
               <Eye aria-hidden className="size-4" />
-              {formatCount(project.views)}
+              {formatCount(project.viewCount)}
             </span>
           </span>
         </div>

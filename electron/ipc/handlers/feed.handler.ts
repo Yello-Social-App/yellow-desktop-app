@@ -5,8 +5,8 @@
  * previous response's `nextCursor` rather than an offset, so a post arriving
  * mid-scroll cannot shift a page boundary and duplicate a row.
  *
- * Images are staged before they are posted, the same two-step shape the avatar
- * upload uses: the picker runs here, the bytes stay here (staged-images.ts),
+ * Images are staged before they are posted — post images, and the avatar and
+ * cover a profile edit sends (profile.handler.ts): the picker runs here, the bytes stay here (staged-images.ts),
  * and the renderer gets a token and a thumbnail. It never names a path (OWASP
  * A01) and never holds the bytes — and the user gets to look at what they
  * picked before it is published.
@@ -43,12 +43,19 @@ import {
   stageImagesResponseSchema,
   type AcknowledgedResponse,
   type FeedResponse,
+  type ImagePurpose,
   type IpcResult,
   type PostResponse,
   type StageImagesResponse,
 } from '../../../shared/ipc-types';
 
 const log = createLogger('ipc.feed');
+
+const PICKER_TITLES: Readonly<Record<ImagePurpose, string>> = {
+  post: 'Choose images for your post',
+  avatar: 'Choose a profile photo',
+  cover: 'Choose a cover image',
+};
 
 const cursorPageSchema = z.object({
   content: z
@@ -93,10 +100,12 @@ export function registerFeedHandlers(): void {
     IPC_CHANNELS.FEED_STAGE_IMAGES,
     stageImagesRequestSchema,
     async (request, event): Promise<IpcResult<StageImagesResponse>> => {
+      const purpose = request?.purpose ?? 'post';
+      const isPost = purpose === 'post';
       const paths = await pickImageFiles(event, {
-        title: 'Choose images for your post',
-        multiple: true,
-        limit: POST_MAX_IMAGES,
+        title: PICKER_TITLES[purpose],
+        multiple: isPost,
+        limit: isPost ? POST_MAX_IMAGES : 1,
       });
 
       if (paths.length === 0) {
@@ -106,7 +115,8 @@ export function registerFeedHandlers(): void {
       // Whatever is already staged is already attached somewhere, so the room
       // left here is the room left there — and an editor may have less still,
       // because of the images its post already carries.
-      const capacity = Math.min(request?.limit ?? POST_MAX_IMAGES, remainingStagingCapacity());
+      const wanted = isPost ? (request?.limit ?? POST_MAX_IMAGES) : 1;
+      const capacity = Math.min(wanted, remainingStagingCapacity());
       const accepted = paths.slice(0, capacity);
       const images = [];
 

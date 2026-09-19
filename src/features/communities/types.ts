@@ -1,39 +1,67 @@
 /**
  * Community shapes — Reddit-style groups with their own posts.
  *
- * No API yet: the store seeds from src/mocks and keeps joins and votes in
- * memory for the session. The shapes are written the way an endpoint would
- * most likely return them, so wiring one later is a store change only.
+ * The records come from the API (see @shared/ipc-types). What lives here is
+ * the paging, the names the screens use for a list, and the one rule a vote
+ * button needs: pressing the arrow you already hold clears it.
  */
-import type { Author } from '@shared/ipc-types';
+import {
+  COMMUNITY_POST_BODY_MAX,
+  COMMUNITY_POST_TITLE_MAX,
+  COMMUNITY_SLUG_PATTERN,
+  type Community,
+  type CommunityMembership,
+  type CommunityPost,
+  type CommunityPostScope,
+  type CommunityPostSort,
+  type CommunitySort,
+  type CommunitySummary,
+  type Vote,
+} from '@shared/ipc-types';
 
-export interface Community {
-  slug: string;
-  name: string;
-  tagline: string;
-  description: string;
-  emoji: string;
-  members: number;
-  online: number;
-  tags: string[];
-  rules: string[];
-  createdAt: string;
-  isJoined: boolean;
+export const COMMUNITIES_PAGE_SIZE = 20;
+export const COMMUNITY_POSTS_PAGE_SIZE = 20;
+
+/**
+ * Which post list: the front page (everything, or only joined communities),
+ * or one community's own, as `c/<slug>`. A string rather than an object so a
+ * hook can depend on it directly.
+ */
+export type PostFeedSource = CommunityPostScope | `c/${string}`;
+
+export function communityFeed(slug: string): PostFeedSource {
+  return `c/${slug}`;
 }
 
-export interface CommunityPost {
-  id: string;
-  communitySlug: string;
-  author: Author;
-  title: string;
-  body: string;
-  tag: string;
-  score: number;
-  commentCount: number;
-  createdAt: string;
-  /** -1, 0 or 1 — Reddit's two-way vote. */
-  viewerVote: -1 | 0 | 1;
+export interface DirectoryQuery {
+  sort: CommunitySort;
+  membership?: CommunityMembership | undefined;
+  q?: string;
+  size?: number;
 }
 
-export const COMMUNITY_POST_TITLE_MAX = 200;
-export const COMMUNITY_POST_BODY_MAX = 5000;
+export const POST_SORT_LABELS: Record<CommunityPostSort, string> = {
+  hot: 'Hot',
+  new: 'New',
+  top: 'Top',
+};
+
+/** The vote to send when an arrow is pressed: the same arrow again clears it. */
+export function nextVote(current: Vote, pressed: 1 | -1): Vote {
+  return current === pressed ? 0 : pressed;
+}
+
+export function isCommunitySlug(value: string | undefined): value is string {
+  return value !== undefined && COMMUNITY_SLUG_PATTERN.test(value);
+}
+
+export { COMMUNITY_POST_BODY_MAX, COMMUNITY_POST_TITLE_MAX };
+export type {
+  Community,
+  CommunityMembership,
+  CommunityPost,
+  CommunityPostSort,
+  CommunitySort,
+  CommunitySummary,
+  Vote,
+};

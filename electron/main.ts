@@ -24,6 +24,7 @@ import { apiBaseUrlFromEnvironment, chatBaseUrlFromEnvironment } from './config'
 import { registerAuthHandlers } from './ipc/handlers/auth.handler';
 import { registerChatHandlers } from './ipc/handlers/chat.handler';
 import { registerCommentHandlers } from './ipc/handlers/comments.handler';
+import { registerCommunityHandlers } from './ipc/handlers/communities.handler';
 import { registerFeedHandlers } from './ipc/handlers/feed.handler';
 import { registerFriendHandlers } from './ipc/handlers/friends.handler';
 import { registerFsHandlers } from './ipc/handlers/fs.handler';
@@ -32,6 +33,7 @@ import { registerNotificationHandlers } from './ipc/handlers/notifications.handl
 import { registerPostHandlers } from './ipc/handlers/posts.handler';
 import { registerProfileHandlers } from './ipc/handlers/profile.handler';
 import { registerReactionHandlers } from './ipc/handlers/reactions.handler';
+import { registerShowcaseHandlers } from './ipc/handlers/showcase.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
 import { chatSocket } from './chat/socket';
 import { notificationWatcher } from './notifications/watcher';
@@ -278,6 +280,8 @@ function bootstrap(): void {
       registerFriendHandlers();
       registerChatHandlers();
       registerNotificationHandlers();
+      registerCommunityHandlers();
+      registerShowcaseHandlers();
       registerProfileHandlers();
       registerWindowHandlers();
 

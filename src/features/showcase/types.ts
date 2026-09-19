@@ -1,32 +1,54 @@
 /**
  * Project showcase shapes — a KhmerCoder-style gallery of what people built.
  *
- * No API yet: seeded from src/mocks, likes and submissions kept in memory.
+ * The records come from the API (see @shared/ipc-types). What lives here is
+ * the paging, the query a grid is drawn from, and the form's link rule.
  */
-import type { Author } from '@shared/ipc-types';
+import {
+  PROJECT_DESCRIPTION_MAX,
+  PROJECT_EMOJIS,
+  PROJECT_NAME_MAX,
+  PROJECT_TAGLINE_MAX,
+  PROJECT_TECH_MAX,
+  PROJECT_TECH_NAME_MAX,
+  PROJECT_URL_MAX,
+  type Project,
+  type ProjectEmoji,
+  type ProjectSort,
+  type TechCount,
+} from '@shared/ipc-types';
 
-export interface Project {
-  id: string;
-  name: string;
-  tagline: string;
-  description: string;
-  /** Stands in for cover art until uploads exist. */
-  emoji: string;
-  tech: string[];
-  author: Author;
-  repoUrl: string | undefined;
-  liveUrl: string | undefined;
-  stars: number;
-  likes: number;
-  views: number;
-  createdAt: string;
-  viewerLiked: boolean;
-  featured: boolean;
+export const PROJECTS_PAGE_SIZE = 20;
+export const PROJECT_TECH_CHIPS = 10;
+
+export type ShowcaseSort = ProjectSort;
+
+export interface ProjectQuery {
+  sort: ProjectSort;
+  tech?: string | undefined;
+  featured?: boolean | undefined;
+  size?: number | undefined;
 }
 
-export const PROJECT_NAME_MAX = 60;
-export const PROJECT_TAGLINE_MAX = 120;
-export const PROJECT_DESCRIPTION_MAX = 2000;
-export const PROJECT_TECH_MAX = 6;
+/**
+ * Accepts an https link only. The server refuses anything else, including
+ * plain http, so the form says so before a request is spent on it.
+ */
+export function httpsUrlOrNull(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'https:' && url.href.length <= PROJECT_URL_MAX ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
-export type ShowcaseSort = 'trending' | 'newest' | 'stars';
+export {
+  PROJECT_DESCRIPTION_MAX,
+  PROJECT_EMOJIS,
+  PROJECT_NAME_MAX,
+  PROJECT_TAGLINE_MAX,
+  PROJECT_TECH_MAX,
+  PROJECT_TECH_NAME_MAX,
+};
+export type { Project, ProjectEmoji, TechCount };
