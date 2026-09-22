@@ -29,7 +29,6 @@ import {
   useRestrictions,
   type CollapseReason,
 } from '@/features/moderation/hooks';
-import { useModerationStore } from '@/features/moderation/store';
 import { reasonLabel } from '@/features/moderation/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
@@ -112,8 +111,6 @@ export const PostCard = memo(function PostCard({
   const navigate = useNavigate();
   const moderation = usePostModeration(post);
   const restrictions = useRestrictions();
-  const showPost = useModerationStore((state) => state.showPost);
-  const hidePost = useModerationStore((state) => state.hidePost);
 
   useEffect(() => {
     if (notice === null) {
@@ -154,7 +151,7 @@ export const PostCard = memo(function PostCard({
         }
         handle={handleOf(post.author)}
         onShow={() => {
-          showPost(post.id);
+          void restrictions.showPost(post.id);
         }}
       />
     );
@@ -296,7 +293,7 @@ export const PostCard = memo(function PostCard({
                 type="button"
                 onClick={() => {
                   closeMenu();
-                  hidePost(post.id);
+                  void restrictions.hidePost(post.id);
                 }}
                 className={MENU_ITEM_CLASS}
               >

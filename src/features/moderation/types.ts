@@ -2,14 +2,26 @@
  * Reporting a post, and the viewer's own safety controls: hide, mute, block.
  *
  * The reason is an allowlisted enum and the details are length-capped before
- * anything is sent (OWASP A05/A06). Reports are anonymous to the author; the
- * server, not this client, decides what happens to the post.
+ * anything is sent (OWASP A05/A06) — the schema is the endpoint's own, from
+ * shared/ipc-types.ts. Reports are anonymous to the author; the server, not
+ * this client, decides what happens to the post.
  */
-import { z } from 'zod';
+import {
+  REPORT_DETAILS_MAX,
+  submitReportRequestSchema,
+  type PostReport,
+  type ReportReason,
+  type ReportStatus,
+  type SubmitReportRequest,
+} from '@shared/ipc-types';
 
-export const REPORT_DETAILS_MAX = 300;
+export { REPORT_DETAILS_MAX };
+export type { ReportReason, ReportStatus };
 
-export const REPORT_REASONS = [
+/** Page size for "Your reports" and "Muted accounts"; the server caps it at 50. */
+export const SAFETY_LIST_SIZE = 50;
+
+export const REPORT_REASONS: readonly { id: ReportReason; label: string; hint: string }[] = [
   {
     id: 'SPAM',
     label: 'Spam or scam',
@@ -41,32 +53,14 @@ export const REPORT_REASONS = [
     label: 'Something else',
     hint: 'Intellectual property, impersonation, or another issue',
   },
-] as const;
+]
 
-export type ReportReason = (typeof REPORT_REASONS)[number]['id'];
+export const reportInputSchema = submitReportRequestSchema;
 
-const REASON_IDS = REPORT_REASONS.map((reason) => reason.id) as [ReportReason, ...ReportReason[]];
+export type ReportInput = SubmitReportRequest;
 
-export const reportInputSchema = z.object({
-  postId: z.string().min(1).max(64),
-  reason: z.enum(REASON_IDS),
-  details: z.string().trim().max(REPORT_DETAILS_MAX),
-});
-
-export type ReportInput = z.infer<typeof reportInputSchema>;
-
-export type ReportStatus = 'UNDER_REVIEW' | 'ACTION_TAKEN' | 'NO_VIOLATION';
-
-export interface ReportEntry {
-  id: string;
-  postId: string;
-  reason: ReportReason;
-  /** Who and what was reported, kept for the viewer's own list only. */
-  authorName: string;
-  excerpt: string;
-  status: ReportStatus;
-  createdAt: string;
-}
+/** One of the viewer's reports, as `GET /v1/reports/me` answers it. */
+export type ReportEntry = PostReport;
 
 /** Someone the viewer muted or blocked, as their list draws them. */
 export interface RestrictedAccount {

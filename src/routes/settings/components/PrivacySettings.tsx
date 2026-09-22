@@ -1,14 +1,14 @@
 import type { AppInfoResponse } from '@shared/ipc-types';
 import { Download, LogOut, ShieldCheck } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { SignOutDialog } from '@/components/layout/SignOutDialog';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { SampleBadge } from '@/components/ui/SampleBadge';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useLoadedPosts } from '@/features/feed/hooks';
+import { useFriendsStore } from '@/features/friends/store';
 import { useRestrictions } from '@/features/moderation/hooks';
 import { useModerationStore } from '@/features/moderation/store';
 import {
@@ -44,9 +44,33 @@ export function PrivacySettings({ appInfo }: PrivacySettingsProps) {
   const posts = useLoadedPosts();
   const [isSignOutOpen, setIsSignOutOpen] = useState(false);
   const muted = useModerationStore((state) => state.muted);
-  const blocked = useModerationStore((state) => state.blocked);
+  const mutedStatus = useModerationStore((state) => state.mutedStatus);
   const reports = useModerationStore((state) => state.reports);
+  const reportsStatus = useModerationStore((state) => state.reportsStatus);
+  const loadReports = useModerationStore((state) => state.loadReports);
+  const loadMuted = useModerationStore((state) => state.loadMuted);
+  const blockedList = useFriendsStore((state) => state.lists.blocked);
+  const loadFriendList = useFriendsStore((state) => state.load);
   const restrictions = useRestrictions();
+
+  // Opening the pane re-reads all three, so a report decided or a mute made
+  // on another device shows here without a restart.
+  useEffect(() => {
+    void loadReports();
+    void loadMuted();
+    void loadFriendList('blocked');
+  }, [loadReports, loadMuted, loadFriendList]);
+
+  const blocked = useMemo<RestrictedAccount[]>(
+    () =>
+      blockedList.entries.map((entry) => ({
+        id: entry.user.id,
+        name: displayName(entry.user),
+        username: entry.user.username,
+        since: entry.since ?? '',
+      })),
+    [blockedList.entries],
+  );
 
   const handleExport = (): void => {
     void ipc
@@ -135,6 +159,7 @@ export function PrivacySettings({ appInfo }: PrivacySettingsProps) {
         title="Muted accounts"
         empty="Nobody muted. Mute someone from the ⋯ menu on their post to stop seeing their posts."
         accounts={muted}
+        status={mutedStatus}
         actionLabel="Unmute"
         onAction={(id) => {
           void restrictions.unmute(id);
@@ -145,6 +170,7 @@ export function PrivacySettings({ appInfo }: PrivacySettingsProps) {
         title="Blocked accounts"
         empty="Nobody blocked. You can block someone when you report their post."
         accounts={blocked}
+        status={blockedList.status}
         actionLabel="Unblock"
         onAction={(id) => {
           void restrictions.unblock(id);
@@ -157,11 +183,10 @@ export function PrivacySettings({ appInfo }: PrivacySettingsProps) {
             <span className="text-on-surface-variant text-[13px]">
               Reports are anonymous. We tell you what we decided here.
             </span>
-            <SampleBadge />
           </div>
           {reports.length === 0 ? (
             <p className="text-on-surface-variant px-lg py-md text-[14px]">
-              You haven’t reported anything.
+              {emptyText(reportsStatus, 'You haven’t reported anything.')}
             </p>
           ) : (
             reports.map((report) => (
@@ -169,11 +194,13 @@ export function PrivacySettings({ appInfo }: PrivacySettingsProps) {
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="text-on-surface text-[14px] font-medium">
                     {reasonLabel(report.reason)}
-                    <span className="text-outline font-normal"> · {report.authorName}</span>
+                    {report.post?.authorName != null && (
+                      <span className="text-outline font-normal"> · {report.post.authorName}</span>
+                    )}
                   </span>
-                  {report.excerpt !== '' && (
+                  {report.post?.excerpt != null && (
                     <span className="text-on-surface-variant truncate text-[13px]">
-                      “{report.excerpt}”
+                      “{report.post.excerpt}”
                     </span>
                   )}
                   <span className="text-outline text-[12px]">{relativeTime(report.createdAt)}</span>
@@ -195,20 +222,33 @@ export function PrivacySettings({ appInfo }: PrivacySettingsProps) {
   );
 }
 
+type ListStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+/** What an empty list says: it may be empty, or not read yet, or unreadable. */
+function emptyText(status: ListStatus, empty: string): string {
+  if (status === 'error') {
+    return 'This list couldn’t be loaded. Open this page again to retry.';
+  }
+  return status === 'ready' ? empty : 'Loading…';
+}
+
 interface AccountListProps {
   title: string;
   empty: string;
   accounts: RestrictedAccount[];
+  status: ListStatus;
   actionLabel: string;
   onAction: (userId: string) => void;
 }
 
-function AccountList({ title, empty, accounts, actionLabel, onAction }: AccountListProps) {
+function AccountList({ title, empty, accounts, status, actionLabel, onAction }: AccountListProps) {
   return (
     <SettingsSection title={title}>
       <Card className="divide-outline-variant flex flex-col divide-y">
         {accounts.length === 0 ? (
-          <p className="text-on-surface-variant px-lg py-md text-[14px]">{empty}</p>
+          <p className="text-on-surface-variant px-lg py-md text-[14px]">
+            {emptyText(status, empty)}
+          </p>
         ) : (
           accounts.map((account) => (
             <div key={account.id} className="px-lg py-md flex items-center gap-3">
@@ -222,8 +262,8 @@ function AccountList({ title, empty, accounts, actionLabel, onAction }: AccountL
                   {account.name}
                 </span>
                 <span className="text-outline truncate text-[13px]">
-                  {handleOf({ username: account.username, fullName: undefined })} · since{' '}
-                  {relativeTime(account.since)}
+                  {handleOf({ username: account.username, fullName: undefined })}
+                  {account.since !== '' && <> · since {relativeTime(account.since)}</>}
                 </span>
               </div>
               <Button

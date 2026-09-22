@@ -1986,6 +1986,127 @@ export type ListProjectTechRequest = z.infer<typeof listProjectTechRequestSchema
 export type ProjectIdRequest = z.infer<typeof projectIdRequestSchema>;
 export type PublishProjectRequest = z.infer<typeof publishProjectRequestSchema>;
 
+/* -- feedback & safety -- */
+
+/**
+ * Feature feedback, post reports, mutes and hidden posts.
+ *
+ * The caller is always the token's owner upstream, so no request here carries
+ * a user id of its own — only the id of the thing acted on (OWASP A01). Report
+ * reasons and feedback features are the server's closed allowlists, held as
+ * enums in both directions; free text is length-capped to the server's own
+ * limits (A05/A06).
+ */
+export const FEEDBACK_FEATURE_IDS = [
+  'messages',
+  'stories',
+  'communities',
+  'showcase',
+  'compact-mode',
+  'in-app-updates',
+  'other',
+] as const;
+export const FEEDBACK_NOTE_MAX = 500;
+export const FEEDBACK_DIAGNOSTIC_MAX = 32;
+
+export const REPORT_REASON_IDS = [
+  'SPAM',
+  'HARASSMENT',
+  'HATE',
+  'VIOLENCE',
+  'SEXUAL',
+  'MISINFORMATION',
+  'OTHER',
+] as const;
+export const REPORT_STATUSES = ['UNDER_REVIEW', 'ACTION_TAKEN', 'NO_VIOLATION'] as const;
+export const REPORT_DETAILS_MAX = 300;
+
+/** The server caps every page here at 50. */
+export const SAFETY_PAGE_SIZE_MAX = 50;
+
+const safetyId = z.string().min(1).max(64);
+
+export const feedbackSchema = z.object({
+  id: safetyId,
+  featureId: z.enum(FEEDBACK_FEATURE_IDS),
+  rating: z.number().int().min(1).max(5),
+  note: optionalText(FEEDBACK_NOTE_MAX).transform((value) => value ?? ''),
+  createdAt: timestamp,
+});
+
+export const feedbackPageSchema = lenientPageOf(feedbackSchema);
+export const feedbackResponseSchema = z.object({ feedback: feedbackSchema });
+
+export const submitFeedbackRequestSchema = z.object({
+  featureId: z.enum(FEEDBACK_FEATURE_IDS),
+  rating: z.number().int().min(1).max(5),
+  note: z.string().trim().max(FEEDBACK_NOTE_MAX),
+  /** App version and OS only — never messages, contacts or tokens. */
+  diagnostics: z
+    .object({
+      appVersion: z.string().max(FEEDBACK_DIAGNOSTIC_MAX),
+      platform: z.string().max(FEEDBACK_DIAGNOSTIC_MAX),
+    })
+    .nullable(),
+});
+
+export const postReportSchema = z.object({
+  id: safetyId,
+  /** Null once the post has been deleted. */
+  postId: optionalText(64).transform((value) => value ?? null),
+  reason: z.enum(REPORT_REASON_IDS),
+  status: z.enum(REPORT_STATUSES),
+  createdAt: timestamp,
+  resolvedAt: optionalText(64).transform((value) => value ?? null),
+  /** Taken when the report was made, so it stays readable after a hide or delete. */
+  post: z
+    .object({
+      authorName: optionalText(200).transform((value) => value ?? null),
+      excerpt: optionalText(500).transform((value) => value ?? null),
+    })
+    .nullish()
+    .transform((value) => value ?? null),
+});
+
+export const postReportPageSchema = lenientPageOf(postReportSchema);
+export const postReportResponseSchema = z.object({ report: postReportSchema });
+
+export const submitReportRequestSchema = z.object({
+  postId: safetyId,
+  reason: z.enum(REPORT_REASON_IDS),
+  details: z.string().trim().max(REPORT_DETAILS_MAX),
+});
+
+export const mutedUserSchema = z.object({
+  user: authorSchema,
+  since: timestamp,
+});
+
+export const mutedUserPageSchema = lenientPageOf(mutedUserSchema);
+
+export const safetyPageRequestSchema = z.object({
+  page: pageNumber,
+  size: z.number().int().min(1).max(SAFETY_PAGE_SIZE_MAX),
+});
+
+export const muteUserRequestSchema = z.object({ userId: safetyId });
+
+export type FeedbackFeatureId = (typeof FEEDBACK_FEATURE_IDS)[number];
+export type ReportReason = (typeof REPORT_REASON_IDS)[number];
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+export type Feedback = z.infer<typeof feedbackSchema>;
+export type FeedbackPage = z.infer<typeof feedbackPageSchema>;
+export type FeedbackResponse = z.infer<typeof feedbackResponseSchema>;
+export type SubmitFeedbackRequest = z.infer<typeof submitFeedbackRequestSchema>;
+export type PostReport = z.infer<typeof postReportSchema>;
+export type PostReportPage = z.infer<typeof postReportPageSchema>;
+export type PostReportResponse = z.infer<typeof postReportResponseSchema>;
+export type SubmitReportRequest = z.infer<typeof submitReportRequestSchema>;
+export type MutedUser = z.infer<typeof mutedUserSchema>;
+export type MutedUserPage = z.infer<typeof mutedUserPageSchema>;
+export type SafetyPageRequest = z.infer<typeof safetyPageRequestSchema>;
+export type MuteUserRequest = z.infer<typeof muteUserRequestSchema>;
+
 /* -- files & window -- */
 
 export const postExportEntrySchema = z.object({
@@ -2267,6 +2388,19 @@ export interface YelloBridge {
     publish(request: PublishProjectRequest): Promise<IpcResult<ProjectResponse>>;
     like(request: ProjectIdRequest): Promise<IpcResult<ProjectLike>>;
     unlike(request: ProjectIdRequest): Promise<IpcResult<ProjectLike>>;
+  };
+  readonly feedback: {
+    submit(request: SubmitFeedbackRequest): Promise<IpcResult<FeedbackResponse>>;
+    listMine(request: SafetyPageRequest): Promise<IpcResult<FeedbackPage>>;
+  };
+  readonly safety: {
+    report(request: SubmitReportRequest): Promise<IpcResult<PostReportResponse>>;
+    listMyReports(request: SafetyPageRequest): Promise<IpcResult<PostReportPage>>;
+    mute(request: MuteUserRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    unmute(request: MuteUserRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    listMuted(request: SafetyPageRequest): Promise<IpcResult<MutedUserPage>>;
+    hidePost(request: PostIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    unhidePost(request: PostIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
   };
   readonly links: {
     preview(request: LinkPreviewRequest): Promise<IpcResult<LinkPreviewResponse>>;

@@ -1,14 +1,22 @@
 /**
- * Feedback, as seen by the renderer. There is no endpoint yet, so the request
- * is answered by `sampleRequest`; this file is the one place that changes when
- * it ships.
+ * Feedback, as seen by the renderer: one allowlisted IPC call each. The input
+ * is checked against the endpoint's schema before it leaves, so a form bug is
+ * caught here rather than as a server 400.
  */
 import type { IpcError } from '@shared/ipc-types';
 
-import { fail, type Result } from '@/lib/result';
-import { sampleId, sampleRequest } from '@/mocks/request';
+import { ipc } from '@/lib/ipc';
+import { fail, ok, type Result } from '@/lib/result';
 
-import { feedbackInputSchema, type FeedbackEntry, type FeedbackInput } from './types';
+import {
+  FEEDBACK_HISTORY_SIZE,
+  feedbackInputSchema,
+  type FeedbackEntry,
+  type FeedbackInput,
+} from './types';
+
+/** The server allows 10 an hour per user; say so in words, not a code. */
+const RATE_LIMITED = 'RATE_LIMIT_EXCEEDED';
 
 export async function submitFeedback(
   input: FeedbackInput,
@@ -17,11 +25,20 @@ export async function submitFeedback(
   if (!parsed.success) {
     return fail({ code: 'INVALID_PAYLOAD', message: 'Pick a feature and a rating first.' });
   }
-  return sampleRequest({
-    id: sampleId('fb'),
-    featureId: parsed.data.featureId,
-    rating: parsed.data.rating,
-    note: parsed.data.note,
-    createdAt: new Date().toISOString(),
-  });
+  const result = await ipc.submitFeedback(parsed.data);
+  if (result.ok) {
+    return ok(result.data.feedback);
+  }
+  if (result.error.apiCode === RATE_LIMITED) {
+    return fail({
+      ...result.error,
+      message: 'You’ve sent a lot of feedback in the last hour. Try again a little later.',
+    });
+  }
+  return fail(result.error);
+}
+
+export async function fetchMyFeedback(): Promise<Result<FeedbackEntry[], IpcError>> {
+  const result = await ipc.listMyFeedback({ page: 0, size: FEEDBACK_HISTORY_SIZE });
+  return result.ok ? ok(result.data.content) : fail(result.error);
 }

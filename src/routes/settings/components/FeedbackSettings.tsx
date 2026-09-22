@@ -1,10 +1,9 @@
 import type { AppInfoResponse, IpcError } from '@shared/ipc-types';
 import { Check, Star } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { SampleBadge } from '@/components/ui/SampleBadge';
 import { submitFeedback } from '@/features/feedback/api';
 import { useFeedbackStore } from '@/features/feedback/store';
 import {
@@ -47,8 +46,14 @@ export function FeedbackSettings({ appInfo }: FeedbackSettingsProps) {
   const [error, setError] = useState<IpcError | null>(null);
   const [sent, setSent] = useState<FeedbackEntry | null>(null);
   const history = useFeedbackStore((state) => state.sent);
+  const historyStatus = useFeedbackStore((state) => state.status);
   const addSent = useFeedbackStore((state) => state.add);
+  const loadHistory = useFeedbackStore((state) => state.load);
   const noteId = useId();
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   const shown = hover || rating;
   const isReady = featureId !== null && rating > 0;
@@ -288,10 +293,15 @@ export function FeedbackSettings({ appInfo }: FeedbackSettingsProps) {
         <Card className="divide-outline-variant flex flex-col divide-y">
           <div className="px-lg py-md flex items-center justify-between gap-3">
             <span className="text-on-surface-variant text-[13px]">Only you see this list.</span>
-            <SampleBadge />
           </div>
           {history.length === 0 ? (
-            <p className="text-on-surface-variant px-lg py-md text-[14px]">Nothing sent yet.</p>
+            <p className="text-on-surface-variant px-lg py-md text-[14px]">
+              {historyStatus === 'loading' || historyStatus === 'idle'
+                ? 'Loading…'
+                : historyStatus === 'error'
+                  ? 'Your feedback history couldn’t be loaded.'
+                  : 'Nothing sent yet.'}
+            </p>
           ) : (
             history.map((entry) => (
               <div key={entry.id} className="px-lg py-md flex items-start gap-3">

@@ -1,15 +1,23 @@
 /**
  * Feature feedback: which part of Yello, a 1–5 rating, and an optional note.
  *
- * The schema is the contract the future endpoint will take, and is checked
- * before anything is sent — the feature id is an allowlist, not free text, and
- * the note is length-capped (OWASP A05/A06). The server must validate again.
+ * The request schema is the endpoint's own contract (shared/ipc-types.ts) and
+ * is checked here before anything is sent, then again by the main process —
+ * the feature id is an allowlist, not free text, and the note is length-capped
+ * (OWASP A05/A06). The server validates a third time.
  */
-import { z } from 'zod';
+import {
+  FEEDBACK_NOTE_MAX,
+  submitFeedbackRequestSchema,
+  type Feedback,
+  type FeedbackFeatureId,
+  type SubmitFeedbackRequest,
+} from '@shared/ipc-types';
 
-export const FEEDBACK_NOTE_MAX = 500;
+export { FEEDBACK_NOTE_MAX };
+export type { FeedbackFeatureId };
 
-export const FEEDBACK_FEATURES = [
+export const FEEDBACK_FEATURES: readonly { id: FeedbackFeatureId; label: string }[] = [
   { id: 'messages', label: 'Messages' },
   { id: 'stories', label: 'Stories' },
   { id: 'communities', label: 'Communities' },
@@ -17,14 +25,10 @@ export const FEEDBACK_FEATURES = [
   { id: 'compact-mode', label: 'Compact mode' },
   { id: 'in-app-updates', label: 'In-app updates' },
   { id: 'other', label: 'Something else' },
-] as const;
-
-export type FeedbackFeatureId = (typeof FEEDBACK_FEATURES)[number]['id'];
-
-const FEATURE_IDS = FEEDBACK_FEATURES.map((feature) => feature.id) as [
-  FeedbackFeatureId,
-  ...FeedbackFeatureId[],
 ];
+
+/** How many past entries "Your recent feedback" shows. */
+export const FEEDBACK_HISTORY_SIZE = 20;
 
 export const RATING_LABELS: Record<number, string> = {
   1: 'Frustrating',
@@ -34,28 +38,12 @@ export const RATING_LABELS: Record<number, string> = {
   5: 'Love it',
 };
 
-export const feedbackInputSchema = z.object({
-  featureId: z.enum(FEATURE_IDS),
-  rating: z.number().int().min(1).max(5),
-  note: z.string().trim().max(FEEDBACK_NOTE_MAX),
-  /** App version and OS only — never messages, contacts or tokens. */
-  diagnostics: z
-    .object({
-      appVersion: z.string().max(32),
-      platform: z.string().max(32),
-    })
-    .nullable(),
-});
+export const feedbackInputSchema = submitFeedbackRequestSchema;
 
-export type FeedbackInput = z.infer<typeof feedbackInputSchema>;
+export type FeedbackInput = SubmitFeedbackRequest;
 
-export interface FeedbackEntry {
-  id: string;
-  featureId: FeedbackFeatureId;
-  rating: number;
-  note: string;
-  createdAt: string;
-}
+/** One sent entry, as the server answered it; a blank note is `''`. */
+export type FeedbackEntry = Feedback;
 
 export function featureLabel(id: FeedbackFeatureId): string {
   return FEEDBACK_FEATURES.find((feature) => feature.id === id)?.label ?? 'Something else';

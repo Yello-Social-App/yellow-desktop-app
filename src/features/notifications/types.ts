@@ -18,6 +18,14 @@ import type { Notification, NotificationType } from '@shared/ipc-types';
 /** Rows per page. The service clamps anything above 50 silently. */
 export const NOTIFICATIONS_PAGE_SIZE = 20;
 
+/**
+ * A moderator decided one of the viewer's reports. Deliberately not in
+ * NOTIFICATION_TYPES: that list is also what Notification settings offers to
+ * mute, and a report's outcome is not a stream to switch off. The row carries
+ * `reportId` and `status` only — never the post, its author, or who decided.
+ */
+export const REPORT_RESOLVED = 'REPORT_RESOLVED';
+
 /** How many rows the topbar panel shows before deferring to the full page. */
 export const NOTIFICATIONS_PANEL_SIZE = 8;
 
@@ -72,6 +80,10 @@ export function routeFor(notification: Notification): string | null {
     case 'FRIEND_REQUEST_ACCEPTED':
       return actor === null ? null : `/users/${encodeURIComponent(actor)}`;
 
+    case REPORT_RESOLVED:
+      // The outcome is listed under "Your reports"; nothing in `data` is used.
+      return '/settings/privacy';
+
     case 'CHAT_MESSAGE':
     case 'CHAT_REACTION': {
       // Push-only upstream, so these should never arrive from the inbox — they
@@ -102,6 +114,9 @@ const TYPE_LABELS: Record<NotificationType, string> = {
 };
 
 export function labelForType(type: string): string {
+  if (type === REPORT_RESOLVED) {
+    return 'Your reports';
+  }
   return type in TYPE_LABELS ? TYPE_LABELS[type as NotificationType] : 'Other activity';
 }
 
