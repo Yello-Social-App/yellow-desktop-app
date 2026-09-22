@@ -279,7 +279,7 @@ function describeFailure(status: number, body: unknown): IpcResult<never> {
 }
 
 interface RequestOptions<TSchema extends z.ZodType> {
-  method: 'get' | 'post' | 'put' | 'delete';
+  method: 'get' | 'post' | 'put' | 'patch' | 'delete';
   url: string;
   schema: TSchema;
   body?: unknown;

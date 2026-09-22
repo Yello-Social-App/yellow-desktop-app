@@ -20,6 +20,11 @@
  * The shape of the problem is a connection with a handful of states and
  * timers, so this is a plain class with a state field rather than a State
  * pattern — three states and no per-state behaviour split do not earn one.
+ *
+ * Parsed frames have two audiences: every renderer window, and the desktop
+ * chat alerts (alerts.ts), which run in this process. That second consumer is
+ * what earns `subscribe` — an Observer in its plainest spelling, a set of
+ * callbacks — rather than the alerts reaching into the socket's internals.
  */
 import { randomUUID } from 'node:crypto';
 
@@ -115,9 +120,30 @@ class ChatSocket {
   private heartbeatDeadline: NodeJS.Timeout | null = null;
   private readonly pending = new Map<string, PendingReply>();
   private readonly online = new Set<string>();
+  private readonly listeners = new Set<(event: ChatEvent) => void>();
+  /** Who the socket is authenticated as, from `auth.ok`; null while it is not. */
+  private userId: string | null = null;
 
   state(): ChatSocketState {
     return { status: this.status, onlineUserIds: [...this.online] };
+  }
+
+  /** The authenticated user's id, or null before `auth.ok` and after a close. */
+  viewerId(): string | null {
+    return this.userId;
+  }
+
+  /** Every frame the renderer is sent, also delivered in-process. Returns the detach. */
+  subscribe(listener: (event: ChatEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /** Publishes a locally originated event (a clicked alert) to the renderer. */
+  announce(event: ChatEvent): void {
+    this.publish(event);
   }
 
   isConnected(): boolean {
@@ -148,6 +174,7 @@ class ChatSocket {
       }
     }
     this.online.clear();
+    this.userId = null;
     this.setStatus('disconnected');
   }
 
@@ -325,6 +352,7 @@ class ChatSocket {
     }
 
     this.reconnectAttempt = 0;
+    this.userId = parsed.data.userId;
     this.online.clear();
     for (const peer of parsed.data.onlinePeers ?? []) {
       this.online.add(peer);
@@ -501,6 +529,14 @@ class ChatSocket {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) {
         window.webContents.send(IPC_CHANNELS.CHAT_EVENT, event);
+      }
+    }
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        // One consumer failing must not starve the others of the frame (A10).
+        log.error('socket_listener_threw', { error });
       }
     }
   }

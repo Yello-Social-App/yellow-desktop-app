@@ -1,5 +1,5 @@
 import { ArrowRight, CornerDownLeft, Search, UserPlus } from 'lucide-react';
-import { useId, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { HighlightMatch } from '@/components/content/HighlightMatch';
@@ -51,13 +51,37 @@ function RelationshipHint({ person }: { person: FriendEntry }) {
  * the search to the Friends screen, where the relationship controls live.
  *
  * The field keeps focus throughout (a combobox): arrows move the highlighted
- * option, Enter picks it, Escape closes the panel.
+ * option, Enter picks it, Escape closes the panel. `/` from anywhere that is
+ * not already a text field jumps into it, as the hint in the field says.
  */
 export function QuickSearch({ query, onQueryChange }: QuickSearchProps) {
   const navigate = useNavigate();
   const listId = useId();
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key !== '/' || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      const target = event.target;
+      // Typing a slash into a message or a post must stay a slash.
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+      ) {
+        return;
+      }
+      event.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, []);
   const hasQuery = normalizeQuery(query) !== '';
   const search = usePeopleSearch(query);
   const people = search.results.slice(0, QUICK_SEARCH_LIMIT);
@@ -124,6 +148,7 @@ export function QuickSearch({ query, onQueryChange }: QuickSearchProps) {
       panelClassName="w-[380px]"
       trigger={
         <Input
+          ref={inputRef}
           type="search"
           role="combobox"
           aria-label="Search posts and people"
@@ -131,7 +156,7 @@ export function QuickSearch({ query, onQueryChange }: QuickSearchProps) {
           aria-controls={listId}
           aria-activedescendant={isPanelOpen ? optionId(activeIndex) : undefined}
           aria-autocomplete="list"
-          placeholder="Search"
+          placeholder="Search people and posts"
           maxLength={PEOPLE_QUERY_MAX}
           value={query}
           onChange={(event) => {
@@ -144,7 +169,17 @@ export function QuickSearch({ query, onQueryChange }: QuickSearchProps) {
           }}
           onKeyDown={onKeyDown}
           leadingIcon={<Search className="size-4" />}
-          className="text-body-sm h-9 rounded-full pl-10"
+          trailingSlot={
+            query === '' ? (
+              <kbd
+                aria-hidden
+                className="border-outline-strong text-outline rounded-[5px] border px-1.5 font-mono text-[11px]"
+              >
+                /
+              </kbd>
+            ) : undefined
+          }
+          className="bg-surface-container-low border-outline-strong h-9 rounded-[10px] pl-10 text-[13.5px]"
         />
       }
     >

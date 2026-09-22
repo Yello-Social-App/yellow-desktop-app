@@ -72,9 +72,10 @@ export function routeFor(notification: Notification): string | null {
     case 'FRIEND_REQUEST_ACCEPTED':
       return actor === null ? null : `/users/${encodeURIComponent(actor)}`;
 
-    case 'CHAT_MESSAGE': {
-      // Push-only upstream, so this should never arrive from the inbox — it is
-      // handled anyway, because an activated OS notification can carry it.
+    case 'CHAT_MESSAGE':
+    case 'CHAT_REACTION': {
+      // Push-only upstream, so these should never arrive from the inbox — they
+      // are handled anyway, so a row of either type still leads somewhere.
       const conversation = idOf(data, 'conversationId');
       return conversation === null ? '/messages' : `/messages/${encodeURIComponent(conversation)}`;
     }
@@ -97,6 +98,7 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   FRIEND_REQUEST_RECEIVED: 'Friend requests',
   FRIEND_REQUEST_ACCEPTED: 'Accepted friend requests',
   CHAT_MESSAGE: 'Chat messages',
+  CHAT_REACTION: 'Reactions to your chat messages',
 };
 
 export function labelForType(type: string): string {

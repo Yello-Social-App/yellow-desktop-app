@@ -21,11 +21,27 @@ export function useFeed() {
   const hasMore = useFeedStore((state) => state.hasMore);
   const isLoadingMore = useFeedStore((state) => state.isLoadingMore);
 
+  const refresh = useFeedStore((state) => state.refresh);
+
   useEffect(() => {
     if (status === 'idle') {
       void load();
     }
   }, [status, load]);
+
+  // The feed is kept across screens, so coming back to it — or back to the
+  // window — is when it catches up with what others did meanwhile. Both are
+  // throttled in the store; a revisit a few seconds later costs nothing.
+  useEffect(() => {
+    void refresh();
+    const onFocus = (): void => {
+      void refresh();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refresh]);
 
   return { status, error, reload: load, loadMore, hasMore, isLoadingMore };
 }
@@ -108,6 +124,9 @@ export function useSinglePost(postId: string | undefined): SinglePostState {
       }
       if (result.ok) {
         setLoaded({ id: postId, post: result.data });
+        // This read is the freshest copy there is; the feed's may be from
+        // when the app opened, so it adopts this one (a no-op if not held).
+        useFeedStore.getState().replacePost(result.data);
       } else {
         setFailure({ id: postId, message: result.error.message });
       }

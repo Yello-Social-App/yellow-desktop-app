@@ -68,6 +68,26 @@ export function imageBaseUrlsFromEnvironment(): string[] {
 }
 
 /**
+ * Where chat attachments and group photos are served from.
+ *
+ * These are presigned links into a *private* bucket, served from the S3 API
+ * host (`<account>.r2.cloudflarestorage.com`) rather than the public media CDN
+ * above — a different origin, so it needs its own `img-src` entry, and the same
+ * list bounds where an attachment download may be fetched from (OWASP A01).
+ * An entry is an origin, optionally with one leading `*.` wildcard label.
+ */
+const DEFAULT_CHAT_MEDIA_HOSTS = 'https://*.r2.cloudflarestorage.com';
+
+export function chatMediaHostsFromEnvironment(): string[] {
+  const configured = process.env.YELLO_CHAT_MEDIA_HOSTS;
+  const raw = configured === undefined || configured === '' ? DEFAULT_CHAT_MEDIA_HOSTS : configured;
+  return raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value !== '');
+}
+
+/**
  * Where the chat service lives. Same origin as the API unless overridden —
  * nginx fronts both in every deployment, and `artisan serve` + `nest start`
  * locally are the one case they diverge (8080 and 3000).

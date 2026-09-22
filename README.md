@@ -108,6 +108,12 @@ The chat service (yello-chat) sits behind the same origin under `/ws` in every
 deployment. Only a bare local run of the two services on different ports needs
 `YELLO_CHAT_BASE_URL=http://localhost:3000`.
 
+Chat attachments and group photos are presigned links on the private bucket's
+S3 host, not the public media CDN. `YELLO_CHAT_MEDIA_HOSTS` (comma-separated
+origins, one leading `*.` allowed) sets where they may load and download from;
+it defaults to `https://*.r2.cloudflarestorage.com`. Narrow it to your account's
+host (`https://<account>.r2.cloudflarestorage.com`) where you know it.
+
 HTTPS is required unless the host is loopback. A packaged build bakes in the
 target that was set when it was built (`YELLO_API_TARGET`), defaulting to `prod`.
 

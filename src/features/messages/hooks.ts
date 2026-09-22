@@ -3,18 +3,36 @@
  * here — ids from the chat service, records from the user directory — so the
  * chat components stay presentational.
  */
-import type { Author, ConversationSummary } from '@shared/ipc-types';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type {
+  Author,
+  LocalFileSource,
+  ChatAttachment,
+  ConversationSummary,
+  ParticipantRole,
+} from '@shared/ipc-types';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useUsers } from '@/features/users/hooks';
 import { TYPING_IDLE_MS } from '@/lib/constants';
+import { onChatEvent } from '@/lib/ipc';
 
+import type { LocalFile } from './api';
+import { isFileDrag, readLocalFiles } from './local-files';
 import { useMessagesStore, type Thread } from './store';
-import { conversationTitle, peerIdsOf, type ThreadMessage } from './types';
+import {
+  conversationTitle,
+  describeMessage,
+  peerIdsOf,
+  roleOf,
+  type GroupNotice,
+  type ThreadMessage,
+} from './types';
 
 const NO_MESSAGES_PREVIEW = 'No messages yet';
+const NO_NOTICES: GroupNotice[] = [];
+const NO_ATTACHMENTS: ChatAttachment[] = [];
 const EMPTY_THREAD: Thread = {
   messages: [],
   nextCursor: null,
@@ -46,6 +64,21 @@ export function useChatSubscription(): void {
       void load();
     }
   }, [userId, status, load]);
+
+  // A clicked desktop chat alert opens its conversation, from any screen. The
+  // id has already passed the event schema; it is encoded into the segment
+  // all the same, so it cannot address another route (A01).
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (userId === undefined) {
+      return;
+    }
+    return onChatEvent((event) => {
+      if (event.event === 'alert.activated') {
+        void navigate(`/messages/${encodeURIComponent(event.data.conversationId)}`);
+      }
+    });
+  }, [userId, navigate]);
 }
 
 /** A conversation with everything the list needs to draw it. */
@@ -107,7 +140,7 @@ export function useConversationRows(): {
         conversation,
         title: conversationTitle(conversation, viewerId, people),
         peers: peerIds.map((id) => people[id]).filter((p): p is Author => p !== undefined),
-        preview: last === null ? NO_MESSAGES_PREVIEW : last.body,
+        preview: last === null ? NO_MESSAGES_PREVIEW : describeMessage(last),
         previewIsMine: last !== null && last.senderId === viewerId,
         isOnline: peerIds.some((id) => onlineSet.has(id)),
         unreadCount: conversation.unreadCount,
@@ -247,6 +280,19 @@ export interface Composer {
   onInput: () => void;
   isSending: boolean;
   hasConversation: boolean;
+  /** The line being quoted, and who wrote it. */
+  replyingTo: { message: ThreadMessage; sender: Author | undefined; isOwn: boolean } | null;
+  /** The line being rewritten; the composer holds its text while this is set. */
+  editing: ThreadMessage | null;
+  saveEdit: (body: string) => Promise<boolean>;
+  /** Up-arrow in an empty composer: rewrite your newest line. */
+  editLatest: () => boolean;
+  cancel: () => void;
+  attachments: ChatAttachment[];
+  attach: () => void;
+  addLocalFiles: (source: LocalFileSource, files: LocalFile[]) => void;
+  dropAttachment: (attachmentId: string) => void;
+  isAttaching: boolean;
 }
 
 export function useComposer(): Composer {
@@ -255,6 +301,27 @@ export function useComposer(): Composer {
   const setTyping = useMessagesStore((state) => state.setTyping);
   const isSending = useMessagesStore((state) => state.isSending);
   const hasConversation = useMessagesStore((state) => state.activeConversationId !== null);
+  const thread = useActiveThread();
+  const viewerId = useMessagesStore((state) => state.viewerId);
+  const replyingToId = useMessagesStore((state) => state.replyingToId);
+  const editingId = useMessagesStore((state) => state.editingId);
+  const saveEdit = useMessagesStore((state) => state.saveEdit);
+  const startEdit = useMessagesStore((state) => state.startEdit);
+  const cancelCompose = useMessagesStore((state) => state.cancelCompose);
+  const attach = useMessagesStore((state) => state.attach);
+  const addLocalFiles = useMessagesStore((state) => state.addLocalFiles);
+  const dropAttachment = useMessagesStore((state) => state.dropAttachment);
+  const isAttaching = useMessagesStore((state) => state.isAttaching);
+  const attachments = useMessagesStore((state) =>
+    state.activeConversationId === null
+      ? NO_ATTACHMENTS
+      : (state.drafts[state.activeConversationId] ?? NO_ATTACHMENTS),
+  );
+  const quoted =
+    replyingToId === null ? undefined : thread.messages.find((m) => m.id === replyingToId);
+  const editing =
+    editingId === null ? null : (thread.messages.find((m) => m.id === editingId) ?? null);
+  const quotedSender = useUsers(quoted === undefined ? [] : [quoted.senderId]);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTyping = useRef(false);
 
@@ -293,7 +360,142 @@ export function useComposer(): Composer {
     onInput,
     isSending,
     hasConversation,
+    replyingTo:
+      quoted === undefined
+        ? null
+        : {
+            message: quoted,
+            sender: quotedSender[quoted.senderId],
+            isOwn: quoted.senderId === viewerId,
+          },
+    editing,
+    saveEdit: async (body) => {
+      stopTyping();
+      return saveEdit(body);
+    },
+    editLatest: () => {
+      const latest = [...thread.messages]
+        .reverse()
+        .find(
+          (m) =>
+            m.senderId === viewerId &&
+            m.delivery === 'sent' &&
+            m.deletedAt === null &&
+            m.body !== '',
+        );
+      if (latest === undefined) {
+        return false;
+      }
+      startEdit(latest.id);
+      return true;
+    },
+    cancel: cancelCompose,
+    attachments,
+    attach: () => {
+      void attach();
+    },
+    addLocalFiles: (source, files) => {
+      void addLocalFiles(source, files);
+    },
+    dropAttachment,
+    isAttaching,
   };
+}
+
+/** What a line in the thread can do, bound to the store once for every bubble. */
+export function useMessageActions() {
+  const startReply = useMessagesStore((state) => state.startReply);
+  const startEdit = useMessagesStore((state) => state.startEdit);
+  const unsend = useMessagesStore((state) => state.unsend);
+  const toggleReaction = useMessagesStore((state) => state.toggleReaction);
+  const refreshAttachment = useMessagesStore((state) => state.refreshAttachment);
+  const saveAttachment = useMessagesStore((state) => state.saveAttachment);
+  const respondToInvite = useMessagesStore((state) => state.respondToInvite);
+  const retry = useMessagesStore((state) => state.retry);
+  const navigate = useNavigate();
+
+  return useMemo(
+    () => ({
+      retry: (message: ThreadMessage) => {
+        void retry(message.clientId);
+      },
+      startReply,
+      startEdit,
+      unsend: (messageId: string) => {
+        void unsend(messageId);
+      },
+      react: (messageId: string, emoji: string) => {
+        void toggleReaction(messageId, emoji);
+      },
+      refreshAttachment: (attachment: ChatAttachment) => {
+        void refreshAttachment(attachment);
+      },
+      saveAttachment: (attachmentId: string) => {
+        void saveAttachment(attachmentId);
+      },
+      /** Accepting opens the group you just joined. */
+      respondToInvite: async (inviteId: string, accept: boolean) => {
+        const joined = await respondToInvite(inviteId, accept);
+        if (joined !== null) {
+          await navigate(`/messages/${encodeURIComponent(joined)}`);
+        }
+      },
+      /** Opens a group you are already in, from its card. */
+      openConversation: (conversationId: string) => {
+        void navigate(`/messages/${encodeURIComponent(conversationId)}`);
+      },
+    }),
+    [
+      startReply,
+      startEdit,
+      unsend,
+      toggleReaction,
+      refreshAttachment,
+      saveAttachment,
+      respondToInvite,
+      retry,
+      navigate,
+    ],
+  );
+}
+
+/** The group-change lines seen this session in the active conversation. */
+export function useThreadNotices(): GroupNotice[] {
+  return useMessagesStore((state) =>
+    state.activeConversationId === null
+      ? NO_NOTICES
+      : (state.notices[state.activeConversationId] ?? NO_NOTICES),
+  );
+}
+
+/** The viewer's role in the active conversation — for which controls to draw. */
+export function useActiveRole(): ParticipantRole | null {
+  return useMessagesStore((state) =>
+    roleOf(
+      state.conversations.find((item) => item.id === state.activeConversationId),
+      state.viewerId,
+    ),
+  );
+}
+
+/**
+ * Leaves an open conversation the viewer was removed from or left: the URL
+ * still names it, and it can no longer be read.
+ */
+export function useLeaveRemovedConversation(conversationId: string | undefined): void {
+  const removed = useMessagesStore((state) => state.removedConversationId);
+  const acknowledge = useMessagesStore((state) => state.acknowledgeRemoval);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (removed === null) {
+      return;
+    }
+    acknowledge();
+    if (removed === conversationId) {
+      void navigate('/messages', { replace: true });
+    }
+  }, [removed, conversationId, acknowledge, navigate]);
 }
 
 /** Starts (or finds) a conversation and goes to it. */
@@ -340,4 +542,94 @@ export function useActivePeers(): Author[] {
   );
   const people = useUsers(ids);
   return ids.map((id) => people[id]).filter((p): p is Author => p !== undefined);
+}
+
+export interface FileDrop {
+  /** A file drag is over the thread right now: draw the drop target. */
+  isDragging: boolean;
+  /** Why a drop would be refused, drawn in place of "Drop to attach". */
+  refusal: string | null;
+  handlers: {
+    onDragEnter: (event: DragEvent) => void;
+    onDragOver: (event: DragEvent) => void;
+    onDragLeave: (event: DragEvent) => void;
+    onDrop: (event: DragEvent) => void;
+  };
+}
+
+/**
+ * Files dragged in from another window — a file manager, a browser, a photo
+ * app — attach to the draft of the open conversation, as the paperclip would.
+ *
+ * Only a drag that carries files is taken; a dragged link or text is left to
+ * the browser's own handling, so dropping text into the box still types it.
+ * The enter/leave pair fires for every child the pointer crosses, so a depth
+ * count, not the last event, decides whether the drag is still over the thread.
+ */
+export function useFileDrop(): FileDrop {
+  const addLocalFiles = useMessagesStore((state) => state.addLocalFiles);
+  const isEditing = useMessagesStore((state) => state.editingId !== null);
+  const hasConversation = useMessagesStore((state) => state.activeConversationId !== null);
+  const [isDragging, setIsDragging] = useState(false);
+  const depth = useRef(0);
+
+  const refusal = !hasConversation
+    ? 'Open a conversation first.'
+    : isEditing
+      ? 'Finish editing before attaching files.'
+      : null;
+
+  const handlers = useMemo<FileDrop['handlers']>(
+    () => ({
+      onDragEnter: (event) => {
+        if (!isFileDrag(event.dataTransfer)) {
+          return;
+        }
+        event.preventDefault();
+        depth.current += 1;
+        setIsDragging(true);
+      },
+      onDragOver: (event) => {
+        if (!isFileDrag(event.dataTransfer)) {
+          return;
+        }
+        // Without this the drop never fires and Chromium opens the file.
+        event.preventDefault();
+        event.dataTransfer.dropEffect = refusal === null ? 'copy' : 'none';
+      },
+      onDragLeave: (event) => {
+        if (!isFileDrag(event.dataTransfer)) {
+          return;
+        }
+        depth.current = Math.max(0, depth.current - 1);
+        if (depth.current === 0) {
+          setIsDragging(false);
+        }
+      },
+      onDrop: (event) => {
+        if (!isFileDrag(event.dataTransfer)) {
+          return;
+        }
+        event.preventDefault();
+        depth.current = 0;
+        setIsDragging(false);
+        if (refusal !== null) {
+          useMessagesStore.setState({ error: refusal });
+          return;
+        }
+        const dropped = [...event.dataTransfer.files];
+        void readLocalFiles(dropped).then(({ files, problem }) => {
+          if (problem !== null) {
+            useMessagesStore.setState({ error: problem });
+          }
+          if (files.length > 0) {
+            void addLocalFiles('drop', files);
+          }
+        });
+      },
+    }),
+    [refusal, addLocalFiles],
+  );
+
+  return { isDragging, refusal, handlers };
 }

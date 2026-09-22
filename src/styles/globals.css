@@ -12,21 +12,22 @@
 @import 'tailwindcss';
 
 @theme {
-  /* ---- Color: "Midnight" — dark-first, one accent ----------------------
+  /* ---- Color: "Quiet rails" — dark-first, one accent --------------------
    * The names are the Material-style roles the components were written
-   * against; the values are a near-black, blue-tinted canvas with hairline
-   * dividers (X) and tonal cards (Reddit), and Yello yellow as the only
-   * saturated colour. The light palette below overrides the same roles under
+   * against; the values are the "Yello — Sidebar Direction" design's neutral
+   * grey-black: rails read as chrome, not cards, separated by 1px hairlines
+   * with no shadows, and Yello yellow as the one saturated colour — one
+   * accent per view. The light palette below overrides the same roles under
    * `[data-theme="light"]`, so no component knows which it is on.
    */
-  --color-primary: #ffd60a;
-  --color-on-primary: #1a1400;
-  --color-primary-container: #ffd60a;
-  --color-on-primary-container: #1a1400;
-  --color-primary-fixed: #2a2405;
-  --color-primary-fixed-dim: #3a3208;
-  --color-on-primary-fixed: #ffe66d;
-  --color-on-primary-fixed-variant: #f2cf2b;
+  --color-primary: #ffce2b;
+  --color-on-primary: #12120f;
+  --color-primary-container: #ffce2b;
+  --color-on-primary-container: #12120f;
+  --color-primary-fixed: #1a1a16;
+  --color-primary-fixed-dim: #2a2716;
+  --color-on-primary-fixed: #ffe07a;
+  --color-on-primary-fixed-variant: #ffce2b;
   --color-inverse-primary: #7a6300;
 
   --color-secondary: #ff7a7a;
@@ -52,24 +53,30 @@
   --color-error-container: #3a1418;
   --color-on-error-container: #ffb4ab;
 
-  --color-background: #0b0d10;
-  --color-on-background: #e7e9ec;
-  --color-surface: #0b0d10;
-  --color-surface-dim: #07080a;
-  --color-surface-bright: #1a1f25;
-  --color-surface-container-lowest: #101317;
-  --color-surface-container-low: #14181d;
-  --color-surface-container: #191e24;
-  --color-surface-container-high: #1f252c;
-  --color-surface-container-highest: #262d35;
-  --color-surface-variant: #262d35;
-  --color-surface-tint: #ffd60a;
-  --color-on-surface: #e7e9ec;
-  --color-on-surface-variant: #9aa3ad;
-  --color-inverse-surface: #e7e9ec;
-  --color-inverse-on-surface: #14181d;
-  --color-outline: #6b7482;
-  --color-outline-variant: #242a32;
+  /* app #0B0B0C · card #0F0F12 · hover #131317 · raised #16161A ·
+     hairline #1C1C20 · text #F2F2F0 · second #9C9CA2 · min grey #8A8A90. */
+  --color-background: #0b0b0c;
+  --color-on-background: #f2f2f0;
+  --color-surface: #0b0b0c;
+  --color-surface-dim: #070708;
+  --color-surface-bright: #1e1e24;
+  --color-surface-container-lowest: #0f0f12;
+  --color-surface-container-low: #131317;
+  --color-surface-container: #16161a;
+  --color-surface-container-high: #1e1e24;
+  --color-surface-container-highest: #26262b;
+  --color-surface-variant: #26262b;
+  --color-surface-tint: #ffce2b;
+  --color-on-surface: #f2f2f0;
+  --color-on-surface-variant: #9c9ca2;
+  --color-inverse-surface: #f2f2f0;
+  --color-inverse-on-surface: #131317;
+  --color-outline: #8a8a90;
+  --color-outline-variant: #1c1c20;
+  /* Borders on controls (inputs, chips): one step stronger than a hairline. */
+  --color-outline-strong: #26262b;
+  /* The top bar: a shade lifted off the app so it reads as window chrome. */
+  --color-chrome: #0e0e10;
 
   /* Second and third accents, for surfaces that are not "the brand":
      communities read blue, showcase reads violet, stories wear the gradient. */
@@ -144,10 +151,14 @@
   --spacing-margin-mobile: 16px;
   --spacing-margin-desktop: 40px;
   --spacing-nav-width-side: 240px;
+  /* The compact (icon-only) nav rail. */
+  --spacing-nav-width-compact: 72px;
   --spacing-nav-height-bottom: 64px;
   --spacing-topbar: 56px;
   --spacing-content-max: 720px;
-  --spacing-rail-width: 350px;
+  /* Home's column: it fills between the rails up to this. */
+  --spacing-feed-max: 1040px;
+  --spacing-rail-width: 320px;
 
   /* Named container widths. These deliberately avoid Tailwind's bare sm/md/xl
      names, which the spacing scale above already owns — `max-w-sm` here would
@@ -174,7 +185,7 @@
   /* ---- Elevation: tonal layering plus a soft, wide shadow ------------- */
   --shadow-floating: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
   --shadow-canvas: 0 24px 64px rgb(0 0 0 / 0.45);
-  --shadow-glow: 0 0 0 1px rgb(255 214 10 / 0.35), 0 8px 32px rgb(255 214 10 / 0.12);
+  --shadow-glow: 0 0 0 1px rgb(255 206 43 / 0.35), 0 8px 32px rgb(255 206 43 / 0.12);
 
   /* ---- Motion ----------------------------------------------------------
    * One curve and three durations, used by everything that moves: hover
@@ -292,6 +303,8 @@
     --color-inverse-on-surface: #f1f0f4;
     --color-outline: #8a919c;
     --color-outline-variant: #e2e2de;
+    --color-outline-strong: #d4d4cf;
+    --color-chrome: #fbfbf9;
 
     --color-info: #1f5fd6;
     --color-on-info: #ffffff;
@@ -544,20 +557,20 @@
     }
   }
 
-  /* The story ring: the brand gradient drawn as a border, Instagram-style.
-     A seen story drops to a quiet hairline. */
+  /* The story ring: a solid accent ring for a story not yet watched, as the
+     "quiet rails" design draws it. A seen story drops to a quiet hairline. */
   .story-ring {
     background:
       linear-gradient(var(--color-background), var(--color-background)) padding-box,
-      conic-gradient(from 210deg, #ffd60a, #ff7a59, #b58cff, #ffd60a) border-box;
-    border: 2.5px solid transparent;
+      linear-gradient(var(--color-primary), var(--color-primary)) border-box;
+    border: 2px solid transparent;
   }
 
   .story-ring-seen {
     background:
       linear-gradient(var(--color-background), var(--color-background)) padding-box,
-      linear-gradient(var(--color-outline-variant), var(--color-outline-variant)) border-box;
-    border: 2.5px solid transparent;
+      linear-gradient(var(--color-outline-strong), var(--color-outline-strong)) border-box;
+    border: 2px solid transparent;
   }
 
   /* Cover art without images: a named gradient per item, picked by hash. */

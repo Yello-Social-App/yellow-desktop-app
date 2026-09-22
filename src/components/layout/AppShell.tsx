@@ -25,6 +25,11 @@ import { Topbar } from './Topbar';
  * are subscribed for the same reason, and for one more: a clicked OS
  * notification has to be able to navigate from wherever the user was.
  *
+ * The rails come in two shapes — labelled ("quiet rails") and icon-only with
+ * one activity panel — switched from the top bar and remembered per machine
+ * (stores/layout-store.ts). Each rail draws its own shape; the shell only
+ * places them.
+ *
  * The messages screen needs two panes, so on it the column fills the space
  * between the rails and the right rail folds away. The nav never moves; the
  * rail's width is what animates, so the change reads as the page opening up
@@ -48,6 +53,9 @@ export function AppShell() {
   const [searchQuery, setSearchQuery] = useState('');
   const { pathname } = useLocation();
   const isWide = pathname.startsWith('/messages');
+  // Home lays its composer and posts out as cards on the canvas, so its column
+  // has no side hairlines; the other screens are lists that rely on them.
+  const isCanvas = pathname === '/feed' || pathname === '/';
 
   useChatSubscription();
   useNotificationSubscription();
@@ -68,7 +76,14 @@ export function AppShell() {
             key={pageKeyOf(pathname)}
             className={cn(
               'animate-fade-up mx-auto flex w-full flex-col',
-              isWide ? 'h-full' : 'max-w-content-max border-outline-variant min-h-full border-x',
+              isWide
+                ? 'h-full'
+                : isCanvas
+                  ? // Home fills the space between the rails, as the design has
+                    // it — capped so a very wide window does not stretch a post
+                    // into one long line.
+                    'max-w-feed-max min-h-full'
+                  : 'max-w-content-max border-outline-variant min-h-full border-x',
             )}
           >
             <Outlet context={{ searchQuery } satisfies AppShellContext} />

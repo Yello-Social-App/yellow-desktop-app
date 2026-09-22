@@ -61,6 +61,36 @@ export function relativeTime(isoTimestamp: string, now: number = Date.now()): st
   return dayFormatter.format(date);
 }
 
+const shortDayFormatter = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
+
+/**
+ * The compact form lists and cards use: "now", "11m", "5h", "3d", then the
+ * date ("Sep 12"). The full "11 minutes ago" belongs in a tooltip or a detail
+ * view; in a row it is wider than the name beside it.
+ */
+export function shortRelativeTime(isoTimestamp: string, now: number = Date.now()): string {
+  const date = instantOf(isoTimestamp);
+  if (date === null) {
+    return UNKNOWN_TIME;
+  }
+  const elapsedMinutes = Math.max(0, Math.round((now - date.getTime()) / MS_PER_MINUTE));
+  if (elapsedMinutes < 1) {
+    return 'now';
+  }
+  if (elapsedMinutes < MINUTES_PER_HOUR) {
+    return `${String(elapsedMinutes)}m`;
+  }
+  const elapsedHours = Math.round(elapsedMinutes / MINUTES_PER_HOUR);
+  if (elapsedHours < HOURS_PER_DAY) {
+    return `${String(elapsedHours)}h`;
+  }
+  const elapsedDays = Math.round(elapsedHours / HOURS_PER_DAY);
+  if (elapsedDays < DAYS_PER_WEEK) {
+    return `${String(elapsedDays)}d`;
+  }
+  return shortDayFormatter.format(date);
+}
+
 export function clockTime(isoTimestamp: string): string {
   const date = instantOf(isoTimestamp);
   return date === null ? UNKNOWN_TIME : timeFormatter.format(date);
