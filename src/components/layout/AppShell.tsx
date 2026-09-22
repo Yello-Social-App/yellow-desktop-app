@@ -59,7 +59,7 @@ export function AppShell() {
   const { pathname } = useLocation();
   // Messages is a two-pane chat: it fills the window and scrolls inside its panes.
   const isWide = pathname.startsWith('/messages');
-  // Settings scrolls inside its own panes too, within the usual column.
+  // Settings keeps Home's column and rail, but scrolls inside its own panes too.
   const isPaned = isWide || pathname.startsWith('/settings');
   // Home lays its composer and posts out as cards on the canvas, so its column
   // has no side hairlines; the other screens are lists that rely on them.
@@ -87,15 +87,14 @@ export function AppShell() {
               'animate-fade-up mx-auto flex w-full flex-col',
               isWide
                 ? 'h-full'
-                : isCanvas
-                  ? // Home fills the space between the rails, as the design has
-                    // it — capped so a very wide window does not stretch a post
-                    // into one long line.
-                    'max-w-feed-max min-h-full'
-                  : cn(
-                      'max-w-content-max border-outline-variant border-x',
-                      isPaned ? 'h-full' : 'min-h-full',
-                    ),
+                : // Every other screen shares Home's column: it fills between the
+                  // rails, capped so a very wide window does not stretch content
+                  // into one long line, and keeps its width between screens.
+                  cn(
+                    'max-w-feed-max',
+                    isPaned ? 'h-full' : 'min-h-full',
+                    !isCanvas && 'border-outline-variant border-x',
+                  ),
             )}
           >
             <Outlet context={{ searchQuery } satisfies AppShellContext} />
