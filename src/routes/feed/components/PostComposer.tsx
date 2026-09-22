@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { IconButton } from '@/components/ui/IconButton';
+import { Popover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { discardPostImages, stagePostImages } from '@/features/feed/api';
@@ -48,7 +48,13 @@ export function PostComposer() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const remaining = POST_MAX_LENGTH - body.trim().length;
-  const visibilityHint = VISIBILITY_OPTIONS.find((option) => option.value === visibility)?.hint;
+  const selectedVisibility = VISIBILITY_OPTIONS.find((option) => option.value === visibility) ?? {
+    value: visibility,
+    label: 'Public',
+    hint: '',
+  };
+  const visibilityHint = selectedVisibility.hint;
+  const [isVisibilityOpen, setIsVisibilityOpen] = useState(false);
   const canAttachMore = images.length < POST_MAX_IMAGES;
   const isEmpty = body.trim() === '' && images.length === 0;
   const VisibilityIcon = VISIBILITY_ICONS[visibility];
@@ -150,12 +156,13 @@ export function PostComposer() {
   };
 
   return (
-    <form className="gap-md px-lg py-md flex" onSubmit={handleSubmit}>
+    <form className="flex gap-3 p-3.5" onSubmit={handleSubmit}>
       {user !== null && (
         <Avatar
           initials={initialsOf(user)}
           name={displayName(user)}
           imageUrl={user.avatarUrl}
+          size="sm"
           className="self-start"
         />
       )}
@@ -175,7 +182,7 @@ export function PostComposer() {
             setBody(event.target.value);
             setError(null);
           }}
-          className="text-on-surface placeholder:text-on-surface-variant min-h-10 w-full resize-none border-none bg-transparent py-2 text-[18px] leading-relaxed focus:outline-none"
+          className="text-on-surface placeholder:text-outline min-h-9 w-full resize-none border-none bg-transparent py-1.5 text-[15px] leading-relaxed focus:outline-none"
         />
 
         {images.length > 0 && (
@@ -215,83 +222,106 @@ export function PostComposer() {
           </p>
         )}
 
-        {/* Visibility as a row of chips: one tap, and the choice stays visible. */}
-        <div
-          role="radiogroup"
-          aria-label="Who can see this post"
-          className="-ml-1 flex flex-wrap items-center gap-1"
-        >
-          {VISIBILITY_OPTIONS.map((option) => {
-            const Icon = VISIBILITY_ICONS[option.value];
-            const isSelected = option.value === visibility;
-            return (
+        {/* One row, as the design has it: attach, who sees it, then Post. */}
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            aria-label={
+              canAttachMore
+                ? `Attach up to ${String(POST_MAX_IMAGES)} photos (JPEG, PNG, GIF or WebP, 5 MB each)`
+                : `That is the limit of ${String(POST_MAX_IMAGES)} photos`
+            }
+            title="Add image"
+            disabled={isPublishing || isPicking || !canAttachMore}
+            onClick={attach}
+            className="border-outline-strong text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-tone flex size-8 items-center justify-center rounded-lg border disabled:opacity-40"
+          >
+            <ImagePlus aria-hidden className="size-4" />
+          </button>
+
+          <Popover
+            isOpen={isVisibilityOpen}
+            onClose={() => {
+              setIsVisibilityOpen(false);
+            }}
+            label="Who can see this post"
+            panelClassName="w-56 py-1"
+            trigger={
               <button
-                key={option.value}
                 type="button"
-                role="radio"
-                aria-checked={isSelected}
-                title={option.hint}
+                aria-haspopup="dialog"
+                aria-expanded={isVisibilityOpen}
+                aria-label={`Who can see this post: ${selectedVisibility.label}`}
                 onClick={() => {
-                  setVisibility(option.value);
+                  setIsVisibilityOpen((open) => !open);
                 }}
-                className={cn(
-                  'transition-tone flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold',
-                  isSelected
-                    ? 'bg-primary-fixed text-on-primary-fixed'
-                    : 'text-on-surface-variant hover:bg-surface-container-high',
-                )}
+                className="border-outline-strong text-on-surface/85 hover:bg-surface-container-low transition-tone flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12.5px] font-medium"
               >
-                <Icon aria-hidden className="size-3.5" />
-                {option.label}
+                <VisibilityIcon aria-hidden className="size-3.5" />
+                {selectedVisibility.label}
               </button>
-            );
-          })}
-        </div>
+            }
+          >
+            <div role="radiogroup" aria-label="Who can see this post" className="flex flex-col">
+              {VISIBILITY_OPTIONS.map((option) => {
+                const Icon = VISIBILITY_ICONS[option.value];
+                const isSelected = option.value === visibility;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    onClick={() => {
+                      setVisibility(option.value);
+                      setIsVisibilityOpen(false);
+                    }}
+                    className={cn(
+                      'hover:bg-surface-container-low transition-tone flex items-start gap-2.5 px-3 py-2 text-left',
+                      isSelected && 'bg-surface-container-low',
+                    )}
+                  >
+                    <Icon
+                      aria-hidden
+                      className={cn('mt-0.5 size-4 shrink-0', isSelected && 'text-primary')}
+                    />
+                    <span className="min-w-0">
+                      <span className="text-on-surface block text-[13.5px] font-medium">
+                        {option.label}
+                      </span>
+                      <span className="text-outline block text-[12px]">{option.hint}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Popover>
 
-        <div className="border-outline-variant gap-md pt-sm flex items-center justify-between border-t">
-          <div className="-ml-2 flex items-center gap-1">
-            <IconButton
-              label={
-                canAttachMore
-                  ? `Attach up to ${String(POST_MAX_IMAGES)} photos (JPEG, PNG, GIF or WebP, 5 MB each)`
-                  : `That is the limit of ${String(POST_MAX_IMAGES)} photos`
-              }
-              tone="brand"
-              icon={<ImagePlus className="size-5" />}
-              disabled={isPublishing || isPicking || !canAttachMore}
-              onClick={attach}
-            />
-            {images.length > 0 && (
-              <span className="text-on-surface-variant text-[12px] tabular-nums">
-                {images.length}/{POST_MAX_IMAGES}
-              </span>
-            )}
-          </div>
+          {images.length > 0 && (
+            <span className="text-on-surface-variant text-[12px] tabular-nums">
+              {images.length}/{POST_MAX_IMAGES}
+            </span>
+          )}
 
-          <div className="gap-md flex items-center">
-            {body.trim().length > 0 && (
-              <span
-                className={cn(
-                  'text-[12px] tabular-nums',
-                  remaining < POST_MAX_LENGTH * (1 - COUNTER_WARN_RATIO)
-                    ? 'text-error'
-                    : 'text-on-surface-variant',
-                )}
-                aria-live="polite"
-              >
-                {remaining}
-              </span>
-            )}
-            <span className="text-on-surface-variant sr-only">{visibilityHint}</span>
-            <Button
-              type="submit"
-              isLoading={isPublishing}
-              disabled={isEmpty}
-              leadingIcon={<VisibilityIcon aria-hidden className="size-3.5" />}
+          <div className="flex-1" />
+
+          {body.trim().length > 0 && (
+            <span
+              className={cn(
+                'text-[12px] tabular-nums',
+                remaining < POST_MAX_LENGTH * (1 - COUNTER_WARN_RATIO)
+                  ? 'text-error'
+                  : 'text-on-surface-variant',
+              )}
+              aria-live="polite"
             >
-              Post
-            </Button>
-          </div>
+              {remaining}
+            </span>
+          )}
+          <span className="sr-only">{visibilityHint}</span>
+          <Button type="submit" size="sm" isLoading={isPublishing} disabled={isEmpty}>
+            Post
+          </Button>
         </div>
       </div>
     </form>

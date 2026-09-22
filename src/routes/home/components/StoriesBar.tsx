@@ -31,8 +31,8 @@ export function StoriesBar() {
   };
 
   return (
-    <div className="border-outline-variant border-b">
-      <ul className="flex gap-4 overflow-x-auto px-5 py-4" aria-label="Stories">
+    <div>
+      <ul className="flex gap-3.5 overflow-x-auto py-0.5" aria-label="Stories">
         {user !== null && (
           <li className="flex w-[68px] shrink-0 flex-col items-center gap-1.5">
             <span className="relative">
@@ -116,5 +116,81 @@ export function StoriesBar() {
         />
       )}
     </div>
+  );
+}
+
+/** Faces shown in the compact chip before the word "stories" takes over. */
+const CHIP_FACES = 3;
+
+/**
+ * The stories row folded into a chip, for the compact frame: the first few
+ * faces stacked, unseen first, beside the word "stories". Opening it plays the
+ * first story in the same viewer the full row uses, and the viewer's own
+ * next/previous walks the rest. With nothing to watch, it offers to post one.
+ */
+export function StoriesChip() {
+  const stories = useStoriesStore((state) => state.stories);
+  const openId = useStoriesStore((state) => state.openId);
+  const open = useStoriesStore((state) => state.open);
+  const [isComposing, setIsComposing] = useState(false);
+
+  const ordered = [...stories].sort((a, b) => Number(a.isSeen) - Number(b.isSeen));
+  const [first] = ordered;
+  const unseen = ordered.filter((story) => !story.isSeen).length;
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={
+          first === undefined
+            ? 'Add to your story'
+            : `Stories, ${String(unseen)} new of ${String(ordered.length)}`
+        }
+        onClick={(event) => {
+          if (first === undefined) {
+            setIsComposing(true);
+            return;
+          }
+          const rect = event.currentTarget.getBoundingClientRect();
+          open(first.id, { x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+        }}
+        className="text-outline hover:text-on-surface-variant transition-tone flex items-center gap-2 pb-2.5 text-[12.5px]"
+      >
+        {first === undefined ? (
+          <Plus aria-hidden className="size-3.5" />
+        ) : (
+          <span className="flex -space-x-1.5">
+            {ordered.slice(0, CHIP_FACES).map((story) => (
+              <span
+                key={story.id}
+                className={cn(
+                  'ring-background rounded-full ring-2',
+                  !story.isSeen && 'outline-primary outline-1',
+                )}
+              >
+                <Avatar
+                  initials={initialsOf(story.author)}
+                  name={displayName(story.author)}
+                  imageUrl={story.author.avatarUrl}
+                  size="xs"
+                />
+              </span>
+            ))}
+          </span>
+        )}
+        stories
+      </button>
+
+      {openId !== null && <StoryViewer />}
+      {isComposing && (
+        <StoryComposer
+          onClose={() => {
+            setIsComposing(false);
+          }}
+        />
+      )}
+    </>
   );
 }

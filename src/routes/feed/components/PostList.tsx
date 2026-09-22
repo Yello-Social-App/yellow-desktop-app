@@ -52,7 +52,7 @@ export function PostList({
       // Lazy rendering of off-screen rows only earns its keep on a long list;
       // below the threshold its height estimates make the scrollbar jump.
       className={cn(
-        'stagger flex flex-col gap-3 p-4',
+        'stagger flex flex-col gap-3.5',
         posts.length > VIRTUALIZATION_THRESHOLD && 'list-windowed',
       )}
       data-row-height={FEED_ROW_HEIGHT_PX}
@@ -61,7 +61,7 @@ export function PostList({
       {posts.map((post) => (
         <li
           key={post.id}
-          className="bg-surface-container-lowest border-outline-variant hover:border-outline/40 transition-tone animate-fade-up rounded-2xl border"
+          className="bg-surface-container-lowest border-outline-variant hover:border-outline-strong transition-tone animate-fade-up rounded-[14px] border"
         >
           <PostCard
             post={post}

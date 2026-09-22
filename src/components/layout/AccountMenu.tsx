@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, LogOut, Plus, ShieldAlert, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronsUpDown, LogOut, Plus, ShieldAlert, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,6 +8,7 @@ import { Popover } from '@/components/ui/Popover';
 import { Spinner } from '@/components/ui/Spinner';
 import { useAccountsStore } from '@/features/auth/accounts-store';
 import { useCurrentUser } from '@/features/auth/hooks';
+import { useFriendList } from '@/features/friends/hooks';
 import { cn } from '@/lib/cn';
 import { displayName, handleOf, initialsOf } from '@/lib/user-display';
 
@@ -26,11 +27,21 @@ import { SignOutDialog } from './SignOutDialog';
  * and receives a profile, and could not authenticate as anyone even if the page
  * were fully compromised (OWASP A01/A02).
  */
-export function AccountMenu() {
+interface AccountMenuProps {
+  /**
+   * `row` is the labelled rail's foot: avatar, name, handle, opening upward.
+   * `pill` is the compact top bar's: your friend count and avatar, opening
+   * downward from the bar's right edge.
+   */
+  variant?: 'row' | 'pill';
+}
+
+export function AccountMenu({ variant = 'row' }: AccountMenuProps) {
   const user = useCurrentUser();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isSignOutOpen, setIsSignOutOpen] = useState(false);
+  const friendCount = useFriendList('friends').total;
 
   const accounts = useAccountsStore((state) => state.accounts);
   const status = useAccountsStore((state) => state.status);
@@ -66,40 +77,66 @@ export function AccountMenu() {
           setIsOpen(false);
         }}
         // The rail sits at the bottom of the window, so the panel opens upward.
-        side="above"
-        align="left"
+        side={variant === 'pill' ? 'below' : 'above'}
+        align={variant === 'pill' ? 'right' : 'left'}
         label="Accounts"
-        className="mt-auto"
         panelClassName="w-[248px] max-h-[60vh]"
         trigger={
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            aria-expanded={isOpen}
-            onClick={() => {
-              setIsOpen((previous) => !previous);
-            }}
-            className={cn(
-              'hover:bg-surface-container-low transition-tone gap-sm flex w-full items-center rounded-full p-2 text-left',
-              isOpen && 'bg-surface-container-low',
-            )}
-          >
-            <Avatar
-              initials={initialsOf(user)}
-              name={displayName(user)}
-              imageUrl={user.avatarUrl}
-              size="md"
-            />
-            <span className="min-w-0 flex-1">
-              <span className="text-on-surface block truncate text-[15px] font-semibold">
-                {displayName(user)}
+          variant === 'pill' ? (
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={isOpen}
+              aria-label={`Accounts — signed in as ${displayName(user)}`}
+              onClick={() => {
+                setIsOpen((previous) => !previous);
+              }}
+              className={cn(
+                'border-outline-strong bg-surface-container-lowest hover:bg-surface-container-low transition-tone flex h-[38px] items-center gap-[9px] rounded-[10px] border pr-1.5 pl-2',
+                isOpen && 'bg-surface-container-low',
+              )}
+            >
+              <span className="text-outline text-[12.5px]">
+                <strong className="text-on-surface font-mono font-medium">{friendCount}</strong>{' '}
+                {friendCount === 1 ? 'friend' : 'friends'}
               </span>
-              <span className="text-on-surface-variant block truncate text-[13px]">
-                {handleOf(user)}
+              <span aria-hidden className="bg-outline-strong h-4 w-px" />
+              <Avatar
+                initials={initialsOf(user)}
+                name={displayName(user)}
+                imageUrl={user.avatarUrl}
+                size="xs"
+              />
+              <ChevronDown aria-hidden className="text-outline size-3.5" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={isOpen}
+              onClick={() => {
+                setIsOpen((previous) => !previous);
+              }}
+              className={cn(
+                'hover:bg-surface-container-low transition-tone flex h-[52px] w-full items-center gap-2.5 rounded-xl px-2.5 text-left',
+                isOpen && 'bg-surface-container-low',
+              )}
+            >
+              <Avatar
+                initials={initialsOf(user)}
+                name={displayName(user)}
+                imageUrl={user.avatarUrl}
+                size="sm"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="text-on-surface block truncate text-[13.5px] font-semibold">
+                  {displayName(user)}
+                </span>
+                <span className="text-outline block truncate text-[12px]">{handleOf(user)}</span>
               </span>
-            </span>
-            <ChevronsUpDown aria-hidden className="text-on-surface-variant size-4 shrink-0" />
-          </button>
+              <ChevronsUpDown aria-hidden className="text-outline size-3.5 shrink-0" />
+            </button>
+          )
         }
       >
         <div className="min-h-0 flex-1 overflow-y-auto">

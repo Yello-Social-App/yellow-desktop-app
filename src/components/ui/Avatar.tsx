@@ -55,8 +55,8 @@ export function Avatar({
         aria-label={name}
         role="img"
         className={cn(
-          'bg-primary-fixed text-on-primary-fixed font-label inline-flex items-center justify-center',
-          'ring-outline-variant overflow-hidden rounded-full uppercase ring-1',
+          'bg-surface-container-high text-on-surface-variant font-label inline-flex items-center justify-center',
+          'ring-outline-strong overflow-hidden rounded-full uppercase ring-1',
           SIZE_CLASSES[size],
         )}
       >

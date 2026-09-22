@@ -1,4 +1,14 @@
-import { Globe, Link2, Lock, MessageCircle, Pencil, Repeat2, Trash2, Users } from 'lucide-react';
+import {
+  Ellipsis,
+  Globe,
+  Link2,
+  Lock,
+  MessageCircle,
+  Pencil,
+  Repeat2,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { memo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -6,13 +16,14 @@ import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
 import { Avatar } from '@/components/ui/Avatar';
 import { IconButton } from '@/components/ui/IconButton';
+import { Popover } from '@/components/ui/Popover';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import type { PostActions, PostEdit } from '@/features/feed/post-actions';
 import { canEdit } from '@/features/feed/post-actions';
 import { reactionTotal, visibilityOf, type Post } from '@/features/feed/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
-import { relativeTime } from '@/lib/relative-time';
+import { relativeTime, shortRelativeTime } from '@/lib/relative-time';
 import { displayName, handleOf, initialsOf } from '@/lib/user-display';
 
 import { Button } from '@/components/ui/Button';
@@ -78,6 +89,7 @@ export const PostCard = memo(function PostCard({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const permalink = `/posts/${post.id}`;
   const [dialog, setDialog] = useState<OpenDialog>('none');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   const author = displayName(post.author);
@@ -97,17 +109,23 @@ export const PostCard = memo(function PostCard({
   };
 
   return (
-    <article className="gap-md px-lg py-md flex">
-      <Link to={`/users/${post.author.id}`} className="shrink-0 self-start">
-        <Avatar initials={initialsOf(post.author)} name={author} imageUrl={post.author.avatarUrl} />
-      </Link>
-
-      <div className="gap-sm flex min-w-0 flex-1 flex-col">
-        <div className="flex items-start gap-1">
-          <div className="text-on-surface-variant flex min-w-0 flex-wrap items-baseline gap-x-1 text-[14px]">
+    // The design's card: who and when across the top, then the post at full
+    // width beneath — not hung off an avatar column, which indents every line.
+    <article className="flex flex-col gap-2.5 p-3.5">
+      <div className="flex min-w-0 flex-col gap-2.5">
+        <div className="flex items-center gap-2.5">
+          <Link to={`/users/${post.author.id}`} className="shrink-0">
+            <Avatar
+              initials={initialsOf(post.author)}
+              name={author}
+              imageUrl={post.author.avatarUrl}
+              size="sm"
+            />
+          </Link>
+          <div className="text-outline flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 text-[13px]">
             <Link
               to={`/users/${post.author.id}`}
-              className="text-on-surface truncate text-[15px] font-bold hover:underline"
+              className="text-on-surface truncate text-[14px] font-semibold hover:underline"
             >
               {author}
             </Link>
@@ -116,8 +134,8 @@ export const PostCard = memo(function PostCard({
             {isDetail ? (
               <span>{relativeTime(post.createdAt)}</span>
             ) : (
-              <Link to={permalink} className="hover:underline">
-                {relativeTime(post.createdAt)}
+              <Link to={permalink} title={relativeTime(post.createdAt)} className="hover:underline">
+                {shortRelativeTime(post.createdAt)}
               </Link>
             )}
             <VisibilityIcon
@@ -127,27 +145,52 @@ export const PostCard = memo(function PostCard({
           </div>
 
           {isOwn && panel !== 'edit' && (
-            <div className="-my-1.5 ml-auto flex shrink-0">
-              <IconButton
-                label="Edit post"
-                size="sm"
-                icon={<Pencil className="size-4" />}
-                disabled={isBusy}
+            <Popover
+              isOpen={isMenuOpen}
+              onClose={() => {
+                setIsMenuOpen(false);
+              }}
+              label="Post options"
+              align="right"
+              className="-my-1 shrink-0"
+              panelClassName="w-44 py-1"
+              trigger={
+                <IconButton
+                  label="Post options"
+                  size="sm"
+                  aria-haspopup="menu"
+                  aria-expanded={isMenuOpen}
+                  icon={<Ellipsis className="size-4" />}
+                  disabled={isBusy}
+                  onClick={() => {
+                    setIsMenuOpen((open) => !open);
+                  }}
+                />
+              }
+            >
+              <button
+                type="button"
                 onClick={() => {
+                  setIsMenuOpen(false);
                   toggle('edit');
                 }}
-              />
-              <IconButton
-                label="Delete post"
-                size="sm"
-                tone="danger"
-                icon={<Trash2 className="size-4" />}
-                disabled={isBusy}
+                className="text-on-surface hover:bg-surface-container-low transition-tone flex items-center gap-2.5 px-3 py-2 text-left text-[13.5px]"
+              >
+                <Pencil aria-hidden className="size-4" />
+                Edit post
+              </button>
+              <button
+                type="button"
                 onClick={() => {
+                  setIsMenuOpen(false);
                   setDialog('delete');
                 }}
-              />
-            </div>
+                className="text-error hover:bg-error-container transition-tone flex items-center gap-2.5 px-3 py-2 text-left text-[13.5px]"
+              >
+                <Trash2 aria-hidden className="size-4" />
+                Delete post
+              </button>
+            </Popover>
           )}
         </div>
 
