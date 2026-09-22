@@ -13,6 +13,7 @@ import { useCurrentUser } from '@/features/auth/hooks';
 import { useFeedStore } from '@/features/feed/store';
 import { createLogger } from '@/lib/logger';
 import { onNotificationEvent } from '@/lib/ipc';
+import { useFriendsStore } from '@/features/friends/store';
 
 import { useNotificationsStore, type NotificationListSlice } from './store';
 import { routeFor, type Notification, type NotificationFilter } from './types';
@@ -61,6 +62,11 @@ export function useNotificationSubscription(): void {
           );
           if (postIds.length > 0) {
             void useFeedStore.getState().refreshPosts(postIds);
+          }
+          // A request or an acceptance changes the friend lists on this side
+          // too; re-read them now rather than at the next background refresh.
+          if (event.data.items.some((row) => row.type.startsWith('FRIEND_'))) {
+            void useFriendsStore.getState().refresh({ force: true });
           }
           break;
         }

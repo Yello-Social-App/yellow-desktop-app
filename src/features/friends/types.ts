@@ -9,6 +9,9 @@ import type { FriendEntry, FriendRequestDirection, FriendStatus } from '@shared/
 
 export const FRIENDS_PAGE_SIZE = 20;
 
+/** The API's largest page, used when a refresh re-reads everything on screen. */
+export const FRIENDS_REFRESH_MAX_SIZE = 50;
+
 /** What to show on a relationship control for one user. */
 export type Relationship = 'none' | 'friends' | 'incoming' | 'outgoing' | 'blocked' | 'self';
 

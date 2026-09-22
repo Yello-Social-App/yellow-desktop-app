@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
+import { useFriendsSync } from '@/features/friends/hooks';
 import { useChatSubscription } from '@/features/messages/hooks';
 import { useNotificationSubscription } from '@/features/notifications/hooks';
 import { cn } from '@/lib/cn';
@@ -59,6 +60,7 @@ export function AppShell() {
 
   useChatSubscription();
   useNotificationSubscription();
+  useFriendsSync();
 
   return (
     <div className="bg-background flex h-full flex-col">

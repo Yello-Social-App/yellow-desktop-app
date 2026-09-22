@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { RowSkeleton } from '@/components/ui/Skeleton';
-import { useFriendList, useFriendsLoader } from '@/features/friends/hooks';
+import { useFriendList, useFriendsLoader, useFriendsRefreshOnShow } from '@/features/friends/hooks';
 import { useFriendsStore, type ListName } from '@/features/friends/store';
 import { usePeopleSearch } from '@/features/people/hooks';
 import { normalizeQuery } from '@/features/people/search';
@@ -101,6 +101,7 @@ const DISCOVER_TAB = {
  */
 export default function FriendsPage() {
   useFriendsLoader();
+  useFriendsRefreshOnShow();
   const location = useLocation();
   const [active, setActive] = useState<FriendsTab>('friends');
   const [query, setQuery] = useState(() => peopleQueryFrom(location.state) ?? '');

@@ -17,10 +17,10 @@
  * A delete is *not* idempotent — a second one is a genuine 404 — so it is left
  * alone and reported.
  */
-import { z } from 'zod';
 
 import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
+import { noContentSchema } from '../../api/envelope';
 import { apiRequest } from '../../api/http-client';
 import { notificationWatcher } from '../../notifications/watcher';
 import { IPC_CHANNELS } from '../channels';
@@ -56,7 +56,6 @@ import {
 
 const log = createLogger('ipc.notifications');
 
-const noContentSchema = z.undefined();
 const ACKNOWLEDGED: AcknowledgedResponse = { acknowledged: true };
 
 /** The service's own code for "no such row, or not yours" — the two are one answer. */

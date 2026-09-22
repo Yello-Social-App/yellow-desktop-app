@@ -27,3 +27,14 @@ export const apiErrorEnvelopeSchema = z.object({
 });
 
 export type ApiErrorEnvelope = z.infer<typeof apiErrorEnvelopeSchema>;
+
+/**
+ * The answer to a call made for its effect alone (a delete, a mark-read).
+ *
+ * The API is not consistent here: some of these answer 204 with no body, others
+ * 200 with `{ success: true, data: null }` — and `null` is not `undefined`. A
+ * strict check on the body turned a delete the server had already carried out
+ * into an error, so the screen kept showing what was gone. The status code is
+ * the answer; the body, whatever it is, is discarded and never used.
+ */
+export const noContentSchema = z.unknown().transform(() => undefined);
