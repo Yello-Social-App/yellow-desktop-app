@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useCurrentUser } from '@/features/auth/hooks';
+import { useFeedStore } from '@/features/feed/store';
 import { createLogger } from '@/lib/logger';
 import { onNotificationEvent } from '@/lib/ipc';
 
@@ -50,9 +51,19 @@ export function useNotificationSubscription(): void {
           setUnreadCount(event.data.count);
           break;
 
-        case 'received':
+        case 'received': {
           receive(event.data.items);
+          // A comment, reply or reaction on a post means the feed's copy of
+          // that post is now behind; re-read it. The id is only used as a
+          // lookup key into posts the feed already holds, never as a route.
+          const postIds = event.data.items.flatMap((row) =>
+            row.data.postId === undefined ? [] : [row.data.postId],
+          );
+          if (postIds.length > 0) {
+            void useFeedStore.getState().refreshPosts(postIds);
+          }
           break;
+        }
 
         case 'activated': {
           // The toast has already brought the window back; acknowledge the row

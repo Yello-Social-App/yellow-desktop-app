@@ -4,6 +4,12 @@
  * Holds the loaded pages, the cursor for the next one, and the in-flight flags
  * the composer and the reaction buttons read.
  *
+ * The feed is loaded once and then kept for the session, so what *other*
+ * people do — a comment, a reply, a reaction on a post already on screen —
+ * would never show until a restart. `refresh` and `refreshPosts` are how the
+ * kept copy catches up: they re-read from the server and adopt the records in
+ * place, by id, without reordering what the reader is looking at.
+ *
  * The post *mutations* are not here — they live in post-actions.ts, because a
  * profile timeline runs the same operations against a list this store does not
  * own. What the store contributes is the sink those mutations write into.
@@ -13,11 +19,16 @@ import { create } from 'zustand';
 
 import { createLogger } from '@/lib/logger';
 
-import { fetchFeed, publishPost } from './api';
+import { fetchFeed, fetchPost, publishPost } from './api';
 import type { PostSink } from './post-actions';
 import type { ComposePostInput } from './types';
 
 const log = createLogger('feed.store');
+
+/** At most this often does a quiet refresh re-read the first page. */
+const REFRESH_MIN_INTERVAL_MS = 30_000;
+/** Posts re-read at once for one burst of notifications. */
+const REFRESH_POSTS_MAX = 5;
 
 export type FeedStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -29,7 +40,16 @@ interface FeedState {
   hasMore: boolean;
   isLoadingMore: boolean;
   isPublishing: boolean;
+  /** When the first page was last read, for throttling quiet refreshes. */
+  refreshedAt: number;
   load: () => Promise<void>;
+  /**
+   * Quietly re-reads the first page: posts already shown are updated in
+   * place, newer ones go on top, nothing is dropped. Throttled unless `force`.
+   */
+  refresh: (force?: boolean) => Promise<void>;
+  /** Re-reads the named posts, if the feed holds them. */
+  refreshPosts: (postIds: readonly string[]) => Promise<void>;
   loadMore: () => Promise<void>;
   publish: (input: ComposePostInput, imageTokens?: readonly string[]) => Promise<boolean>;
   /** Adopts a post the server has just returned, wherever it came from. */
@@ -53,6 +73,7 @@ export const useFeedStore = create<FeedState>((set, get) => ({
   hasMore: false,
   isLoadingMore: false,
   isPublishing: false,
+  refreshedAt: 0,
 
   load: async () => {
     set({ status: 'loading', error: null });
@@ -68,7 +89,44 @@ export const useFeedStore = create<FeedState>((set, get) => ({
       nextCursor: result.data.nextCursor,
       hasMore: result.data.hasMore,
       status: 'ready',
+      refreshedAt: Date.now(),
     });
+  },
+
+  refresh: async (force = false) => {
+    const { status, refreshedAt } = get();
+    if (status !== 'ready' || (!force && Date.now() - refreshedAt < REFRESH_MIN_INTERVAL_MS)) {
+      return;
+    }
+    // Stamped before the call, so a burst of focus events costs one request.
+    set({ refreshedAt: Date.now() });
+    const result = await fetchFeed();
+    if (!result.ok) {
+      // A quiet refresh failing is not worth an error over a feed that works.
+      log.info('feed_refresh_failed', {});
+      return;
+    }
+
+    const fresh = new Map(result.data.posts.map((post) => [post.id, post]));
+    set((state) => {
+      const known = new Set(state.posts.map((post) => post.id));
+      const newer = result.data.posts.filter((post) => !known.has(post.id));
+      return {
+        posts: [...newer, ...state.posts.map((post) => fresh.get(post.id) ?? post)],
+      };
+    });
+    log.info('feed_refreshed', {});
+  },
+
+  refreshPosts: async (postIds) => {
+    const held = new Set(get().posts.map((post) => post.id));
+    const wanted = [...new Set(postIds)].filter((id) => held.has(id)).slice(0, REFRESH_POSTS_MAX);
+    for (const postId of wanted) {
+      const result = await fetchPost(postId);
+      if (result.ok) {
+        get().replacePost(result.data);
+      }
+    }
   },
 
   loadMore: async () => {
