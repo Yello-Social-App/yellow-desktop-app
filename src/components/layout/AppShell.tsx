@@ -47,13 +47,20 @@ export interface AppShellContext {
  * as the app navigating away. The thread animates its own transcript instead.
  */
 function pageKeyOf(pathname: string): string {
-  return pathname.startsWith('/messages') ? '/messages' : pathname;
+  if (pathname.startsWith('/messages')) {
+    return '/messages';
+  }
+  // Moving between settings panes swaps the pane, not the whole page.
+  return pathname.startsWith('/settings') ? '/settings' : pathname;
 }
 
 export function AppShell() {
   const [searchQuery, setSearchQuery] = useState('');
   const { pathname } = useLocation();
+  // Messages is a two-pane chat: it fills the window and scrolls inside its panes.
   const isWide = pathname.startsWith('/messages');
+  // Settings scrolls inside its own panes too, within the usual column.
+  const isPaned = isWide || pathname.startsWith('/settings');
   // Home lays its composer and posts out as cards on the canvas, so its column
   // has no side hairlines; the other screens are lists that rely on them.
   const isCanvas = pathname === '/feed' || pathname === '/';
@@ -71,7 +78,7 @@ export function AppShell() {
           className={cn(
             'min-w-0 flex-1',
             // Messages scroll inside their own panes, so the composer stays put.
-            isWide ? 'overflow-hidden' : 'overflow-y-auto',
+            isPaned ? 'overflow-hidden' : 'overflow-y-auto',
           )}
         >
           <div
@@ -85,7 +92,10 @@ export function AppShell() {
                     // it — capped so a very wide window does not stretch a post
                     // into one long line.
                     'max-w-feed-max min-h-full'
-                  : 'max-w-content-max border-outline-variant min-h-full border-x',
+                  : cn(
+                      'max-w-content-max border-outline-variant border-x',
+                      isPaned ? 'h-full' : 'min-h-full',
+                    ),
             )}
           >
             <Outlet context={{ searchQuery } satisfies AppShellContext} />

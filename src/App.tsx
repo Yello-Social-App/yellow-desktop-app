@@ -72,7 +72,8 @@ export function App() {
                 <Route path="/showcase/:projectId" element={<ProjectPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/users/:userId" element={<UserProfilePage />} />
-                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings" element={<Navigate to="/settings/appearance" replace />} />
+                <Route path="/settings/:section" element={<SettingsPage />} />
               </Route>
             </Route>
           </Route>

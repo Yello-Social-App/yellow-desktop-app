@@ -1,5 +1,7 @@
 import {
   Ellipsis,
+  EyeOff,
+  Flag,
   Globe,
   Link2,
   Lock,
@@ -8,8 +10,9 @@ import {
   Repeat2,
   Trash2,
   Users,
+  VolumeX,
 } from 'lucide-react';
-import { memo, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
@@ -21,6 +24,13 @@ import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import type { PostActions, PostEdit } from '@/features/feed/post-actions';
 import { canEdit } from '@/features/feed/post-actions';
 import { reactionTotal, visibilityOf, type Post } from '@/features/feed/types';
+import {
+  usePostModeration,
+  useRestrictions,
+  type CollapseReason,
+} from '@/features/moderation/hooks';
+import { useModerationStore } from '@/features/moderation/store';
+import { reasonLabel } from '@/features/moderation/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { relativeTime, shortRelativeTime } from '@/lib/relative-time';
@@ -31,6 +41,7 @@ import { Modal } from '@/components/ui/Modal';
 
 import { CommentThread } from './CommentThread';
 import { PostEditor } from './PostEditor';
+import { ReportPostDialog } from './ReportPostDialog';
 import { ReactionBreakdown } from './ReactionBreakdown';
 import { ReactionButton } from './ReactionButton';
 import { RepostDialog } from './RepostDialog';
@@ -71,7 +82,13 @@ const VISIBILITY_ICONS = {
  */
 type OpenPanel = 'none' | 'comments' | 'edit';
 
-type OpenDialog = 'none' | 'repost' | 'delete' | 'share';
+type OpenDialog = 'none' | 'repost' | 'delete' | 'share' | 'report';
+
+/** How long "Link copied" and the like stay under the post. */
+const NOTICE_MS = 2200;
+
+const MENU_ITEM_CLASS =
+  'text-on-surface hover:bg-surface-container-low transition-tone flex items-center gap-2.5 px-3 py-2 text-left text-[13.5px]';
 
 /**
  * Memoised: the feed re-renders on every keystroke in the search box, and a
@@ -90,7 +107,25 @@ export const PostCard = memo(function PostCard({
   const permalink = `/posts/${post.id}`;
   const [dialog, setDialog] = useState<OpenDialog>('none');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  /** A one-line confirmation under the post ("Link copied"), cleared on a timer. */
+  const [notice, setNotice] = useState<string | null>(null);
   const navigate = useNavigate();
+  const moderation = usePostModeration(post);
+  const restrictions = useRestrictions();
+  const showPost = useModerationStore((state) => state.showPost);
+  const hidePost = useModerationStore((state) => state.hidePost);
+
+  useEffect(() => {
+    if (notice === null) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setNotice(null);
+    }, NOTICE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [notice]);
 
   const author = displayName(post.author);
   // Media wins: a post with photos gets no link card, the way a timeline does.
@@ -106,6 +141,27 @@ export const PostCard = memo(function PostCard({
 
   const toggle = (next: OpenPanel): void => {
     setPanel((current) => (current === next ? 'none' : next));
+  };
+
+  if (moderation.collapse !== null) {
+    return (
+      <CollapsedPost
+        reason={moderation.collapse}
+        detail={
+          moderation.reportedFor === null
+            ? null
+            : `Reported for ${reasonLabel(moderation.reportedFor).toLowerCase()} · under review`
+        }
+        handle={handleOf(post.author)}
+        onShow={() => {
+          showPost(post.id);
+        }}
+      />
+    );
+  }
+
+  const closeMenu = (): void => {
+    setIsMenuOpen(false);
   };
 
   return (
@@ -142,6 +198,11 @@ export const PostCard = memo(function PostCard({
               aria-label={`Visibility: ${visibility.toLowerCase()}`}
               className="ml-0.5 size-3.5 self-center"
             />
+            {moderation.reportedFor !== null && (
+              <span className="bg-error-container text-on-error-container ml-1 self-center rounded-md px-1.5 py-px text-[11px] font-semibold">
+                Reported
+              </span>
+            )}
           </div>
 
           {isOwn && panel !== 'edit' && (
@@ -190,6 +251,90 @@ export const PostCard = memo(function PostCard({
                 <Trash2 aria-hidden className="size-4" />
                 Delete post
               </button>
+            </Popover>
+          )}
+
+          {!isOwn && viewerId !== undefined && (
+            <Popover
+              isOpen={isMenuOpen}
+              onClose={closeMenu}
+              label="Post options"
+              align="right"
+              className="-my-1 shrink-0"
+              panelClassName="w-56 py-1"
+              trigger={
+                <IconButton
+                  label="Post options"
+                  size="sm"
+                  aria-haspopup="menu"
+                  aria-expanded={isMenuOpen}
+                  icon={<Ellipsis className="size-4" />}
+                  onClick={() => {
+                    setIsMenuOpen((open) => !open);
+                  }}
+                />
+              }
+            >
+              {visibility === 'PUBLIC' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    void actions.copyLink(post).then((link) => {
+                      if (link !== null) {
+                        setNotice('Link copied');
+                      }
+                    });
+                  }}
+                  className={MENU_ITEM_CLASS}
+                >
+                  <Link2 aria-hidden className="text-on-surface-variant size-4" />
+                  Copy link
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  closeMenu();
+                  hidePost(post.id);
+                }}
+                className={MENU_ITEM_CLASS}
+              >
+                <EyeOff aria-hidden className="text-on-surface-variant size-4" />
+                Hide this post
+              </button>
+              {!moderation.isMuted && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    void restrictions.mute(post.author);
+                  }}
+                  className={cn(MENU_ITEM_CLASS, 'min-w-0')}
+                >
+                  <VolumeX aria-hidden className="text-on-surface-variant size-4 shrink-0" />
+                  <span className="truncate">Mute {handleOf(post.author)}</span>
+                </button>
+              )}
+              <div aria-hidden className="bg-outline-variant mx-2 my-1 h-px" />
+              {moderation.reportedFor === null ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMenu();
+                    setDialog('report');
+                  }}
+                  className="text-error hover:bg-error-container transition-tone flex items-center gap-2.5 px-3 py-2 text-left text-[13.5px]"
+                >
+                  <Flag aria-hidden className="size-4" />
+                  Report post
+                </button>
+              ) : (
+                <p className="text-outline flex items-center gap-2.5 px-3 py-2 text-[13px]">
+                  <Flag aria-hidden className="size-4" />
+                  You reported this post
+                </p>
+              )}
             </Popover>
           )}
         </div>
@@ -347,6 +492,12 @@ export const PostCard = memo(function PostCard({
           </blockquote>
         )}
 
+        {notice !== null && (
+          <p role="status" className="text-tertiary text-[13px]">
+            {notice}
+          </p>
+        )}
+
         {actions.error !== null && actions.pendingPostId === null && (
           <p role="alert" className="text-error text-[13px]">
             {actions.error.message}
@@ -444,6 +595,15 @@ export const PostCard = memo(function PostCard({
           />
         )}
 
+        {dialog === 'report' && (
+          <ReportPostDialog
+            post={post}
+            onClose={() => {
+              setDialog('none');
+            }}
+          />
+        )}
+
         {dialog === 'share' && (
           <ShareDialog
             post={post}
@@ -494,3 +654,39 @@ export const PostCard = memo(function PostCard({
     </article>
   );
 });
+
+const COLLAPSED_TITLES: Record<Exclude<CollapseReason, null>, string> = {
+  reported: 'You reported this post',
+  hidden: 'Post hidden',
+  muted: 'Post from an account you muted',
+  blocked: 'Post from an account you blocked',
+};
+
+interface CollapsedPostProps {
+  reason: Exclude<CollapseReason, null>;
+  detail: string | null;
+  handle: string;
+  onShow: () => void;
+}
+
+/** What a hidden, reported or muted post folds down to — always one click from back. */
+function CollapsedPost({ reason, detail, handle, onShow }: CollapsedPostProps) {
+  const sub =
+    detail ??
+    (reason === 'hidden'
+      ? 'You won’t see this post in your feed.'
+      : `${handle} · manage this in Settings → Privacy & safety`);
+
+  return (
+    <article className="flex items-center gap-3 p-3.5">
+      <EyeOff aria-hidden className="text-outline size-[18px] shrink-0" />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-on-surface text-[14px] font-medium">{COLLAPSED_TITLES[reason]}</span>
+        <span className="text-outline truncate text-[13px]">{sub}</span>
+      </div>
+      <Button variant="outline" size="sm" onClick={onShow}>
+        Show post
+      </Button>
+    </article>
+  );
+}
