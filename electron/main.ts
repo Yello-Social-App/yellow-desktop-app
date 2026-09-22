@@ -26,6 +26,7 @@ import { registerChatHandlers } from './ipc/handlers/chat.handler';
 import { registerCommentHandlers } from './ipc/handlers/comments.handler';
 import { registerCommunityHandlers } from './ipc/handlers/communities.handler';
 import { registerFeedHandlers } from './ipc/handlers/feed.handler';
+import { registerFeedbackHandlers } from './ipc/handlers/feedback.handler';
 import { registerFriendHandlers } from './ipc/handlers/friends.handler';
 import { registerFsHandlers } from './ipc/handlers/fs.handler';
 import { registerLinkHandlers } from './ipc/handlers/links.handler';
@@ -33,6 +34,7 @@ import { registerNotificationHandlers } from './ipc/handlers/notifications.handl
 import { registerPostHandlers } from './ipc/handlers/posts.handler';
 import { registerProfileHandlers } from './ipc/handlers/profile.handler';
 import { registerReactionHandlers } from './ipc/handlers/reactions.handler';
+import { registerSafetyHandlers } from './ipc/handlers/safety.handler';
 import { registerShowcaseHandlers } from './ipc/handlers/showcase.handler';
 import { registerUpdateHandlers } from './ipc/handlers/updates.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
@@ -306,6 +308,8 @@ function bootstrap(): void {
       registerUpdateHandlers();
       registerCommunityHandlers();
       registerShowcaseHandlers();
+      registerFeedbackHandlers();
+      registerSafetyHandlers();
       registerProfileHandlers();
       registerWindowHandlers();
 

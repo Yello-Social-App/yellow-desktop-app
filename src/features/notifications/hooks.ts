@@ -13,9 +13,11 @@ import { useCurrentUser } from '@/features/auth/hooks';
 import { useFeedStore } from '@/features/feed/store';
 import { createLogger } from '@/lib/logger';
 import { onNotificationEvent } from '@/lib/ipc';
+import { useFriendsStore } from '@/features/friends/store';
+import { useModerationStore } from '@/features/moderation/store';
 
 import { useNotificationsStore, type NotificationListSlice } from './store';
-import { routeFor, type Notification, type NotificationFilter } from './types';
+import { REPORT_RESOLVED, routeFor, type Notification, type NotificationFilter } from './types';
 
 const log = createLogger('notifications.hooks');
 
@@ -61,6 +63,16 @@ export function useNotificationSubscription(): void {
           );
           if (postIds.length > 0) {
             void useFeedStore.getState().refreshPosts(postIds);
+          }
+          // A request or an acceptance changes the friend lists on this side
+          // too; re-read them now rather than at the next background refresh.
+          if (event.data.items.some((row) => row.type.startsWith('FRIEND_'))) {
+            void useFriendsStore.getState().refresh({ force: true });
+          }
+          // A report was decided: its status lives in "Your reports", which
+          // is re-read rather than patched from the row's `status`.
+          if (event.data.items.some((row) => row.type === REPORT_RESOLVED)) {
+            void useModerationStore.getState().loadReports();
           }
           break;
         }

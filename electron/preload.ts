@@ -67,6 +67,8 @@ import type {
   ExportPostsResponse,
   FeedRequest,
   FeedResponse,
+  FeedbackPage,
+  FeedbackResponse,
   ForgotPasswordRequest,
   FriendEntryPage,
   FriendEntryResponse,
@@ -89,12 +91,16 @@ import type {
   MarkAllNotificationsRead,
   MarkReadRequest,
   MessagePage,
+  MutedUserPage,
+  MuteUserRequest,
   NotificationIdRequest,
   NotificationPage,
   NotificationPreferences,
   NotificationResponse,
   PageRequest,
   PostIdRequest,
+  PostReportPage,
+  PostReportResponse,
   PostResponse,
   ProjectIdRequest,
   ProjectLike,
@@ -110,6 +116,7 @@ import type {
   RegisterRequest,
   RegisterResponse,
   RepostRequest,
+  SafetyPageRequest,
   SearchUsersRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
@@ -118,6 +125,8 @@ import type {
   ShareLinkCopiedResponse,
   StageImagesRequest,
   StageImagesResponse,
+  SubmitFeedbackRequest,
+  SubmitReportRequest,
   TechCountList,
   ToggleReactionRequest,
   TypingRequest,
@@ -354,6 +363,28 @@ const bridge: YelloBridge = {
     like: (request: ProjectIdRequest) => invoke<ProjectLike>(IPC_CHANNELS.SHOWCASE_LIKE, request),
     unlike: (request: ProjectIdRequest) =>
       invoke<ProjectLike>(IPC_CHANNELS.SHOWCASE_UNLIKE, request),
+  },
+  feedback: {
+    submit: (request: SubmitFeedbackRequest) =>
+      invoke<FeedbackResponse>(IPC_CHANNELS.FEEDBACK_SUBMIT, request),
+    listMine: (request: SafetyPageRequest) =>
+      invoke<FeedbackPage>(IPC_CHANNELS.FEEDBACK_LIST_MINE, request),
+  },
+  safety: {
+    report: (request: SubmitReportRequest) =>
+      invoke<PostReportResponse>(IPC_CHANNELS.SAFETY_REPORT_POST, request),
+    listMyReports: (request: SafetyPageRequest) =>
+      invoke<PostReportPage>(IPC_CHANNELS.SAFETY_LIST_MY_REPORTS, request),
+    mute: (request: MuteUserRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.SAFETY_MUTE, request),
+    unmute: (request: MuteUserRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.SAFETY_UNMUTE, request),
+    listMuted: (request: SafetyPageRequest) =>
+      invoke<MutedUserPage>(IPC_CHANNELS.SAFETY_LIST_MUTED, request),
+    hidePost: (request: PostIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.SAFETY_HIDE_POST, request),
+    unhidePost: (request: PostIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.SAFETY_UNHIDE_POST, request),
   },
   links: {
     preview: (request: LinkPreviewRequest) =>

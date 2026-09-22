@@ -37,6 +37,9 @@ export const ENDPOINTS = {
     byId: (userId: string) => `${base}/users/${seg(userId)}`,
     posts: (userId: string) => `${base}/users/${seg(userId)}/posts`,
     block: (userId: string) => `${base}/users/${seg(userId)}/block`,
+    /** Mute (POST) and unmute (DELETE); both idempotent, both 204. */
+    mute: (userId: string) => `${base}/users/${seg(userId)}/mute`,
+    muted: `${base}/users/me/muted`,
   },
   feed: {
     list: `${base}/feed`,
@@ -46,6 +49,16 @@ export const ENDPOINTS = {
     byId: (postId: string) => `${base}/posts/${seg(postId)}`,
     repost: (postId: string) => `${base}/posts/${seg(postId)}/repost`,
     comments: (postId: string) => `${base}/posts/${seg(postId)}/comments`,
+    reports: (postId: string) => `${base}/posts/${seg(postId)}/reports`,
+    /** Hide (POST) and unhide (DELETE) for the caller's own feed; both 204. */
+    hide: (postId: string) => `${base}/posts/${seg(postId)}/hide`,
+  },
+  feedback: {
+    create: `${base}/feedback`,
+    mine: `${base}/feedback/me`,
+  },
+  reports: {
+    mine: `${base}/reports/me`,
   },
   comments: {
     byId: (commentId: string) => `${base}/comments/${seg(commentId)}`,

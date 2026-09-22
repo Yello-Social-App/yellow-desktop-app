@@ -30,7 +30,7 @@ import {
   unblockUser,
   type FriendsError,
 } from './api';
-import { LOCAL_BLOCKED_STATUS } from './types';
+import { FRIENDS_PAGE_SIZE, FRIENDS_REFRESH_MAX_SIZE, LOCAL_BLOCKED_STATUS } from './types';
 
 const log = createLogger('friends.store');
 
@@ -56,12 +56,18 @@ const EMPTY_SLICE: ListSlice = {
   total: 0,
 };
 
-const FETCHERS: Record<ListName, (page: number) => ReturnType<typeof fetchFriends>> = {
-  friends: (page) => fetchFriends(page),
-  received: (page) => fetchFriendRequests('received', page),
-  sent: (page) => fetchFriendRequests('sent', page),
-  blocked: (page) => fetchBlockedUsers(page),
-};
+const FETCHERS: Record<ListName, (page: number, size?: number) => ReturnType<typeof fetchFriends>> =
+  {
+    friends: (page, size) => fetchFriends(page, size),
+    received: (page, size) => fetchFriendRequests('received', page, size),
+    sent: (page, size) => fetchFriendRequests('sent', page, size),
+    blocked: (page, size) => fetchBlockedUsers(page, size),
+  };
+
+const LIST_NAMES = ['friends', 'received', 'sent', 'blocked'] as const;
+
+/** A background refresh closer than this to the last one is skipped. */
+const REFRESH_THROTTLE_MS = 10_000;
 
 /** The API's own conflict code for a request that already exists. */
 const REQUEST_CONFLICT = 'FRIEND_REQUEST_CONFLICT';
@@ -76,6 +82,13 @@ interface FriendsState {
   load: (name: ListName) => Promise<void>;
   loadAll: () => Promise<void>;
   loadMore: (name: ListName) => Promise<void>;
+  /**
+   * Re-reads every list in the background, without a loading state, so what
+   * the other side did — accepting, declining, removing — shows up. Throttled
+   * unless `force`d, which a live notification does.
+   */
+  refresh: (options?: { force?: boolean }) => Promise<void>;
+  lastRefreshedAt: number;
   sendRequest: (userId: string) => Promise<boolean>;
   cancelRequest: (userId: string) => Promise<boolean>;
   accept: (userId: string) => Promise<boolean>;
@@ -165,6 +178,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => {
     statuses: {},
     pendingIds: new Set(),
     error: null,
+    lastRefreshedAt: 0,
 
     load: async (name) => {
       set((state) => ({
@@ -198,11 +212,82 @@ export const useFriendsStore = create<FriendsState>((set, get) => {
 
     loadAll: async () => {
       // Fresh lists are the truth again; per-user answers from before are stale.
-      set({ statuses: {}, error: null });
+      set({ statuses: {}, error: null, lastRefreshedAt: Date.now() });
       // Independent reads: one failing must not blank the others.
       await Promise.all(
         (['friends', 'received', 'sent', 'blocked'] as const).map((name) => get().load(name)),
       );
+    },
+
+    refresh: async ({ force = false } = {}) => {
+      const state = get();
+      // Before the first load there is nothing to catch up; the loader owns that.
+      if (state.lists.friends.status !== 'ready') {
+        return;
+      }
+      if (!force && Date.now() - state.lastRefreshedAt < REFRESH_THROTTLE_MS) {
+        return;
+      }
+      set({ lastRefreshedAt: Date.now() });
+
+      const results = await Promise.all(
+        LIST_NAMES.map(async (name) => {
+          // As many rows as are on screen, so a refresh never shortens a list
+          // the user scrolled; the API caps a page, so it may take several.
+          const wanted = Math.max(get().lists[name].entries.length, 1);
+          const size = Math.min(wanted, FRIENDS_REFRESH_MAX_SIZE);
+          const pages = Math.ceil(wanted / size);
+          const content: FriendEntry[] = [];
+          let last = true;
+          let total = 0;
+          for (let page = 0; page < pages; page += 1) {
+            const result = await FETCHERS[name](page, size);
+            if (!result.ok) {
+              return null;
+            }
+            content.push(...result.data.content);
+            last = result.data.last;
+            total = result.data.totalElements;
+            if (last) {
+              break;
+            }
+          }
+          return { name, content, last, total };
+        }),
+      );
+
+      const fresh = results.filter((entry) => entry !== null);
+      if (fresh.length === 0) {
+        // A background miss is not worth an error banner; the next one retries.
+        log.warn('friends_refresh_failed', {});
+        return;
+      }
+
+      useUsersStore.getState().prime(fresh.flatMap((entry) => entry.content.map((e) => e.user)));
+      set((current) => {
+        const lists = { ...current.lists };
+        for (const entry of fresh) {
+          lists[entry.name] = {
+            ...lists[entry.name],
+            entries: entry.content,
+            status: 'ready',
+            // `loadMore` pages at FRIENDS_PAGE_SIZE: point it past what is held.
+            page: Math.max(0, Math.ceil(entry.content.length / FRIENDS_PAGE_SIZE) - 1),
+            hasMore: !entry.last,
+            total: entry.total,
+          };
+        }
+        // The lists now say where each relationship stands. A status kept from
+        // this session's own actions only still counts while one is in flight,
+        // and a block, which the server never reports back.
+        const statuses: Record<string, string> = {};
+        for (const [userId, status] of Object.entries(current.statuses)) {
+          if (current.pendingIds.has(userId) || status === LOCAL_BLOCKED_STATUS) {
+            statuses[userId] = status;
+          }
+        }
+        return { lists, statuses };
+      });
     },
 
     loadMore: async (name) => {

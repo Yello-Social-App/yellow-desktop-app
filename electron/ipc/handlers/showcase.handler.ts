@@ -9,10 +9,10 @@
  * Publishing sends exactly the documented fields. `isFeatured`, the counts and
  * the author are the server's to decide and are never put in the body.
  */
-import { z } from 'zod';
 
 import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
+import { noContentSchema } from '../../api/envelope';
 import { apiRequest } from '../../api/http-client';
 import { IPC_CHANNELS, type IpcChannel } from '../channels';
 import { registerIpcHandler } from '../register';
@@ -36,8 +36,6 @@ import {
 } from '../../../shared/ipc-types';
 
 const log = createLogger('ipc.showcase');
-
-const noContentSchema = z.undefined();
 
 /** Like and unlike differ only in verb, so they are one table. */
 const LIKES: readonly { channel: IpcChannel; method: 'post' | 'delete'; event: string }[] = [

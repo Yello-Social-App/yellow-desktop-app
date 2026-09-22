@@ -9,10 +9,10 @@
  * A block is never revealed: the server reports NONE for either side of one,
  * and a blocked user's profile answers 404. Nothing here tries to infer it.
  */
-import { z } from 'zod';
 
 import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
+import { noContentSchema } from '../../api/envelope';
 import { apiRequest } from '../../api/http-client';
 import { IPC_CHANNELS, type IpcChannel } from '../channels';
 import { registerIpcHandler } from '../register';
@@ -33,8 +33,6 @@ import {
 } from '../../../shared/ipc-types';
 
 const log = createLogger('ipc.friends');
-
-const noContentSchema = z.undefined();
 
 /**
  * Seven mutations differ only in verb and path, so they are one table and one

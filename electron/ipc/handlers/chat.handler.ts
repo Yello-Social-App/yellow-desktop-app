@@ -26,6 +26,7 @@ import { z } from 'zod';
 
 import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
+import { noContentSchema } from '../../api/envelope';
 import { apiRequest } from '../../api/http-client';
 import {
   droppedFilePart,
@@ -103,8 +104,6 @@ import {
 const log = createLogger('ipc.chat');
 
 const ACKNOWLEDGED = acknowledgedResponseSchema.parse({ acknowledged: true });
-
-const noContentSchema = z.undefined();
 
 /** `GET /ws/conversations/{id}`: the record plus participants, no list extras. */
 const conversationDetailSchema = conversationSchema.extend({

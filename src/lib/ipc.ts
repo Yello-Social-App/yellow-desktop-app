@@ -46,6 +46,8 @@ import {
   deletedResponseSchema,
   exportPostsResponseSchema,
   feedResponseSchema,
+  feedbackPageSchema,
+  feedbackResponseSchema,
   friendEntryPageSchema,
   friendEntryResponseSchema,
   ipcFail,
@@ -53,9 +55,12 @@ import {
   linkPreviewResponseSchema,
   markAllNotificationsReadSchema,
   messagePageSchema,
+  mutedUserPageSchema,
   notificationPageSchema,
   notificationPreferencesSchema,
   notificationResponseSchema,
+  postReportPageSchema,
+  postReportResponseSchema,
   postResponseSchema,
   projectLikeSchema,
   projectPageSchema,
@@ -99,6 +104,7 @@ import {
   type ListReactorsRequest,
   type LoginRequest,
   type MarkReadRequest,
+  type MuteUserRequest,
   type NotificationIdRequest,
   type PageRequest,
   type PostIdRequest,
@@ -109,11 +115,14 @@ import {
   type RegisterDeviceRequest,
   type RegisterRequest,
   type RepostRequest,
+  type SafetyPageRequest,
   type SearchUsersRequest,
   type ResendOtpRequest,
   type ResetPasswordRequest,
   type SendChatMessageRequest,
   type StageImagesRequest,
+  type SubmitFeedbackRequest,
+  type SubmitReportRequest,
   type ToggleReactionRequest,
   type TypingRequest,
   type UnregisterDeviceRequest,
@@ -466,6 +475,30 @@ export const ipc = {
     guarded('showcase.like', projectLikeSchema, (api) => api.showcase.like(request)),
   unlikeProject: (request: ProjectIdRequest) =>
     guarded('showcase.unlike', projectLikeSchema, (api) => api.showcase.unlike(request)),
+
+  submitFeedback: (request: SubmitFeedbackRequest) =>
+    guarded('feedback.submit', feedbackResponseSchema, (api) => api.feedback.submit(request)),
+  listMyFeedback: (request: SafetyPageRequest) =>
+    guarded('feedback.listMine', feedbackPageSchema, (api) => api.feedback.listMine(request)),
+
+  reportPost: (request: SubmitReportRequest) =>
+    guarded('safety.report', postReportResponseSchema, (api) => api.safety.report(request)),
+  listMyReports: (request: SafetyPageRequest) =>
+    guarded('safety.listMyReports', postReportPageSchema, (api) =>
+      api.safety.listMyReports(request),
+    ),
+  muteUser: (request: MuteUserRequest) =>
+    guarded('safety.mute', acknowledgedResponseSchema, (api) => api.safety.mute(request)),
+  unmuteUser: (request: MuteUserRequest) =>
+    guarded('safety.unmute', acknowledgedResponseSchema, (api) => api.safety.unmute(request)),
+  listMutedUsers: (request: SafetyPageRequest) =>
+    guarded('safety.listMuted', mutedUserPageSchema, (api) => api.safety.listMuted(request)),
+  hidePost: (request: PostIdRequest) =>
+    guarded('safety.hidePost', acknowledgedResponseSchema, (api) => api.safety.hidePost(request)),
+  unhidePost: (request: PostIdRequest) =>
+    guarded('safety.unhidePost', acknowledgedResponseSchema, (api) =>
+      api.safety.unhidePost(request),
+    ),
 
   linkPreview: (request: LinkPreviewRequest) =>
     guarded('links.preview', linkPreviewResponseSchema, (api) => api.links.preview(request)),

@@ -11,10 +11,10 @@
  * `ENDPOINTS`, so a crafted id cannot address a different route (A05).
  */
 import { clipboard } from 'electron';
-import { z } from 'zod';
 
 import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
+import { noContentSchema } from '../../api/envelope';
 import { apiRequest } from '../../api/http-client';
 import { IPC_CHANNELS } from '../channels';
 import { registerIpcHandler } from '../register';
@@ -39,7 +39,6 @@ import {
 const log = createLogger('ipc.posts');
 
 /** A 204 hands the parser `undefined`; nothing else is acceptable. */
-const noContentSchema = z.undefined();
 
 export function registerPostHandlers(): void {
   registerIpcHandler(

@@ -22,6 +22,46 @@ export function useFriendsLoader(): void {
   }, [status, loadAll]);
 }
 
+/** Opening a screen that shows the lists is when they catch up (throttled in the store). */
+export function useFriendsRefreshOnShow(): void {
+  const refresh = useFriendsStore((state) => state.refresh);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+}
+
+/** How often the lists are re-read while the window is in front. */
+const FRIENDS_POLL_MS = 30_000;
+
+/**
+ * Keeps the friend lists current while the app is open. The server pushes a
+ * notification for a new request and an acceptance (handled where
+ * notifications arrive), but nothing when the other side declines, cancels or
+ * removes the friendship — so the lists are also re-read when the window comes
+ * back to the front, and on a slow poll while it is visible. Mounted once, from
+ * the app shell.
+ */
+export function useFriendsSync(): void {
+  const refresh = useFriendsStore((state) => state.refresh);
+
+  useEffect(() => {
+    const catchUp = (): void => {
+      if (document.visibilityState === 'visible') {
+        void refresh();
+      }
+    };
+    const timer = window.setInterval(catchUp, FRIENDS_POLL_MS);
+    window.addEventListener('focus', catchUp);
+    document.addEventListener('visibilitychange', catchUp);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', catchUp);
+      document.removeEventListener('visibilitychange', catchUp);
+    };
+  }, [refresh]);
+}
+
 export function useFriendList(name: ListName) {
   return useFriendsStore((state) => state.lists[name]);
 }
