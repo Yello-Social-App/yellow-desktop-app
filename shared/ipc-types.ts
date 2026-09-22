@@ -2019,6 +2019,64 @@ export const appInfoResponseSchema = z.object({
   secureStorageAvailable: z.boolean(),
 });
 
+/* -- app updates -- */
+
+/**
+ * How this install can be updated, decided in the main process from how it
+ * was installed:
+ *   - `installer` — the Windows .exe (NSIS) install, a Linux AppImage, or a
+ *     Linux deb/rpm/pacman package: checks, downloads and installs in place;
+ *   - `store` — the Microsoft Store package: the Store owns it and its files
+ *     are read-only, so the app only says a newer version exists;
+ *   - `notify` — every other packaged install (macOS, an unpacked Linux
+ *     tarball): told, not updated, from here;
+ *   - `unavailable` — a development or unpackaged run.
+ */
+export const UPDATE_MODES = ['installer', 'store', 'notify', 'unavailable'] as const;
+
+export const UPDATE_STATUSES = [
+  'idle',
+  'checking',
+  'up-to-date',
+  'available',
+  'downloading',
+  'ready',
+  'installing',
+  'error',
+] as const;
+
+export const updateStateSchema = z.object({
+  mode: z.enum(UPDATE_MODES),
+  status: z.enum(UPDATE_STATUSES),
+  currentVersion: z.string().max(64),
+  /** The newer version, once one is known. */
+  latestVersion: z.string().max(64).nullable(),
+  /** 0–100 while downloading. */
+  progress: z.number().min(0).max(100).nullable(),
+  /** Operator-safe text for the `error` status. */
+  error: z.string().max(300).nullable(),
+  /**
+   * Installing will show the system's password prompt (a Linux package is
+   * installed as root through pkexec); the UI says so before the click.
+   */
+  asksForPassword: z.boolean(),
+  /** Whether a check runs at launch and every few hours. */
+  autoCheck: z.boolean(),
+  /** When the last check finished, epoch ms. */
+  checkedAt: z.number().int().nonnegative().nullable(),
+});
+
+export const setAutoCheckRequestSchema = z.object({ enabled: z.boolean() });
+
+/** Pushed from the main process whenever the update state changes. */
+export const updateEventSchema = z.object({ event: z.literal('state'), data: updateStateSchema });
+
+export type UpdateMode = (typeof UPDATE_MODES)[number];
+export type UpdateStatus = (typeof UPDATE_STATUSES)[number];
+export type UpdateState = z.infer<typeof updateStateSchema>;
+export type SetAutoCheckRequest = z.infer<typeof setAutoCheckRequestSchema>;
+export type UpdateEvent = z.infer<typeof updateEventSchema>;
+
 export const windowStateSchema = z.object({
   isMaximized: z.boolean(),
   isFullScreen: z.boolean(),
@@ -2216,6 +2274,19 @@ export interface YelloBridge {
   readonly files: {
     exportPosts(request: ExportPostsRequest): Promise<IpcResult<ExportPostsResponse>>;
     readAppInfo(): Promise<IpcResult<AppInfoResponse>>;
+  };
+  readonly updates: {
+    state(): Promise<IpcResult<UpdateState>>;
+    check(): Promise<IpcResult<UpdateState>>;
+    /** Downloads, verifies, installs and restarts; answers only if it stopped. */
+    updateNow(): Promise<IpcResult<UpdateState>>;
+    /** Restarts into the downloaded update; answers only if it could not. */
+    install(): Promise<IpcResult<UpdateState>>;
+    setAutoCheck(request: SetAutoCheckRequest): Promise<IpcResult<UpdateState>>;
+    /** Opens the newer version's release notes in the browser. */
+    openReleaseNotes(): Promise<IpcResult<AcknowledgedResponse>>;
+    /** Subscribes to state pushes; the listener parses against `updateEventSchema`. */
+    onEvent(listener: (event: unknown) => void): () => void;
   };
   readonly window: {
     minimize(): Promise<IpcResult<WindowState>>;

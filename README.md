@@ -32,10 +32,29 @@ first launch until signing certificates are added to the release workflow. On
 Windows, installing from the Microsoft Store avoids the warning: Microsoft signs
 what the Store distributes, and the Store keeps the app updated.
 
-### Updating on Linux
+### Updating
 
-An app installed from the `.deb`, `.rpm` or `.pacman` package updates itself
-from a terminal:
+From Settings → Updates: **Check now**, then **Update now**. Yello downloads the
+new version, checks it against the checksum the release publishes, installs it
+over the current one and restarts. Nothing is uninstalled first, so settings and
+saved sign-ins are kept. "Check for updates automatically" (on by default) looks
+at launch and every six hours, and never downloads without the click.
+
+- **Windows (`.exe`)** and **Linux AppImage** update with no password.
+- **Linux `.deb`, `.rpm` and `.pacman`** install as root, so your desktop's
+  password prompt appears (pkexec). That prompt needs a polkit authentication
+  agent. GNOME, KDE, Cinnamon, XFCE and MATE run one; on a bare window manager
+  (Hyprland, sway, i3) start one such as `hyprpolkitagent` or `polkit-gnome`,
+  or use the terminal command below.
+- **Microsoft Store** installs are updated by the Store. Settings still says
+  when a newer version is out, and that the Store will deliver it after
+  Microsoft's review.
+- **macOS** is told about a new version and downloads it from the release page.
+
+#### From a terminal on Linux
+
+An app installed from the `.deb`, `.rpm` or `.pacman` package also updates
+itself from a terminal:
 
 ```sh
 yello-desktop-app update

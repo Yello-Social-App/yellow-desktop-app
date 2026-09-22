@@ -18,6 +18,8 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from './ipc/channels';
 
 import type {
+  SetAutoCheckRequest,
+  UpdateState,
   AddGroupMembersRequest,
   AttachChatFilesRequest,
   AttachChatFilesResponse,
@@ -361,6 +363,25 @@ const bridge: YelloBridge = {
     exportPosts: (request: ExportPostsRequest) =>
       invoke<ExportPostsResponse>(IPC_CHANNELS.FS_EXPORT_POSTS, request),
     readAppInfo: () => invoke<AppInfoResponse>(IPC_CHANNELS.FS_READ_APP_INFO),
+  },
+  updates: {
+    state: () => invoke<UpdateState>(IPC_CHANNELS.UPDATES_STATE),
+    check: () => invoke<UpdateState>(IPC_CHANNELS.UPDATES_CHECK),
+    updateNow: () => invoke<UpdateState>(IPC_CHANNELS.UPDATES_UPDATE_NOW),
+    install: () => invoke<UpdateState>(IPC_CHANNELS.UPDATES_INSTALL),
+    setAutoCheck: (request: SetAutoCheckRequest) =>
+      invoke<UpdateState>(IPC_CHANNELS.UPDATES_SET_AUTO_CHECK, request),
+    openReleaseNotes: () => invoke<AcknowledgedResponse>(IPC_CHANNELS.UPDATES_OPEN_RELEASE_NOTES),
+    onEvent: (listener: (event: unknown) => void) => {
+      // As with chat: the IpcRendererEvent carries the sender and stays here.
+      const handler = (_event: IpcRendererEvent, payload: unknown): void => {
+        listener(payload);
+      };
+      ipcRenderer.on(IPC_CHANNELS.UPDATES_EVENT, handler);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.UPDATES_EVENT, handler);
+      };
+    },
   },
   window: {
     minimize: () => invoke<WindowState>(IPC_CHANNELS.WINDOW_MINIMIZE),

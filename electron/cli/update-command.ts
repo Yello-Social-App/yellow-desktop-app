@@ -13,20 +13,18 @@
  * where the user typed the command. Every command goes to spawnSync as an
  * argument array, never through a shell (A05).
  *
- * Which command runs is chosen by how the app was installed: electron-builder
- * writes `resources/package-type` into the deb, rpm and pacman packages, and
- * an AppImage is known by the APPIMAGE variable its runtime sets. A build that
- * is neither (an unpacked tarball, a dev run) is told how to update instead.
+ * Which command runs is chosen by how the app was installed, and which
+ * package-manager commands install it, by updates/linux-install.ts — shared
+ * with the Settings button, which elevates with pkexec instead of sudo. A
+ * build that is neither (an unpacked tarball, a dev run) is told how to
+ * update instead.
  */
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, readFileSync } from 'node:fs';
-import path from 'node:path';
 
 import { app } from 'electron';
 
+import { installPackage, linuxInstallation } from '../updates/linux-install';
 import { loadUpdaterModule } from '../updater-module';
-
-type Installation = 'deb' | 'rpm' | 'pacman' | 'appimage';
 
 const RELEASES_URL = 'https://github.com/Yello-Social-App/yellow-desktop-app/releases/latest';
 
@@ -43,37 +41,6 @@ function print(line: string): void {
 
 function printError(line: string): void {
   process.stderr.write(`${line}\n`);
-}
-
-function installationOf(): Installation | null {
-  try {
-    const type = readFileSync(path.join(process.resourcesPath, 'package-type'), 'utf8').trim();
-    if (type === 'deb' || type === 'rpm' || type === 'pacman') {
-      return type;
-    }
-  } catch {
-    // No marker: not installed from a package.
-  }
-  return process.env.APPIMAGE === undefined ? null : 'appimage';
-}
-
-/** Whether an executable of this name is on PATH; no shell is involved. */
-function hasCommand(name: string): boolean {
-  return (process.env.PATH ?? '').split(path.delimiter).some((dir) => {
-    if (dir === '') {
-      return false;
-    }
-    try {
-      accessSync(path.join(dir, name), constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-}
-
-function firstCommand<T extends string>(candidates: readonly T[]): T | null {
-  return candidates.find(hasCommand) ?? null;
 }
 
 /**
@@ -110,14 +77,14 @@ const quietLogger = {
 
 /** Checks, downloads and installs; resolves to the process exit code. */
 export async function runUpdateCommand(): Promise<number> {
-  const installation = installationOf();
+  const installation = linuxInstallation();
   if (installation === null) {
     printError('This copy of Yello was not installed from a package, so it cannot update itself.');
     printError(`Download the latest release from ${RELEASES_URL}`);
     return 1;
   }
 
-  const { autoUpdater, DebUpdater, RpmUpdater } = await loadUpdaterModule();
+  const { autoUpdater } = await loadUpdaterModule();
   autoUpdater.logger = quietLogger;
   autoUpdater.autoDownload = false;
   // The install below is explicit; nothing should run again on the way out.
@@ -156,27 +123,11 @@ export async function runUpdateCommand(): Promise<number> {
     return 1;
   }
 
-  switch (installation) {
-    case 'deb': {
-      const manager = firstCommand(['dpkg', 'apt'] as const) ?? 'dpkg';
-      DebUpdater.installWithCommandRunner(manager, installer, runAsRoot, quietLogger);
-      break;
-    }
-    case 'rpm': {
-      const manager = firstCommand(['zypper', 'dnf', 'yum', 'rpm'] as const) ?? 'dnf';
-      RpmUpdater.installWithCommandRunner(manager, installer, runAsRoot, quietLogger);
-      break;
-    }
-    case 'pacman':
-      // Not PacmanUpdater's runner: on failure it retries after `pacman -Sy`,
-      // a database sync without an upgrade, which Arch warns leaves a
-      // partially upgraded system.
-      runAsRoot(['pacman', '-U', '--noconfirm', installer]);
-      break;
-    case 'appimage':
-      // Replaces the AppImage file in place; the user owns it, so no sudo.
-      autoUpdater.quitAndInstall(true, false);
-      break;
+  if (installation === 'appimage') {
+    // Replaces the AppImage file in place; the user owns it, so no sudo.
+    autoUpdater.quitAndInstall(true, false);
+  } else {
+    await installPackage(installation, installer, runAsRoot);
   }
 
   if (outcome.failure !== null) {

@@ -12,6 +12,7 @@ import { createLogger } from '@/lib/logger';
 import { useTheme, type Theme } from '@/lib/theme';
 
 import { NotificationSettings } from './components/NotificationSettings';
+import { UpdateSettings } from './components/UpdateSettings';
 import { displayName, handleOf } from '@/lib/user-display';
 import type { AppInfoResponse } from '@shared/ipc-types';
 
@@ -167,6 +168,8 @@ export default function SettingsPage() {
             </div>
           </Card>
         </section>
+
+        <UpdateSettings />
 
         <section className="gap-sm flex flex-col">
           <h2 className="text-on-surface-variant text-caption font-semibold tracking-wider uppercase">
