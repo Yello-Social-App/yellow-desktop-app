@@ -6,6 +6,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-23
+
+Send feedback, report posts, and mute or hide what you'd rather not see, all
+saved to your Yello account. Settings is split into panes, and a removed
+friend now disappears from the list straight away.
+
+### Added
+
+- **Send feedback.** Settings → Send feedback lets you rate a feature from 1
+  to 5, answer a short follow-up question and add a note of up to 500
+  characters. You can choose to include the app version and OS. Your recent
+  feedback is listed under the form.
+- **Report a post.** The "…" menu on someone else's post has Report post:
+  pick a reason, add details if you like, and confirm. When you close the
+  dialog you can also hide the post or block its author. Reporting a post
+  twice just shows it as already reported. When a report is resolved you get
+  a notification that opens Privacy & safety.
+- **Mute and hide.** The same menu has Hide this post, Mute and Copy link.
+  Hidden, reported and muted posts collapse to a single line with a Show post
+  button. What you hide or mute is saved to your account, so it applies
+  wherever you sign in.
+- **Privacy & safety.** Lists your muted accounts, your blocked accounts and
+  the status of your reports, with unmute and unblock.
+
+### Changed
+
+- **Settings has panes.** Appearance, Notifications, Privacy & safety,
+  Updates and Send feedback each get their own pane. Account and Security are
+  now under Privacy & safety, and About is under Updates.
+- Every screen except Messages now uses the Home feed's column width, so the
+  layout stays put as you move between screens.
+
+### Fixed
+
+- Removing a friend takes them off the list straight away. Before, they stayed
+  until you restarted.
+- When someone else removes you, or declines or cancels a request, your friend
+  lists catch up within about 30 seconds. They also refresh when you open
+  Friends or come back to the window.
+
 ## [0.6.0] - 2026-09-22
 
 Chat grows up — replies, edits, unsend, reactions, files, group management and

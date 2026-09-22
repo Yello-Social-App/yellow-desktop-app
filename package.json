@@ -1,7 +1,7 @@
 {
   "name": "yello-desktop-app",
   "productName": "Yello",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Yello desktop client — Electron + React shell built on the Luminous Minimalist design system.",
   "private": true,
   "author": "Yello <hushstack168@gmail.com>",
