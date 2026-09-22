@@ -77,7 +77,7 @@ type WatcherStatus = 'stopped' | 'seeding' | 'running';
  * into literal control bytes on the next format pass, which is unreadable and
  * easy to break silently.
  */
-function toPlainText(value: string, max: number): string {
+export function toPlainText(value: string, max: number): string {
   const flattened = value
     .replace(/[\p{Cc}\p{Cf}]+/gu, ' ')
     .replace(/\s+/g, ' ')
@@ -168,6 +168,11 @@ class NotificationWatcher {
   /** Adopts preferences the renderer just read or saved, sparing a fetch. */
   adoptPreferences(preferences: NotificationPreferences): void {
     this.preferences = preferences;
+  }
+
+  /** The opt-outs as last read, for the chat alerts, which honour the same ones. */
+  currentPreferences(): NotificationPreferences {
+    return this.preferences;
   }
 
   private async loadPreferences(): Promise<void> {

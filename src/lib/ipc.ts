@@ -7,6 +7,24 @@
  * here, not a crash.
  */
 import {
+  attachChatFilesResponseSchema,
+  attachmentResponseSchema,
+  groupInviteResultSchema,
+  groupParticipantsSchema,
+  groupRecordResponseSchema,
+  messageReactionsSchema,
+  savedFileResponseSchema,
+  type AddGroupMembersRequest,
+  type AttachChatFilesRequest,
+  type UploadLocalFilesRequest,
+  type AttachmentIdRequest,
+  type ChangeMemberRoleRequest,
+  type ChatMessageRef,
+  type EditChatMessageRequest,
+  type GroupMemberRequest,
+  type InviteIdRequest,
+  type ReactChatMessageRequest,
+  type RenameGroupRequest,
   accountListResponseSchema,
   acknowledgedResponseSchema,
   appInfoResponseSchema,
@@ -309,6 +327,60 @@ export const ipc = {
     guarded('chat.listMessages', messagePageSchema, (api) => api.chat.listMessages(request)),
   sendChatMessage: (request: SendChatMessageRequest) =>
     guarded('chat.sendMessage', chatMessageResponseSchema, (api) => api.chat.sendMessage(request)),
+  editChatMessage: (request: EditChatMessageRequest) =>
+    guarded('chat.editMessage', chatMessageResponseSchema, (api) => api.chat.editMessage(request)),
+  deleteChatMessage: (request: ChatMessageRef) =>
+    guarded('chat.deleteMessage', deletedResponseSchema, (api) => api.chat.deleteMessage(request)),
+  reactToChatMessage: (request: ReactChatMessageRequest) =>
+    guarded('chat.react', messageReactionsSchema, (api) => api.chat.react(request)),
+  unreactToChatMessage: (request: ChatMessageRef) =>
+    guarded('chat.unreact', messageReactionsSchema, (api) => api.chat.unreact(request)),
+  attachChatFiles: (request: AttachChatFilesRequest) =>
+    guarded('chat.attachFiles', attachChatFilesResponseSchema, (api) =>
+      api.chat.attachFiles(request),
+    ),
+  uploadLocalChatFiles: (request: UploadLocalFilesRequest) =>
+    guarded('chat.uploadLocalFiles', attachChatFilesResponseSchema, (api) =>
+      api.chat.uploadLocalFiles(request),
+    ),
+  getChatAttachment: (request: AttachmentIdRequest) =>
+    guarded('chat.getAttachment', attachmentResponseSchema, (api) =>
+      api.chat.getAttachment(request),
+    ),
+  saveChatAttachment: (request: AttachmentIdRequest) =>
+    guarded('chat.saveAttachment', savedFileResponseSchema, (api) =>
+      api.chat.saveAttachment(request),
+    ),
+  renameGroup: (request: RenameGroupRequest) =>
+    guarded('chat.renameGroup', groupRecordResponseSchema, (api) => api.chat.renameGroup(request)),
+  setGroupPhoto: (request: ConversationIdRequest) =>
+    guarded('chat.setGroupPhoto', groupRecordResponseSchema, (api) =>
+      api.chat.setGroupPhoto(request),
+    ),
+  removeGroupPhoto: (request: ConversationIdRequest) =>
+    guarded('chat.removeGroupPhoto', groupRecordResponseSchema, (api) =>
+      api.chat.removeGroupPhoto(request),
+    ),
+  addGroupMembers: (request: AddGroupMembersRequest) =>
+    guarded('chat.addMembers', groupParticipantsSchema, (api) => api.chat.addMembers(request)),
+  removeGroupMember: (request: GroupMemberRequest) =>
+    guarded('chat.removeMember', acknowledgedResponseSchema, (api) =>
+      api.chat.removeMember(request),
+    ),
+  changeGroupRole: (request: ChangeMemberRoleRequest) =>
+    guarded('chat.changeRole', groupParticipantsSchema, (api) => api.chat.changeRole(request)),
+  leaveGroup: (request: ConversationIdRequest) =>
+    guarded('chat.leaveGroup', acknowledgedResponseSchema, (api) => api.chat.leaveGroup(request)),
+  inviteToGroup: (request: GroupMemberRequest) =>
+    guarded('chat.invite', groupInviteResultSchema, (api) => api.chat.invite(request)),
+  acceptGroupInvite: (request: InviteIdRequest) =>
+    guarded('chat.acceptInvite', conversationResponseSchema, (api) =>
+      api.chat.acceptInvite(request),
+    ),
+  declineGroupInvite: (request: InviteIdRequest) =>
+    guarded('chat.declineInvite', acknowledgedResponseSchema, (api) =>
+      api.chat.declineInvite(request),
+    ),
   markConversationRead: (request: MarkReadRequest) =>
     guarded('chat.markRead', acknowledgedResponseSchema, (api) => api.chat.markRead(request)),
   sendTyping: (request: TypingRequest) =>

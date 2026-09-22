@@ -9,6 +9,7 @@ import { RowSkeleton } from '@/components/ui/Skeleton';
 import {
   useActiveConversation,
   useConversationRows,
+  useLeaveRemovedConversation,
   useOpenConversation,
 } from '@/features/messages/hooks';
 import { useMessagesStore } from '@/features/messages/store';
@@ -30,6 +31,7 @@ export default function MessagesPage() {
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
 
   useOpenConversation(conversationId);
+  useLeaveRemovedConversation(conversationId);
 
   return (
     <div className="flex min-h-0 flex-1">

@@ -682,11 +682,51 @@ export type UserPostsResponse = z.infer<typeof userPostsResponseSchema>;
 
 /* -- chat (yello-chat: /ws/* over HTTP, live frames over the socket) -- */
 
+/** The wire ceiling, from the service's spec; what a received body is bounded by. */
 export const CHAT_MESSAGE_MAX_LENGTH = 20_000;
+/** What the service accepts on send by default (`CHAT_MESSAGE_MAX_LENGTH` there). */
+export const CHAT_COMPOSE_MAX_LENGTH = 4000;
 export const CHAT_PAGE_MAX_SIZE = 100;
+/** Files one message may carry (`CHAT_MESSAGE_MAX_ATTACHMENTS`). */
+export const CHAT_MESSAGE_MAX_ATTACHMENTS = 10;
+/** Each upload and each group photo (`CHAT_ATTACHMENT_MAX_BYTES`, 10 MiB). */
+export const CHAT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 export const CONVERSATION_TYPES = ['DIRECT', 'GROUP'] as const;
 export const conversationTypeSchema = z.enum(CONVERSATION_TYPES);
+
+/** The roles a participant can hold. ADMIN is new; OWNER is exactly one person. */
+export const PARTICIPANT_ROLES = ['OWNER', 'ADMIN', 'MEMBER'] as const;
+export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
+
+/**
+ * A presigned media link, or null.
+ *
+ * Only `https:` survives: these land in `<img src>` and in a download, and a
+ * `javascript:` or `data:` value from a compromised or confused upstream must
+ * never reach either (OWASP A05). The CSP `img-src` allowlist is the second
+ * line; this is the first.
+ */
+const mediaUrl = z
+  .string()
+  .max(4096)
+  .nullish()
+  .transform((value) => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    try {
+      return new URL(value).protocol === 'https:' ? value : null;
+    } catch {
+      return null;
+    }
+  });
+
+const nullableTimestamp = z
+  .string()
+  .max(64)
+  .nullish()
+  .transform((value) => (value === null || value === undefined || value === '' ? null : value));
 
 /**
  * Chat rows carry user *ids* only — the chat service knows nothing about names
@@ -696,15 +736,106 @@ export const conversationTypeSchema = z.enum(CONVERSATION_TYPES);
  */
 export const participantSchema = z.object({
   userId: z.string().min(1).max(64),
-  /** OWNER or MEMBER; text so a role added later cannot void a conversation. */
+  /**
+   * OWNER, ADMIN or MEMBER. Text rather than the enum so a role added later
+   * cannot void a conversation; an unrecognised one reads as MEMBER, the role
+   * with the fewest rights, so it can never unlock a control (A01).
+   */
   role: z
     .string()
     .max(16)
     .nullish()
-    .transform((value) => value ?? 'MEMBER'),
+    .transform((value): ParticipantRole =>
+      value === 'OWNER' || value === 'ADMIN' ? value : 'MEMBER',
+    ),
   joinedAt: timestamp,
   lastReadMessageId: optionalText(64),
   lastReadAt: optionalText(64),
+});
+
+/**
+ * A file on a message. The kind is sniffed from the bytes server-side; an
+ * unknown kind reads as FILE, which downloads rather than renders inline.
+ */
+export const chatAttachmentSchema = z.object({
+  id: z.string().min(1).max(64),
+  kind: z
+    .string()
+    .max(16)
+    .transform((value): 'IMAGE' | 'FILE' => (value === 'IMAGE' ? 'IMAGE' : 'FILE')),
+  fileName: z.string().max(512),
+  mimeType: z.string().max(255),
+  sizeBytes: z.number().int().nonnegative(),
+  url: mediaUrl,
+  urlExpiresAt: nullableTimestamp,
+});
+
+export const chatReactionSchema = z.object({
+  emoji: z.string().min(1).max(64),
+  count: z.number().int().nonnegative(),
+  userIds: z.array(z.string().min(1).max(64)).max(600),
+});
+
+const chatReactionListSchema = z
+  .array(chatReactionSchema)
+  .max(200)
+  .nullish()
+  .transform((value) => value ?? []);
+
+/** The quoted message on a reply: a 200-character preview, not the record. */
+export const replyPreviewSchema = z.object({
+  id: z.string().min(1).max(64),
+  senderId: z.string().min(1).max(64),
+  body: z.string().max(CHAT_MESSAGE_MAX_LENGTH),
+  hasAttachments: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
+  deleted: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
+});
+
+export const GROUP_INVITE_STATUSES = ['PENDING', 'ACCEPTED', 'DECLINED'] as const;
+export type GroupInviteStatus = (typeof GROUP_INVITE_STATUSES)[number];
+
+/**
+ * An unrecognised status reads as DECLINED — a settled state — so an invite the
+ * app does not understand never shows Join (A10).
+ */
+const inviteStatus = z
+  .string()
+  .max(16)
+  .transform((value): GroupInviteStatus =>
+    value === 'PENDING' || value === 'ACCEPTED' ? value : 'DECLINED',
+  );
+
+/** The group an invite card describes, as the card's message carries it. */
+export const groupInviteCardSchema = z.object({
+  id: z.string().min(1).max(64),
+  conversationId: z.string().min(1).max(64),
+  inviterId: z
+    .string()
+    .max(64)
+    .nullish()
+    .transform((value) => value ?? ''),
+  /** Only this user may answer; everyone else sees the status. */
+  inviteeId: z
+    .string()
+    .max(64)
+    .nullish()
+    .transform((value) => value ?? ''),
+  status: inviteStatus,
+  title: optionalText(100),
+  memberCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((value) => value ?? 0),
+  photoUrl: mediaUrl,
+  photoUrlExpiresAt: nullableTimestamp,
 });
 
 export const chatMessageSchema = z.object({
@@ -717,15 +848,35 @@ export const chatMessageSchema = z.object({
     .max(64)
     .nullish()
     .transform((value) => value ?? ''),
+  /** Empty for an attachment-only message, an invite card and a tombstone. */
   body: z.string().max(CHAT_MESSAGE_MAX_LENGTH),
+  replyTo: replyPreviewSchema.nullish().transform((value) => value ?? null),
+  attachments: z
+    .array(chatAttachmentSchema)
+    .max(20)
+    .nullish()
+    .transform((value) => value ?? []),
+  reactions: chatReactionListSchema,
+  groupInvite: groupInviteCardSchema.nullish().transform((value) => value ?? null),
   createdAt: timestamp,
+  editedAt: nullableTimestamp,
+  /** Set on a tombstone: the line stays in history as "Message deleted". */
+  deletedAt: nullableTimestamp,
 });
 
+/**
+ * The list's preview of the newest line. The server sends only the first four
+ * fields; the rest are filled in locally when the preview comes from a live
+ * frame, so "Sent a photo" can be said rather than an empty line.
+ */
 const lastMessageSchema = z.object({
   id: z.string().min(1).max(64),
   senderId: z.string().min(1).max(64),
   body: z.string().max(CHAT_MESSAGE_MAX_LENGTH),
   createdAt: timestamp,
+  attachments: z.array(chatAttachmentSchema).max(20).optional(),
+  groupInvite: groupInviteCardSchema.nullish(),
+  deletedAt: nullableTimestamp.optional(),
 });
 
 /** The bare conversation record, as `POST /ws/conversations` and `conversation.new` carry it. */
@@ -736,15 +887,20 @@ export const conversationSchema = z.object({
   createdBy: z.string().min(1).max(64),
   createdAt: timestamp,
   lastMessageAt: optionalText(64),
+  /** A group's photo: presigned, re-signed on every read, expires like attachments. */
+  photoUrl: mediaUrl,
+  photoUrlExpiresAt: nullableTimestamp,
 });
+
+const participantListSchema = z
+  .array(participantSchema)
+  .max(600)
+  .nullish()
+  .transform((value) => value ?? []);
 
 /** A row of the conversation list: the record plus what the list needs to draw it. */
 export const conversationSummarySchema = conversationSchema.extend({
-  participants: z
-    .array(participantSchema)
-    .max(600)
-    .nullish()
-    .transform((value) => value ?? []),
+  participants: participantListSchema,
   lastMessage: lastMessageSchema.nullish().transform((value) => value ?? null),
   /** Messages from others after the caller's read marker. */
   unreadCount: z
@@ -788,7 +944,12 @@ export const listConversationsRequestSchema = z.object({
 });
 
 export const CHAT_GROUP_TITLE_MAX = 100;
+/** The wire ceiling on a create request's member list. */
 export const CHAT_GROUP_MAX_MEMBERS = 500;
+/** How many people a group may hold by default (`CHAT_GROUP_MAX_MEMBERS` there). */
+export const CHAT_GROUP_SIZE_LIMIT = 50;
+
+const chatId = z.string().min(1).max(64);
 
 /**
  * A direct conversation is idempotent per pair — asking again returns the one
@@ -797,60 +958,225 @@ export const CHAT_GROUP_MAX_MEMBERS = 500;
 export const createConversationRequestSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('DIRECT'),
-    peerId: z.string().min(1).max(64),
+    peerId: chatId,
   }),
   z.object({
     type: z.literal('GROUP'),
     title: z.string().trim().min(1).max(CHAT_GROUP_TITLE_MAX),
-    memberIds: z.array(z.string().min(1).max(64)).min(1).max(CHAT_GROUP_MAX_MEMBERS),
+    memberIds: z.array(chatId).min(1).max(CHAT_GROUP_MAX_MEMBERS),
   }),
 ]);
 
 export const conversationIdRequestSchema = z.object({
-  conversationId: z.string().min(1).max(64),
+  conversationId: chatId,
 });
 
 export const conversationResponseSchema = z.object({ conversation: conversationSummarySchema });
 
 export const listMessagesRequestSchema = z.object({
-  conversationId: z.string().min(1).max(64),
+  conversationId: chatId,
   cursor: z.string().max(512).optional(),
   limit: z.number().int().min(1).max(CHAT_PAGE_MAX_SIZE),
 });
 
-export const sendChatMessageRequestSchema = z.object({
-  conversationId: z.string().min(1).max(64),
-  /** Generated by the renderer per attempt; a retry resends the same one. */
-  clientId: z.string().min(1).max(64),
-  body: z.string().trim().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
-});
+/**
+ * A send: text, files, or both, optionally quoting a line. The body may be
+ * empty only when files ride along — the service's own rule, checked here so a
+ * blank send never costs a round trip.
+ */
+export const sendChatMessageRequestSchema = z
+  .object({
+    conversationId: chatId,
+    /** Generated by the renderer per attempt; a retry resends the same one. */
+    clientId: chatId,
+    body: z.string().trim().max(CHAT_COMPOSE_MAX_LENGTH),
+    replyToMessageId: chatId.optional(),
+    attachmentIds: z.array(chatId).max(CHAT_MESSAGE_MAX_ATTACHMENTS).optional(),
+  })
+  .refine((value) => value.body !== '' || (value.attachmentIds?.length ?? 0) > 0, {
+    message: 'A message needs text or a file.',
+    path: ['body'],
+  });
 
 export const chatMessageResponseSchema = z.object({ message: chatMessageSchema });
 
+/** Addresses one message in one conversation — delete, and removing a reaction. */
+export const chatMessageRefSchema = z.object({
+  conversationId: chatId,
+  messageId: chatId,
+});
+
+/** Text only: files and the reply target are fixed once sent. */
+export const editChatMessageRequestSchema = chatMessageRefSchema.extend({
+  body: z.string().trim().min(1).max(CHAT_COMPOSE_MAX_LENGTH),
+});
+
+/**
+ * One emoji. The service is the judge of "exactly one" (a flag, a skin tone,
+ * a ZWJ family are each one); this only bounds the length so a paragraph never
+ * crosses the bridge.
+ */
+export const reactChatMessageRequestSchema = chatMessageRefSchema.extend({
+  emoji: z.string().trim().min(1).max(32),
+});
+
+/** The whole reaction list after a change — replace, never merge. */
+export const messageReactionsSchema = z.object({
+  messageId: chatId,
+  reactions: chatReactionListSchema,
+});
+
 export const markReadRequestSchema = z.object({
-  conversationId: z.string().min(1).max(64),
+  conversationId: chatId,
   /** The last message seen; the server never moves the marker backwards. */
-  messageId: z.string().min(1).max(64),
+  messageId: chatId,
 });
 
 export const typingRequestSchema = z.object({
-  conversationId: z.string().min(1).max(64),
+  conversationId: chatId,
   typing: z.boolean(),
 });
+
+/* -- chat attachments -- */
+
+/**
+ * Upload is picker-driven: the renderer names the conversation and how many
+ * more files the draft has room for, and the main process opens the OS dialog,
+ * so the page never names a path (A01).
+ */
+export const attachChatFilesRequestSchema = z.object({
+  conversationId: chatId,
+  limit: z.number().int().min(1).max(CHAT_MESSAGE_MAX_ATTACHMENTS),
+});
+
+export const attachChatFilesResponseSchema = z.object({
+  /** Uploaded and pending: visible to the uploader only until they are sent. */
+  attachments: z.array(chatAttachmentSchema).max(CHAT_MESSAGE_MAX_ATTACHMENTS),
+  cancelled: z.boolean(),
+  /** Files that were picked but not uploaded (over the cap, too large, refused). */
+  skipped: z.number().int().nonnegative(),
+  /** Why the first skipped file was refused, for the composer to say. */
+  skippedReason: z.string().max(300).optional(),
+});
+
+/**
+ * Files the user pasted or dropped into the conversation. Unlike the picker,
+ * the bytes come from the page — a paste or a drop is only readable there, as
+ * the `File` the user handed it — so the main process treats them as
+ * untrusted: bounded here in count and size, and a paste is accepted only if
+ * its leading bytes are a JPEG, PNG, GIF or WebP (A05/A06).
+ *
+ * Bytes rather than a path, deliberately: the preload *could* turn a dropped
+ * `File` into its path on disk, but then the page would be naming a path for
+ * the main process to read, and a compromised page could "drop" any file the
+ * user can read (A01). The bytes are only ever what the user actually handed
+ * over.
+ */
+export const LOCAL_FILE_SOURCES = ['paste', 'drop'] as const;
+
+export const uploadLocalFilesRequestSchema = z.object({
+  conversationId: chatId,
+  /** A paste must be an image; a drop may be any file, as the picker allows. */
+  source: z.enum(LOCAL_FILE_SOURCES),
+  files: z
+    .array(
+      z.object({
+        /** The file's own name, when it has one; a hint, never a path. */
+        fileName: z.string().trim().min(1).max(255).optional(),
+        bytes: z
+          .instanceof(Uint8Array)
+          .refine(
+            (bytes) => bytes.byteLength > 0 && bytes.byteLength <= CHAT_ATTACHMENT_MAX_BYTES,
+            'Each file must be 10 MB or smaller.',
+          ),
+      }),
+    )
+    .min(1)
+    .max(CHAT_MESSAGE_MAX_ATTACHMENTS),
+});
+
+export const attachmentIdRequestSchema = z.object({ attachmentId: chatId });
+
+export const attachmentResponseSchema = z.object({ attachment: chatAttachmentSchema });
+
+export const savedFileResponseSchema = z.object({
+  /** False when the user cancelled the save dialog. */
+  saved: z.boolean(),
+});
+
+/* -- chat groups -- */
+
+export const renameGroupRequestSchema = z.object({
+  conversationId: chatId,
+  title: z.string().trim().min(1).max(CHAT_GROUP_TITLE_MAX),
+});
+
+export const addGroupMembersRequestSchema = z.object({
+  conversationId: chatId,
+  userIds: z.array(chatId).min(1).max(CHAT_GROUP_SIZE_LIMIT),
+});
+
+export const groupMemberRequestSchema = z.object({
+  conversationId: chatId,
+  userId: chatId,
+});
+
+/** OWNER is never assignable: ownership moves only when the owner leaves. */
+export const changeMemberRoleRequestSchema = groupMemberRequestSchema.extend({
+  role: z.enum(['ADMIN', 'MEMBER']),
+});
+
+export const groupParticipantsSchema = z.object({
+  conversationId: chatId,
+  participants: participantListSchema,
+});
+
+/** A rename or a photo change answers with the record, without participants. */
+export const groupRecordResponseSchema = z.object({ conversation: conversationSchema });
+
+export const groupInviteSchema = z.object({
+  id: chatId,
+  conversationId: chatId,
+  inviterId: chatId,
+  inviteeId: chatId,
+  status: inviteStatus,
+  createdAt: timestamp,
+});
+
+export const groupInviteResultSchema = z.object({
+  invite: groupInviteSchema,
+  /** The card, as it appears in the inviter's DM with the invitee. */
+  message: chatMessageSchema,
+});
+
+export const inviteIdRequestSchema = z.object({ inviteId: chatId });
 
 export const CHAT_SOCKET_STATUSES = ['disconnected', 'connecting', 'connected'] as const;
 
 export const chatSocketStateSchema = z.object({
   status: z.enum(CHAT_SOCKET_STATUSES),
   /** Users with an open socket, as the server last reported them. */
-  onlineUserIds: z.array(z.string().min(1).max(64)).max(5000),
+  onlineUserIds: z.array(chatId).max(5000),
+});
+
+/** What changed in a group, enough to say "Alice added Bob and Chea". */
+export const groupChangeSchema = z.object({
+  /** RENAMED, PHOTO_CHANGED, MEMBERS_ADDED, MEMBER_REMOVED, MEMBER_LEFT, ROLE_CHANGED. */
+  kind: z.string().min(1).max(32),
+  actorId: optionalText(64),
+  userIds: z
+    .array(chatId)
+    .max(600)
+    .nullish()
+    .transform((value) => value ?? []),
 });
 
 /**
  * What the main process pushes to the renderer from the live socket. Each is
  * a server frame that has already been parsed there — an unknown or malformed
- * frame never reaches the page (A08). `socket` is the one local event: the
- * connection's own state, so the UI can say "reconnecting" honestly.
+ * frame never reaches the page (A08). `socket` and `alert.activated` are the
+ * local events: the connection's own state, so the UI can say "reconnecting"
+ * honestly, and a desktop chat alert having been clicked.
  */
 export const chatEventSchema = z.discriminatedUnion('event', [
   z.object({
@@ -858,15 +1184,39 @@ export const chatEventSchema = z.discriminatedUnion('event', [
     data: chatSocketStateSchema,
   }),
   z.object({
+    event: z.literal('alert.activated'),
+    data: z.object({ conversationId: chatId }),
+  }),
+  z.object({
     event: z.literal('message.new'),
     data: z.object({ message: chatMessageSchema }),
   }),
   z.object({
+    event: z.literal('message.updated'),
+    data: z.object({ message: chatMessageSchema }),
+  }),
+  z.object({
+    event: z.literal('message.deleted'),
+    data: z.object({
+      conversationId: chatId,
+      messageId: chatId,
+      deletedAt: timestamp,
+    }),
+  }),
+  z.object({
+    event: z.literal('message.reactions'),
+    data: z.object({
+      conversationId: chatId,
+      messageId: chatId,
+      reactions: chatReactionListSchema,
+    }),
+  }),
+  z.object({
     event: z.literal('message.read'),
     data: z.object({
-      conversationId: z.string().min(1).max(64),
-      userId: z.string().min(1).max(64),
-      lastReadMessageId: z.string().min(1).max(64),
+      conversationId: chatId,
+      userId: chatId,
+      lastReadMessageId: chatId,
       readAt: timestamp,
     }),
   }),
@@ -874,25 +1224,45 @@ export const chatEventSchema = z.discriminatedUnion('event', [
     event: z.literal('conversation.new'),
     data: z.object({
       conversation: conversationSchema,
-      participants: z
-        .array(participantSchema)
-        .max(600)
-        .nullish()
-        .transform((value) => value ?? []),
+      participants: participantListSchema,
+    }),
+  }),
+  z.object({
+    event: z.literal('conversation.updated'),
+    data: z.object({
+      conversation: conversationSchema,
+      participants: participantListSchema,
+      change: groupChangeSchema.nullish().transform((value) => value ?? null),
+    }),
+  }),
+  z.object({
+    event: z.literal('conversation.removed'),
+    data: z.object({
+      conversationId: chatId,
+      /** REMOVED or LEFT. */
+      reason: z.string().max(16),
+    }),
+  }),
+  z.object({
+    event: z.literal('group.invite.updated'),
+    data: z.object({
+      inviteId: chatId,
+      conversationId: chatId,
+      status: inviteStatus,
     }),
   }),
   z.object({
     event: z.literal('typing'),
     data: z.object({
-      conversationId: z.string().min(1).max(64),
-      userId: z.string().min(1).max(64),
+      conversationId: chatId,
+      userId: chatId,
       typing: z.boolean(),
     }),
   }),
   z.object({
     event: z.literal('presence'),
     data: z.object({
-      userId: z.string().min(1).max(64),
+      userId: chatId,
       online: z.boolean(),
     }),
   }),
@@ -900,6 +1270,10 @@ export const chatEventSchema = z.discriminatedUnion('event', [
 
 export type ConversationType = z.infer<typeof conversationTypeSchema>;
 export type Participant = z.infer<typeof participantSchema>;
+export type ChatAttachment = z.infer<typeof chatAttachmentSchema>;
+export type ChatReaction = z.infer<typeof chatReactionSchema>;
+export type ReplyPreview = z.infer<typeof replyPreviewSchema>;
+export type GroupInviteCard = z.infer<typeof groupInviteCardSchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;
 export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
@@ -912,8 +1286,29 @@ export type ConversationResponse = z.infer<typeof conversationResponseSchema>;
 export type ListMessagesRequest = z.infer<typeof listMessagesRequestSchema>;
 export type SendChatMessageRequest = z.infer<typeof sendChatMessageRequestSchema>;
 export type ChatMessageResponse = z.infer<typeof chatMessageResponseSchema>;
+export type ChatMessageRef = z.infer<typeof chatMessageRefSchema>;
+export type EditChatMessageRequest = z.infer<typeof editChatMessageRequestSchema>;
+export type ReactChatMessageRequest = z.infer<typeof reactChatMessageRequestSchema>;
+export type MessageReactions = z.infer<typeof messageReactionsSchema>;
 export type MarkReadRequest = z.infer<typeof markReadRequestSchema>;
 export type TypingRequest = z.infer<typeof typingRequestSchema>;
+export type AttachChatFilesRequest = z.infer<typeof attachChatFilesRequestSchema>;
+export type AttachChatFilesResponse = z.infer<typeof attachChatFilesResponseSchema>;
+export type LocalFileSource = (typeof LOCAL_FILE_SOURCES)[number];
+export type UploadLocalFilesRequest = z.infer<typeof uploadLocalFilesRequestSchema>;
+export type AttachmentIdRequest = z.infer<typeof attachmentIdRequestSchema>;
+export type AttachmentResponse = z.infer<typeof attachmentResponseSchema>;
+export type SavedFileResponse = z.infer<typeof savedFileResponseSchema>;
+export type RenameGroupRequest = z.infer<typeof renameGroupRequestSchema>;
+export type AddGroupMembersRequest = z.infer<typeof addGroupMembersRequestSchema>;
+export type GroupMemberRequest = z.infer<typeof groupMemberRequestSchema>;
+export type ChangeMemberRoleRequest = z.infer<typeof changeMemberRoleRequestSchema>;
+export type GroupParticipants = z.infer<typeof groupParticipantsSchema>;
+export type GroupRecordResponse = z.infer<typeof groupRecordResponseSchema>;
+export type GroupInvite = z.infer<typeof groupInviteSchema>;
+export type GroupInviteResult = z.infer<typeof groupInviteResultSchema>;
+export type InviteIdRequest = z.infer<typeof inviteIdRequestSchema>;
+export type GroupChange = z.infer<typeof groupChangeSchema>;
 export type ChatSocketStatus = (typeof CHAT_SOCKET_STATUSES)[number];
 export type ChatSocketState = z.infer<typeof chatSocketStateSchema>;
 export type ChatEvent = z.infer<typeof chatEventSchema>;
@@ -1020,8 +1415,9 @@ export const NOTIFICATION_TYPES = [
   'COMMENT_REACTED',
   'FRIEND_REQUEST_RECEIVED',
   'FRIEND_REQUEST_ACCEPTED',
-  /** Push-only: chat pushes never land in the inbox. */
+  /** Push-only: chat alerts never land in the inbox. */
   'CHAT_MESSAGE',
+  'CHAT_REACTION',
 ] as const;
 
 export const notificationTypeSchema = z.string().min(1).max(64);
@@ -1748,9 +2144,27 @@ export interface YelloBridge {
     getConversation(request: ConversationIdRequest): Promise<IpcResult<ConversationResponse>>;
     listMessages(request: ListMessagesRequest): Promise<IpcResult<MessagePage>>;
     sendMessage(request: SendChatMessageRequest): Promise<IpcResult<ChatMessageResponse>>;
+    editMessage(request: EditChatMessageRequest): Promise<IpcResult<ChatMessageResponse>>;
+    deleteMessage(request: ChatMessageRef): Promise<IpcResult<DeletedResponse>>;
+    react(request: ReactChatMessageRequest): Promise<IpcResult<MessageReactions>>;
+    unreact(request: ChatMessageRef): Promise<IpcResult<MessageReactions>>;
     markRead(request: MarkReadRequest): Promise<IpcResult<AcknowledgedResponse>>;
     typing(request: TypingRequest): Promise<IpcResult<AcknowledgedResponse>>;
     socketState(): Promise<IpcResult<ChatSocketState>>;
+    attachFiles(request: AttachChatFilesRequest): Promise<IpcResult<AttachChatFilesResponse>>;
+    uploadLocalFiles(request: UploadLocalFilesRequest): Promise<IpcResult<AttachChatFilesResponse>>;
+    getAttachment(request: AttachmentIdRequest): Promise<IpcResult<AttachmentResponse>>;
+    saveAttachment(request: AttachmentIdRequest): Promise<IpcResult<SavedFileResponse>>;
+    renameGroup(request: RenameGroupRequest): Promise<IpcResult<GroupRecordResponse>>;
+    setGroupPhoto(request: ConversationIdRequest): Promise<IpcResult<GroupRecordResponse>>;
+    removeGroupPhoto(request: ConversationIdRequest): Promise<IpcResult<GroupRecordResponse>>;
+    addMembers(request: AddGroupMembersRequest): Promise<IpcResult<GroupParticipants>>;
+    removeMember(request: GroupMemberRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    changeRole(request: ChangeMemberRoleRequest): Promise<IpcResult<GroupParticipants>>;
+    leaveGroup(request: ConversationIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    invite(request: GroupMemberRequest): Promise<IpcResult<GroupInviteResult>>;
+    acceptInvite(request: InviteIdRequest): Promise<IpcResult<ConversationResponse>>;
+    declineInvite(request: InviteIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
     /**
      * Subscribes to frames pushed from the main process. Returns the
      * unsubscribe; the listener receives an unvalidated value the renderer

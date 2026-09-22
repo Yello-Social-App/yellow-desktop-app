@@ -67,8 +67,14 @@ export interface ImagePart {
   byteLength: number;
 }
 
-/** Reads one chosen file into a form part, refusing anything off the allowlist. */
-export async function readImagePart(filePath: string): Promise<IpcResult<ImagePart>> {
+/**
+ * Reads one chosen file into a form part, refusing anything off the allowlist.
+ * `maxBytes` defaults to the post-image cap; a chat group photo allows more.
+ */
+export async function readImagePart(
+  filePath: string,
+  maxBytes: number = MAX_IMAGE_BYTES,
+): Promise<IpcResult<ImagePart>> {
   const extension = path.extname(filePath).toLowerCase();
   const contentType = ALLOWED_IMAGE_EXTENSIONS[extension];
   if (contentType === undefined) {
@@ -83,8 +89,9 @@ export async function readImagePart(filePath: string): Promise<IpcResult<ImagePa
     return ipcFail('IO_ERROR', 'That file could not be read.');
   }
 
-  if (bytes.byteLength > MAX_IMAGE_BYTES) {
-    return ipcFail('INVALID_PAYLOAD', 'Images must be 5 MB or smaller.');
+  if (bytes.byteLength > maxBytes) {
+    const megabytes = String(Math.floor(maxBytes / (1024 * 1024)));
+    return ipcFail('INVALID_PAYLOAD', `Images must be ${megabytes} MB or smaller.`);
   }
 
   // Copy into a plain ArrayBuffer: a Node Buffer is not a valid BlobPart.

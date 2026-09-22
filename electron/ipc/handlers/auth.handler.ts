@@ -40,6 +40,7 @@ import {
   startupRefreshToken,
   isSecureStorageAvailable,
 } from '../../api/account-vault';
+import { chatAlerts } from '../../chat/alerts';
 import { chatSocket } from '../../chat/socket';
 import { notificationWatcher } from '../../notifications/watcher';
 import { IPC_CHANNELS } from '../channels';
@@ -168,6 +169,8 @@ async function currentSession(): Promise<IpcResult<SessionResponse>> {
 function endSessionScopedWork(): void {
   chatSocket.disconnect();
   notificationWatcher.stop();
+  // An alert left up would name a conversation of the account just left.
+  chatAlerts.reset();
 }
 
 /** Adopts a freshly issued pair, then resolves the profile behind it. */

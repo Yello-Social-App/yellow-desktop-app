@@ -104,7 +104,28 @@ export const ENDPOINTS = {
     conversations: `${chat}/conversations`,
     conversation: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}`,
     messages: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/messages`,
+    /** PATCH edits the text, DELETE unsends it for everyone (a tombstone stays). */
+    message: (conversationId: string, messageId: string) =>
+      `${chat}/conversations/${seg(conversationId)}/messages/${seg(messageId)}`,
+    /** PUT sets the caller's one reaction, DELETE removes it. */
+    reaction: (conversationId: string, messageId: string) =>
+      `${chat}/conversations/${seg(conversationId)}/messages/${seg(messageId)}/reaction`,
     read: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/read`,
+    /** Multipart upload, one `file` per request; the result is pending until sent. */
+    attachments: (conversationId: string) =>
+      `${chat}/conversations/${seg(conversationId)}/attachments`,
+    /** A fresh presigned link for an attachment whose URL has expired. */
+    attachment: (attachmentId: string) => `${chat}/attachments/${seg(attachmentId)}`,
+    /** PUT (multipart) sets a group's photo, DELETE removes it. */
+    photo: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/photo`,
+    members: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/members`,
+    /** DELETE removes someone else; PATCH changes their role. */
+    member: (conversationId: string, userId: string) =>
+      `${chat}/conversations/${seg(conversationId)}/members/${seg(userId)}`,
+    leave: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/leave`,
+    invites: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/invites`,
+    acceptInvite: (inviteId: string) => `${chat}/invites/${seg(inviteId)}/accept`,
+    declineInvite: (inviteId: string) => `${chat}/invites/${seg(inviteId)}/decline`,
     /** The live socket, relative to the API origin (wss:// for https://). */
     socket: chat,
   },

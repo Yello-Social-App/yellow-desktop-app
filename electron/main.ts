@@ -35,6 +35,7 @@ import { registerProfileHandlers } from './ipc/handlers/profile.handler';
 import { registerReactionHandlers } from './ipc/handlers/reactions.handler';
 import { registerShowcaseHandlers } from './ipc/handlers/showcase.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
+import { chatAlerts } from './chat/alerts';
 import { chatSocket } from './chat/socket';
 import { notificationWatcher } from './notifications/watcher';
 import { createLogger } from '../shared/logger';
@@ -268,6 +269,7 @@ function bootstrap(): void {
     // A clean close beats the server waiting out a heartbeat.
     chatSocket.disconnect();
     notificationWatcher.stop();
+    chatAlerts.reset();
   });
 
   app.on('activate', () => {
@@ -283,6 +285,9 @@ function bootstrap(): void {
       // The HTTP client lives in this process, so it is ready before any
       // renderer can ask for data.
       configureHttpClient(apiBaseUrlFromEnvironment(), chatBaseUrlFromEnvironment());
+      // Chat alerts listen to the socket for the life of the app; each session
+      // end clears what they hold.
+      chatAlerts.attach();
 
       applyContentSecurityPolicy();
       applyPermissionPolicy();

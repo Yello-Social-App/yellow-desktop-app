@@ -1,4 +1,3 @@
-import { Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -8,40 +7,18 @@ import { cn } from '@/lib/cn';
 import { relativeTime } from '@/lib/relative-time';
 import { displayName, initialsOf } from '@/lib/user-display';
 
+import { GroupAvatar } from './GroupAvatar';
+
 interface ConversationListProps {
   rows: ConversationRow[];
   activeId: string | null;
 }
 
-/** A group's avatar is its first two members stacked; a direct one is the peer. */
+/** A group's avatar is its photo or its members (GroupAvatar); a direct one is the peer. */
 function ConversationAvatar({ row }: { row: ConversationRow }) {
-  const [first, second] = row.peers;
-  if (row.conversation.type === 'GROUP' && second !== undefined && first !== undefined) {
-    return (
-      <span className="relative size-10 shrink-0">
-        <Avatar
-          initials={initialsOf(first)}
-          name={displayName(first)}
-          imageUrl={first.avatarUrl}
-          size="sm"
-          className="absolute top-0 left-0"
-        />
-        <Avatar
-          initials={initialsOf(second)}
-          name={displayName(second)}
-          imageUrl={second.avatarUrl}
-          size="sm"
-          className="ring-background absolute right-0 bottom-0 rounded-full ring-2"
-        />
-      </span>
-    );
-  }
-  if (first === undefined) {
-    return (
-      <span className="bg-surface-container text-on-surface-variant flex size-10 shrink-0 items-center justify-center rounded-full">
-        <Users aria-hidden className="size-5" />
-      </span>
-    );
+  const [first] = row.peers;
+  if (row.conversation.type === 'GROUP' || first === undefined) {
+    return <GroupAvatar row={row} />;
   }
   return (
     <Avatar

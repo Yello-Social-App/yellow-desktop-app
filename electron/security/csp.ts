@@ -15,6 +15,7 @@ import { session } from 'electron';
 
 import { apiBaseUrlFromEnvironment, imageBaseUrlsFromEnvironment } from '../config';
 
+import { chatMediaSources } from './media-hosts';
 import { devServerUrl, isDevRuntime } from './origins';
 
 /**
@@ -24,7 +25,8 @@ import { devServerUrl, isDevRuntime } from './origins';
  *
  * Both the API origin and the media CDN (R2) are included: the API may serve
  * some images inline, but uploaded media is served from a separate bucket
- * origin, so leaving it out silently blanks every avatar to its initials.
+ * origin, so leaving it out silently blanks every avatar to its initials. Chat
+ * media is a third origin again, from its own allowlist.
  */
 function imageHosts(): string {
   const origins = new Set<string>();
@@ -37,7 +39,9 @@ function imageHosts(): string {
     }
   }
 
-  return [...origins].join(' ');
+  // Chat attachments and group photos: presigned links on the private bucket's
+  // host, which is not the public CDN above (see media-hosts.ts).
+  return [...origins, chatMediaSources()].filter((value) => value !== '').join(' ');
 }
 
 function productionPolicy(): string {

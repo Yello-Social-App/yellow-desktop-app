@@ -18,6 +18,24 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from './ipc/channels';
 
 import type {
+  AddGroupMembersRequest,
+  AttachChatFilesRequest,
+  AttachChatFilesResponse,
+  AttachmentIdRequest,
+  AttachmentResponse,
+  UploadLocalFilesRequest,
+  ChangeMemberRoleRequest,
+  ChatMessageRef,
+  EditChatMessageRequest,
+  GroupInviteResult,
+  GroupMemberRequest,
+  GroupParticipants,
+  GroupRecordResponse,
+  InviteIdRequest,
+  MessageReactions,
+  ReactChatMessageRequest,
+  RenameGroupRequest,
+  SavedFileResponse,
   AccountIdRequest,
   AccountListResponse,
   AcknowledgedResponse,
@@ -223,6 +241,42 @@ const bridge: YelloBridge = {
       invoke<MessagePage>(IPC_CHANNELS.CHAT_LIST_MESSAGES, request),
     sendMessage: (request: SendChatMessageRequest) =>
       invoke<ChatMessageResponse>(IPC_CHANNELS.CHAT_SEND_MESSAGE, request),
+    editMessage: (request: EditChatMessageRequest) =>
+      invoke<ChatMessageResponse>(IPC_CHANNELS.CHAT_EDIT_MESSAGE, request),
+    deleteMessage: (request: ChatMessageRef) =>
+      invoke<DeletedResponse>(IPC_CHANNELS.CHAT_DELETE_MESSAGE, request),
+    react: (request: ReactChatMessageRequest) =>
+      invoke<MessageReactions>(IPC_CHANNELS.CHAT_REACT, request),
+    unreact: (request: ChatMessageRef) =>
+      invoke<MessageReactions>(IPC_CHANNELS.CHAT_UNREACT, request),
+    attachFiles: (request: AttachChatFilesRequest) =>
+      invoke<AttachChatFilesResponse>(IPC_CHANNELS.CHAT_ATTACH_FILES, request),
+    uploadLocalFiles: (request: UploadLocalFilesRequest) =>
+      invoke<AttachChatFilesResponse>(IPC_CHANNELS.CHAT_UPLOAD_LOCAL_FILES, request),
+    getAttachment: (request: AttachmentIdRequest) =>
+      invoke<AttachmentResponse>(IPC_CHANNELS.CHAT_GET_ATTACHMENT, request),
+    saveAttachment: (request: AttachmentIdRequest) =>
+      invoke<SavedFileResponse>(IPC_CHANNELS.CHAT_SAVE_ATTACHMENT, request),
+    renameGroup: (request: RenameGroupRequest) =>
+      invoke<GroupRecordResponse>(IPC_CHANNELS.CHAT_RENAME_GROUP, request),
+    setGroupPhoto: (request: ConversationIdRequest) =>
+      invoke<GroupRecordResponse>(IPC_CHANNELS.CHAT_SET_GROUP_PHOTO, request),
+    removeGroupPhoto: (request: ConversationIdRequest) =>
+      invoke<GroupRecordResponse>(IPC_CHANNELS.CHAT_REMOVE_GROUP_PHOTO, request),
+    addMembers: (request: AddGroupMembersRequest) =>
+      invoke<GroupParticipants>(IPC_CHANNELS.CHAT_ADD_MEMBERS, request),
+    removeMember: (request: GroupMemberRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.CHAT_REMOVE_MEMBER, request),
+    changeRole: (request: ChangeMemberRoleRequest) =>
+      invoke<GroupParticipants>(IPC_CHANNELS.CHAT_CHANGE_ROLE, request),
+    leaveGroup: (request: ConversationIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.CHAT_LEAVE_GROUP, request),
+    invite: (request: GroupMemberRequest) =>
+      invoke<GroupInviteResult>(IPC_CHANNELS.CHAT_INVITE, request),
+    acceptInvite: (request: InviteIdRequest) =>
+      invoke<ConversationResponse>(IPC_CHANNELS.CHAT_ACCEPT_INVITE, request),
+    declineInvite: (request: InviteIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.CHAT_DECLINE_INVITE, request),
     markRead: (request: MarkReadRequest) =>
       invoke<AcknowledgedResponse>(IPC_CHANNELS.CHAT_MARK_READ, request),
     typing: (request: TypingRequest) =>
