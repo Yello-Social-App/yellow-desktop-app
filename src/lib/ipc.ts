@@ -7,6 +7,10 @@
  * here, not a crash.
  */
 import {
+  updateEventSchema,
+  updateStateSchema,
+  type SetAutoCheckRequest,
+  type UpdateEvent,
   attachChatFilesResponseSchema,
   attachmentResponseSchema,
   groupInviteResultSchema,
@@ -473,6 +477,19 @@ export const ipc = {
   readAppInfo: () =>
     guarded('files.readAppInfo', appInfoResponseSchema, (api) => api.files.readAppInfo()),
 
+  updateState: () => guarded('updates.state', updateStateSchema, (api) => api.updates.state()),
+  checkForUpdates: () => guarded('updates.check', updateStateSchema, (api) => api.updates.check()),
+  updateNow: () =>
+    guarded('updates.updateNow', updateStateSchema, (api) => api.updates.updateNow()),
+  installUpdate: () =>
+    guarded('updates.install', updateStateSchema, (api) => api.updates.install()),
+  setUpdateAutoCheck: (request: SetAutoCheckRequest) =>
+    guarded('updates.setAutoCheck', updateStateSchema, (api) => api.updates.setAutoCheck(request)),
+  openReleaseNotes: () =>
+    guarded('updates.openReleaseNotes', acknowledgedResponseSchema, (api) =>
+      api.updates.openReleaseNotes(),
+    ),
+
   minimizeWindow: () =>
     guarded('window.minimize', windowStateSchema, (api) => api.window.minimize()),
   toggleMaximizeWindow: () =>
@@ -520,6 +537,26 @@ export function onNotificationEvent(listener: (event: NotificationEvent) => void
       listener(parsed.data);
     } else {
       log.warn('notification_event_rejected', {});
+    }
+  });
+}
+
+/**
+ * Update-state pushes from the main process, parsed against the shared schema
+ * before the listener sees them (A08). Returns the unsubscribe, or a no-op
+ * when there is no bridge.
+ */
+export function onUpdateEvent(listener: (event: UpdateEvent) => void): () => void {
+  const api = bridge();
+  if (api === undefined) {
+    return () => undefined;
+  }
+  return api.updates.onEvent((raw) => {
+    const parsed = updateEventSchema.safeParse(raw);
+    if (parsed.success) {
+      listener(parsed.data);
+    } else {
+      log.warn('update_event_rejected', {});
     }
   });
 }

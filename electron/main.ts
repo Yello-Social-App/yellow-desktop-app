@@ -34,13 +34,14 @@ import { registerPostHandlers } from './ipc/handlers/posts.handler';
 import { registerProfileHandlers } from './ipc/handlers/profile.handler';
 import { registerReactionHandlers } from './ipc/handlers/reactions.handler';
 import { registerShowcaseHandlers } from './ipc/handlers/showcase.handler';
+import { registerUpdateHandlers } from './ipc/handlers/updates.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
 import { chatAlerts } from './chat/alerts';
 import { chatSocket } from './chat/socket';
 import { notificationWatcher } from './notifications/watcher';
 import { createLogger } from '../shared/logger';
 import { buildApplicationMenu } from './menu';
-import { initialiseAutoUpdater } from './autoUpdater';
+import { updateService } from './autoUpdater';
 import { isUpdateCommand, runUpdateCommand } from './cli/update-command';
 import { applyContentSecurityPolicy } from './security/csp';
 import { applyNavigationPolicy, applyPermissionPolicy } from './security/permissions';
@@ -166,7 +167,7 @@ function createMainWindow(): BrowserWindow {
     // Deferred until the window is interactive: none are needed to first paint.
     registerFsHandlers();
     registerLinkHandlers();
-    initialiseAutoUpdater();
+    void updateService.start();
   });
 
   // The inbox watcher paces itself by whether anyone is looking: often while
@@ -302,6 +303,7 @@ function bootstrap(): void {
       registerFriendHandlers();
       registerChatHandlers();
       registerNotificationHandlers();
+      registerUpdateHandlers();
       registerCommunityHandlers();
       registerShowcaseHandlers();
       registerProfileHandlers();
