@@ -6,6 +6,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-22
+
+Chat grows up — replies, edits, unsend, reactions, files, group management and
+invites, with desktop chat alerts — Home gets a new frame with a compact mode,
+and Yello can now check for and install its own updates from Settings.
+
+### Added
+
+- **Reply, edit, unsend and react in chat.** Hover a message to reply (the
+  quote jumps to the original), edit your own, unsend it for everyone (it
+  stays as "Message deleted"), or react with an emoji. One reaction per person
+  per message; tapping yours again removes it. Up in an empty message box
+  edits your last message.
+- **Files in chat.** Attach up to 10 files of up to 10 MB each with the
+  paperclip, by pasting an image, or by dragging files in from another window.
+  Photos show in the conversation and open full size; other files have a Save
+  button that asks where to put them.
+- **Groups.** Group details (the ⓘ in a group's header) rename the group, set
+  or remove its photo, list members with owner and admin badges, promote and
+  demote admins, remove members, add friends directly or send them an invite,
+  and leave. Invites arrive as a card in your direct messages with Join and
+  Decline.
+- **Chat alerts on the desktop.** A system notification for a new message
+  while Yello is in the background — one per conversation, taken down if the
+  message is unsent — and for the first reaction to one of your messages.
+  Settings → Notifications has a Chat section to turn either off.
+- **Updates from Settings.** Settings → Updates has "Check now" and
+  "Update now", which downloads the new version, checks it, installs it over
+  the current one and restarts — nothing is uninstalled, so settings and
+  sign-ins are kept. "Check for updates automatically" is on by default and
+  never downloads without the click.
+  - Windows (`.exe`) and Linux AppImage update without a password.
+  - Linux `.deb`, `.rpm` and `.pacman` ask for your password in the desktop's
+    own prompt. That needs a polkit agent, which GNOME, KDE, Cinnamon, XFCE
+    and MATE run; on Hyprland, sway or i3 start one (`hyprpolkitagent`,
+    `polkit-gnome`) or keep using `yello-desktop-app update`.
+  - A Microsoft Store install is told when a newer version is out; the Store
+    delivers it after Microsoft's review.
+- **Compact layout.** The panel button beside the logo switches between the
+  labelled sidebars and a compact frame: an icon rail with tooltips, one side
+  panel with a Chats / Trending switch, and more room for the feed. The choice
+  is remembered.
+- `/` jumps to search from anywhere that is not a text field.
+
+### Changed
+
+- **A new frame.** A calmer neutral palette with hairline dividers and one
+  yellow accent. The navigation rail is grouped, marks waiting messages,
+  notifications and requests with a dot, and keeps your account at its foot.
+  The right rail is now your profile card with friends, requests and unread in
+  one line, your recent chats, and trending projects.
+- **Home.** The feed fills the space between the rails, the composer is one
+  row with a Public / Friends / Only me chip, posts show the author and time in
+  a header with Edit and Delete under "…", times read "11m" or "3d" (hover for
+  the full time), and new stories wear a yellow ring.
+- The right rail no longer lists friend requests, requests you sent or popular
+  communities. Requests are a number that opens Friends, where they are
+  answered.
+
+### Fixed
+
+- The feed no longer shows an old comment count after someone else comments
+  or replies. It catches up when you open a post, when you come back to the
+  feed or the window, and when a notification about the post arrives.
+
+### Upgrading
+
+- Windows `.exe` users on 0.5.0 install the 0.6.0 installer over the old one
+  once; from then on, Settings → Updates does it. Linux users run
+  `yello-desktop-app update` once (or install the 0.6.0 package over the old
+  one) for the same reason.
+
 ## [0.5.0] - 2026-09-19
 
 Communities, the showcase and people search now run on the API, you can edit

@@ -51,6 +51,10 @@ at launch and every six hours, and never downloads without the click.
   Microsoft's review.
 - **macOS** is told about a new version and downloads it from the release page.
 
+The Settings button exists from 0.6.0 on. An older copy gets there once by
+installing the 0.6.0 installer or package over it — an upgrade, not a
+reinstall — or, on Linux, with the terminal command below.
+
 #### From a terminal on Linux
 
 An app installed from the `.deb`, `.rpm` or `.pacman` package also updates
