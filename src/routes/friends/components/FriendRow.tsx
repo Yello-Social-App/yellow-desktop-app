@@ -61,6 +61,7 @@ export const FriendRow = memo(function FriendRow({
       <div className="shrink-0">
         <FriendshipControls
           control={control}
+          name={name}
           isMessaging={isStarting}
           onMessage={
             control.relationship === 'friends'

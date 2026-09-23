@@ -1,11 +1,15 @@
 import { Ban, Check, MessageCircle, UserCheck, UserMinus, UserPlus, X } from 'lucide-react';
+import { useState } from 'react';
 
+import { UnblockDialog } from '@/components/people/UnblockDialog';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import type { RelationshipControl } from '@/features/friends/hooks';
 
 interface FriendshipControlsProps {
   control: RelationshipControl;
+  /** The other person's display name, for the unblock confirmation. */
+  name: string;
   /** Starts a direct conversation; absent where chat is not offered. */
   onMessage?: () => void;
   isMessaging?: boolean;
@@ -24,11 +28,13 @@ interface FriendshipControlsProps {
  */
 export function FriendshipControls({
   control,
+  name,
   onMessage,
   isMessaging = false,
   showBlock = false,
 }: FriendshipControlsProps) {
   const { relationship, isBusy } = control;
+  const [isUnblockOpen, setIsUnblockOpen] = useState(false);
 
   if (relationship === 'self') {
     return null;
@@ -36,14 +42,27 @@ export function FriendshipControls({
 
   if (relationship === 'blocked') {
     return (
-      <Button
-        variant="outline"
-        leadingIcon={<Ban className="size-4" />}
-        isLoading={isBusy}
-        onClick={control.unblock}
-      >
-        Unblock
-      </Button>
+      <>
+        <Button
+          variant="outline"
+          leadingIcon={<Ban className="size-4" />}
+          isLoading={isBusy}
+          onClick={() => {
+            setIsUnblockOpen(true);
+          }}
+        >
+          Unblock
+        </Button>
+        {isUnblockOpen && (
+          <UnblockDialog
+            name={name}
+            onConfirm={control.unblock}
+            onClose={() => {
+              setIsUnblockOpen(false);
+            }}
+          />
+        )}
+      </>
     );
   }
 

@@ -210,6 +210,8 @@ export interface NotificationPreferencesForm {
   isSaving: boolean;
   setPushEnabled: (enabled: boolean) => void;
   toggleMuted: (type: string) => void;
+  /** Mutes or unmutes several types in one save: a group's "Turn all off". */
+  setMuted: (types: readonly string[], muted: boolean) => void;
 }
 
 /**
@@ -248,6 +250,13 @@ export function useNotificationPreferences(): NotificationPreferencesForm {
         ? preferences.mutedTypes.filter((entry) => entry !== type)
         : [...preferences.mutedTypes, type];
       void savePreferences({ pushEnabled: preferences.pushEnabled, mutedTypes: next });
+    },
+    setMuted: (types, muted) => {
+      const others = preferences.mutedTypes.filter((entry) => !types.includes(entry));
+      void savePreferences({
+        pushEnabled: preferences.pushEnabled,
+        mutedTypes: muted ? [...others, ...types] : others,
+      });
     },
   };
 }

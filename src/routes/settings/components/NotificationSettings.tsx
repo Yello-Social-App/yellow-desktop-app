@@ -1,11 +1,17 @@
-import { BellRing } from 'lucide-react';
+import { NOTIFICATION_TYPES, type NotificationType } from '@shared/ipc-types';
+import { BellRing, Info } from 'lucide-react';
 
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
-import { useNotificationPreferences } from '@/features/notifications/hooks';
-import { NOTIFICATION_TYPES, type NotificationType } from '@shared/ipc-types';
+import { Switch } from '@/components/ui/Switch';
+import {
+  useNotificationPreferences,
+  type NotificationPreferencesForm,
+} from '@/features/notifications/hooks';
 import { labelForType } from '@/features/notifications/types';
 import { cn } from '@/lib/cn';
+
+import { CardHeading } from './SettingsSection';
 
 /**
  * Push opt-outs.
@@ -27,118 +33,178 @@ import { cn } from '@/lib/cn';
  * wrong — and the list redraws from what the server stored, which is sorted and
  * deduplicated rather than the order it was sent.
  */
-/** Alerts this app raises from the chat socket rather than from the inbox. */
-const CHAT_TYPES: ReadonlySet<NotificationType> = new Set(['CHAT_MESSAGE', 'CHAT_REACTION']);
-
-interface TypeTogglesProps {
+interface TypeGroup {
+  title: string;
+  description: string;
   types: readonly NotificationType[];
-  mutedTypes: ReadonlySet<string>;
-  isDisabled: boolean;
-  isDimmed: boolean;
-  onToggle: (type: NotificationType) => void;
 }
 
-function TypeToggles({ types, mutedTypes, isDisabled, isDimmed, onToggle }: TypeTogglesProps) {
+/** Two columns, as the design lays them out: posts on the left, people and chat on the right. */
+const COLUMNS: readonly (readonly TypeGroup[])[] = [
+  [
+    {
+      title: 'Posts & comments',
+      description: 'Activity on things you share.',
+      types: [
+        'POST_CREATED',
+        'POST_COMMENTED',
+        'COMMENT_REPLIED',
+        'POST_REPOSTED',
+        'POST_REACTED',
+        'COMMENT_REACTED',
+      ],
+    },
+  ],
+  [
+    {
+      title: 'Friends',
+      description: 'People connecting with you.',
+      types: ['FRIEND_REQUEST_RECEIVED', 'FRIEND_REQUEST_ACCEPTED'],
+    },
+    {
+      title: 'Chat',
+      description: 'Only while Yello is in the background. The conversation keeps every message.',
+      types: ['CHAT_MESSAGE', 'CHAT_REACTION'],
+    },
+  ],
+];
+
+export function NotificationSettings() {
+  const preferences = useNotificationPreferences();
+  const { pushEnabled, status, isSaving, setPushEnabled } = preferences;
+
+  if (status === 'loading' || status === 'idle') {
+    return (
+      <Card className="px-lg py-md">
+        <Spinner label="Loading preferences" />
+      </Card>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <Card className="px-lg py-md">
+        <p className="text-on-surface-variant text-[13px]">
+          Notification preferences could not be loaded. Alerts fall back to being on.
+        </p>
+      </Card>
+    );
+  }
+
   return (
-    <ul className={cn('mt-sm gap-xs flex flex-col', isDimmed && 'opacity-50')}>
-      {types.map((type) => (
-        <li key={type}>
-          <label className="gap-sm hover:bg-surface-container-low transition-tone -mx-2 flex cursor-pointer items-center rounded-lg px-2 py-1.5">
-            <input
-              type="checkbox"
-              checked={!mutedTypes.has(type)}
-              disabled={isDisabled}
-              onChange={() => {
-                onToggle(type);
-              }}
-              className="accent-primary-container size-4 shrink-0 cursor-pointer"
-            />
-            <span className="text-on-surface-variant text-[14px]">{labelForType(type)}</span>
-          </label>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-4">
+      <Card className="flex items-center gap-4 px-5 py-[18px]">
+        <span className="bg-surface-container text-primary flex size-10 shrink-0 items-center justify-center rounded-[10px]">
+          <BellRing aria-hidden className="size-5" />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span className="text-on-surface text-[15px] font-semibold">Desktop alerts</span>
+          <span className="text-on-surface-variant text-[13px]">
+            Show a system notification when something happens while Yello is in the background. Your
+            inbox fills either way.
+          </span>
+        </div>
+        <Switch
+          label="Desktop alerts"
+          checked={pushEnabled}
+          disabled={isSaving}
+          onChange={setPushEnabled}
+        />
+      </Card>
+
+      <p className="text-on-surface-variant flex items-start gap-2.5 px-1 text-[13px] leading-normal">
+        <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+        {pushEnabled
+          ? 'Turning one off stops the alert only — it still appears in your notifications and still counts as unread.'
+          : 'Desktop alerts are off. Everything still lands in your notifications inbox.'}
+      </p>
+
+      <div
+        className={cn(
+          'grid items-start gap-4 transition-opacity @2xl:grid-cols-2',
+          !pushEnabled && 'opacity-40',
+        )}
+      >
+        {COLUMNS.map((column, index) => (
+          <div key={index} className="flex flex-col gap-4">
+            {column.map((group) => (
+              <GroupCard key={group.title} group={group} preferences={preferences} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
-export function NotificationSettings() {
-  const { pushEnabled, mutedTypes, status, isSaving, setPushEnabled, toggleMuted } =
-    useNotificationPreferences();
+interface GroupCardProps {
+  group: TypeGroup;
+  preferences: NotificationPreferencesForm;
+}
+
+function GroupCard({ group, preferences }: GroupCardProps) {
+  const { pushEnabled, mutedTypes, isSaving, toggleMuted, setMuted } = preferences;
+  const isDisabled = isSaving || !pushEnabled;
+  const allOn = group.types.every((type) => !mutedTypes.has(type));
 
   return (
-    <section className="gap-sm flex flex-col">
-      <h2 className="text-on-surface-variant text-caption font-semibold tracking-wider uppercase">
-        Notifications
-      </h2>
-      <Card className="divide-outline-variant flex flex-col divide-y">
-        {status === 'loading' && (
-          <div className="px-lg py-md">
-            <Spinner label="Loading preferences" />
-          </div>
-        )}
-
-        {status === 'error' && (
-          <p className="text-on-surface-variant px-lg py-md text-[13px]">
-            Notification preferences could not be loaded. Alerts fall back to being on.
-          </p>
-        )}
-
-        {status === 'ready' && (
-          <>
-            <label className="px-lg py-md gap-md flex cursor-pointer items-center justify-between">
-              <span className="min-w-0">
-                <span className="text-on-surface gap-sm flex items-center text-[15px]">
-                  <BellRing aria-hidden className="text-primary size-4 shrink-0" />
-                  Desktop alerts
-                </span>
-                <span className="text-on-surface-variant mt-0.5 block text-[13px]">
-                  Show a system notification when something happens while Yello is in the
-                  background. Your inbox fills either way.
-                </span>
-              </span>
-              <input
-                type="checkbox"
-                checked={pushEnabled}
-                disabled={isSaving}
-                onChange={(event) => {
-                  setPushEnabled(event.target.checked);
+    <Card className="overflow-hidden">
+      <CardHeading
+        title={group.title}
+        description={group.description}
+        action={
+          <button
+            type="button"
+            disabled={isDisabled}
+            onClick={() => {
+              setMuted(group.types, allOn);
+            }}
+            className="border-outline-strong text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-tone h-7 shrink-0 rounded-lg border px-2.5 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {allOn ? 'Turn all off' : 'Turn all on'}
+          </button>
+        }
+      />
+      <ul>
+        {group.types.map((type, index) => {
+          const label = labelForType(type);
+          return (
+            <li
+              key={type}
+              className={cn(
+                'flex h-[50px] items-center gap-3 px-[18px]',
+                index > 0 && 'border-outline-variant border-t',
+              )}
+            >
+              <span className="text-on-surface min-w-0 flex-1 text-[14px]">{label}</span>
+              <Switch
+                size="sm"
+                label={label}
+                checked={!mutedTypes.has(type)}
+                disabled={isDisabled}
+                onChange={() => {
+                  toggleMuted(type);
                 }}
-                className="accent-primary-container size-4 shrink-0 cursor-pointer"
               />
-            </label>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
 
-            <div className="px-lg py-md gap-sm flex flex-col">
-              <p className="text-on-surface text-[15px]">What to alert me about</p>
-              <p className="text-on-surface-variant text-[13px]">
-                Turning one off stops the alert only — it still appears in your notifications and
-                still counts as unread.
-              </p>
-              <TypeToggles
-                types={NOTIFICATION_TYPES.filter((type) => !CHAT_TYPES.has(type))}
-                mutedTypes={mutedTypes}
-                isDisabled={isSaving || !pushEnabled}
-                isDimmed={!pushEnabled}
-                onToggle={toggleMuted}
-              />
-            </div>
-
-            <div className="px-lg py-md gap-sm flex flex-col">
-              <p className="text-on-surface text-[15px]">Chat</p>
-              <p className="text-on-surface-variant text-[13px]">
-                Shown only while Yello is in the background. The conversation keeps every message
-                either way.
-              </p>
-              <TypeToggles
-                types={NOTIFICATION_TYPES.filter((type) => CHAT_TYPES.has(type))}
-                mutedTypes={mutedTypes}
-                isDisabled={isSaving || !pushEnabled}
-                isDimmed={!pushEnabled}
-                onToggle={toggleMuted}
-              />
-            </div>
-          </>
-        )}
-      </Card>
-    </section>
+/** The page header's count while Notifications is open: how many alerts would fire. */
+export function AlertsSummary() {
+  const { pushEnabled, mutedTypes, status } = useNotificationPreferences();
+  if (status !== 'ready') {
+    return null;
+  }
+  const on = pushEnabled ? NOTIFICATION_TYPES.filter((type) => !mutedTypes.has(type)).length : 0;
+  return (
+    <p className="text-on-surface-variant flex shrink-0 items-center gap-2 text-[13px]">
+      <span className="text-on-surface font-mono tabular-nums">{on}</span>
+      of {NOTIFICATION_TYPES.length} alerts on
+    </p>
   );
 }

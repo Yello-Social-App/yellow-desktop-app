@@ -170,9 +170,10 @@ export function useRestrictions() {
     }
   }, []);
 
-  const unblock = useCallback(async (userId: string): Promise<void> => {
-    await useFriendsStore.getState().unblock(userId);
-  }, []);
+  const unblock = useCallback(
+    (userId: string): Promise<boolean> => useFriendsStore.getState().unblock(userId),
+    [],
+  );
 
   const hidePost = useCallback(async (postId: string): Promise<void> => {
     await hide(postId);

@@ -2177,6 +2177,13 @@ export const appInfoResponseSchema = z.object({
   secureStorageAvailable: z.boolean(),
 });
 
+/**
+ * "Copy details" in Settings → Updates. The main process writes the text from
+ * the same values `readAppInfo` answers with; the renderer only asks, so it
+ * never decides what lands on the clipboard (A01).
+ */
+export const appInfoCopiedResponseSchema = z.object({ copied: z.boolean() });
+
 /* -- app updates -- */
 
 /**
@@ -2292,6 +2299,7 @@ export type PostExportEntry = z.infer<typeof postExportEntrySchema>;
 export type ExportPostsRequest = z.infer<typeof exportPostsRequestSchema>;
 export type ExportPostsResponse = z.infer<typeof exportPostsResponseSchema>;
 export type AppInfoResponse = z.infer<typeof appInfoResponseSchema>;
+export type AppInfoCopiedResponse = z.infer<typeof appInfoCopiedResponseSchema>;
 export type WindowState = z.infer<typeof windowStateSchema>;
 
 /* ------------------------------------------------------------------ *
@@ -2456,6 +2464,7 @@ export interface YelloBridge {
   readonly files: {
     exportPosts(request: ExportPostsRequest): Promise<IpcResult<ExportPostsResponse>>;
     readAppInfo(): Promise<IpcResult<AppInfoResponse>>;
+    copyAppInfo(): Promise<IpcResult<AppInfoCopiedResponse>>;
   };
   readonly updates: {
     state(): Promise<IpcResult<UpdateState>>;

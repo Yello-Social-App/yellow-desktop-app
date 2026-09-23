@@ -1,4 +1,4 @@
-import { ShieldCheck } from 'lucide-react';
+import { Check, Info } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/Button';
@@ -23,10 +23,11 @@ import {
 } from '@/features/auth/types';
 import { useZodForm } from '@/hooks/use-zod-form';
 import { OTP_RESEND_COOLDOWN_MS } from '@/lib/constants';
+import { cn } from '@/lib/cn';
 import { ApiErrorNotice } from '@/routes/auth/components/ApiErrorNotice';
 import { PasswordField } from '@/routes/auth/components/PasswordField';
 
-import { PaneHeader } from './SettingsSection';
+import { SuccessNote } from './SettingsSection';
 
 /** The server kills a code on its fifth wrong try; every later try is OTP_INVALID too. */
 const MAX_WRONG_CODES = 5;
@@ -40,6 +41,34 @@ function serverFieldError(error: AuthError | null, field: string): string | unde
 }
 
 type Step = 'password' | 'code' | 'done';
+
+interface Draft {
+  newPassword: string;
+  confirmPassword: string;
+}
+
+const EMPTY_DRAFT: Draft = { newPassword: '', confirmPassword: '' };
+
+/**
+ * What the change-password endpoint requires of a new password (the same as
+ * `newPasswordRule`), plus the one thing that only makes it stronger.
+ */
+function passwordChecks(password: string): { label: string; met: boolean; required: boolean }[] {
+  return [
+    {
+      label: `At least ${String(REGISTER_PASSWORD_MIN_LENGTH)} characters`,
+      met: password.length >= REGISTER_PASSWORD_MIN_LENGTH,
+      required: true,
+    },
+    {
+      label: 'Upper and lower case letters',
+      met: /[a-z]/.test(password) && /[A-Z]/.test(password),
+      required: true,
+    },
+    { label: 'A number', met: /[0-9]/.test(password), required: true },
+    { label: 'A symbol, to make it stronger', met: /[^A-Za-z0-9]/.test(password), required: false },
+  ];
+}
 
 /**
  * Settings → Change password: prove the current password, then enter the
@@ -59,22 +88,15 @@ export function ChangePasswordSettings() {
   const [restartReason, setRestartReason] = useState<string | null>(null);
   const heldPassword = useRef<string | null>(null);
   const cooldown = useCooldown(OTP_RESEND_COOLDOWN_MS);
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
 
   const email = user?.email;
 
   return (
-    <>
-      <PaneHeader
-        title="Change password"
-        description={
-          email === undefined
-            ? 'We’ll email you a code to confirm it’s you.'
-            : `We’ll email a code to ${email} to confirm it’s you.`
-        }
-      />
-
+    <div className="grid items-start gap-5 @3xl:grid-cols-[460px_minmax(0,1fr)]">
       {step === 'password' && (
         <CurrentPasswordStep
+          email={email}
           notice={restartReason}
           onCodeSent={(password) => {
             heldPassword.current = password;
@@ -90,12 +112,15 @@ export function ChangePasswordSettings() {
           email={email}
           cooldown={cooldown}
           heldPassword={() => heldPassword.current}
+          onDraftChange={setDraft}
           onChanged={() => {
             heldPassword.current = null;
+            setDraft(EMPTY_DRAFT);
             setStep('done');
           }}
           onRestart={(reason) => {
             heldPassword.current = null;
+            setDraft(EMPTY_DRAFT);
             setRestartReason(reason);
             setStep('password');
           }}
@@ -103,28 +128,102 @@ export function ChangePasswordSettings() {
       )}
 
       {step === 'done' && (
-        <Card className="gap-sm p-lg flex flex-col" role="status">
-          <p className="text-on-surface gap-sm flex items-center text-[15px] font-semibold">
-            <ShieldCheck aria-hidden className="text-tertiary size-5 shrink-0" />
-            Password changed
-          </p>
+        <Card className="flex flex-col gap-3 p-5">
+          <SuccessNote>Password changed.</SuccessNote>
           <p className="text-on-surface-variant text-[14px]">
             You’re still signed in here. Every other device and browser was signed out and needs the
             new password to get back in.
           </p>
         </Card>
       )}
-    </>
+
+      {step !== 'done' && <PasswordRules draft={draft} />}
+    </div>
+  );
+}
+
+/** The checklist beside the form, ticking as the new password is typed. */
+function PasswordRules({ draft }: { draft: Draft }) {
+  const matches = draft.confirmPassword !== '' && draft.confirmPassword === draft.newPassword;
+  const checks = [
+    ...passwordChecks(draft.newPassword),
+    { label: 'Both new passwords match', met: matches, required: true },
+  ];
+
+  return (
+    <Card as="section" aria-label="Password requirements" className="flex flex-col gap-3 p-5">
+      <h2 className="text-on-surface text-[14px] font-semibold">Your new password needs</h2>
+      <ul className="flex flex-col gap-3">
+        {checks.map((check) => (
+          <li
+            key={check.label}
+            className={cn(
+              'flex items-center gap-2.5 text-[13px]',
+              check.met ? 'text-on-surface' : 'text-outline',
+            )}
+          >
+            <span
+              className={cn(
+                'flex size-[18px] shrink-0 items-center justify-center rounded-full',
+                check.met
+                  ? 'bg-tertiary text-on-tertiary'
+                  : 'bg-surface-container-highest text-transparent',
+              )}
+            >
+              <Check aria-hidden className="size-3" strokeWidth={3} />
+            </span>
+            {check.label}
+            <span className="sr-only">{check.met ? ', done' : ', not yet'}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="bg-outline-variant my-1 h-px" />
+      <p className="text-outline text-[12px] leading-normal">
+        Changing your password signs out every other device. This one stays signed in. Passwords
+        found in known data breaches are turned down.
+      </p>
+    </Card>
+  );
+}
+
+const STRENGTH_NAMES = ['', 'Weak', 'Fair', 'Good', 'Strong'] as const;
+const STRENGTH_BARS = ['', 'bg-error', 'bg-coral', 'bg-[#facc15]', 'bg-tertiary'] as const;
+const STRENGTH_TEXT = ['', 'text-error', 'text-coral', 'text-[#facc15]', 'text-tertiary'] as const;
+
+/** Four bars under the new password: one per check it passes. */
+function StrengthMeter({ password }: { password: string }) {
+  const score = password === '' ? 0 : passwordChecks(password).filter((c) => c.met).length;
+  return (
+    <div className="-mt-sm flex flex-col gap-1.5">
+      <div aria-hidden className="grid grid-cols-4 gap-1">
+        {[1, 2, 3, 4].map((bar) => (
+          <span
+            key={bar}
+            className={cn(
+              'h-1 rounded-sm',
+              bar <= score ? STRENGTH_BARS[score] : 'bg-surface-container-highest',
+            )}
+          />
+        ))}
+      </div>
+      <p className="text-on-surface-variant text-[12px]" aria-live="polite">
+        Strength:{' '}
+        <span className={score === 0 ? 'text-outline' : STRENGTH_TEXT[score]}>
+          {score === 0 ? '—' : STRENGTH_NAMES[score]}
+        </span>
+      </p>
+    </div>
   );
 }
 
 interface CurrentPasswordStepProps {
+  email: string | undefined;
   /** Why the user is back on this step, when the code step sent them. */
   notice: string | null;
   onCodeSent: (currentPassword: string) => void;
 }
 
-function CurrentPasswordStep({ notice, onCodeSent }: CurrentPasswordStepProps) {
+function CurrentPasswordStep({ email, notice, onCodeSent }: CurrentPasswordStepProps) {
   const form = useZodForm<typeof CURRENT_INITIAL, CurrentPasswordFormValues>(
     currentPasswordFormSchema,
     CURRENT_INITIAL,
@@ -156,8 +255,14 @@ function CurrentPasswordStep({ notice, onCodeSent }: CurrentPasswordStepProps) {
   };
 
   return (
-    <Card className="p-lg">
-      <form className="gap-lg flex flex-col" onSubmit={handleSubmit} noValidate>
+    <Card className="p-5">
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+        <p className="text-on-surface-variant flex items-start gap-2 text-[13px]">
+          <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
+          {email === undefined
+            ? 'We’ll email you a code to confirm it’s you.'
+            : `We’ll email a code to ${email} to confirm it’s you.`}
+        </p>
         {notice !== null && (
           <p role="alert" className="text-on-surface-variant text-[14px]">
             {notice}
@@ -191,11 +296,20 @@ interface CodeStepProps {
   email: string | undefined;
   cooldown: Cooldown;
   heldPassword: () => string | null;
+  /** Reports the new password as typed, for the checklist beside the form. */
+  onDraftChange: (draft: Draft) => void;
   onChanged: () => void;
   onRestart: (reason: string | null) => void;
 }
 
-function CodeStep({ email, cooldown, heldPassword, onChanged, onRestart }: CodeStepProps) {
+function CodeStep({
+  email,
+  cooldown,
+  heldPassword,
+  onDraftChange,
+  onChanged,
+  onRestart,
+}: CodeStepProps) {
   const codeId = useId();
   const form = useZodForm<typeof CHANGE_INITIAL, ChangePasswordFormValues>(
     changePasswordFormSchema,
@@ -282,8 +396,8 @@ function CodeStep({ email, cooldown, heldPassword, onChanged, onRestart }: CodeS
   };
 
   return (
-    <Card className="p-lg">
-      <form className="gap-lg flex flex-col" onSubmit={handleSubmit} noValidate>
+    <Card className="p-5">
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         <p className="text-on-surface-variant text-[14px]">
           We sent a {OTP_LENGTH}-digit code to{' '}
           {email === undefined ? (
@@ -314,10 +428,13 @@ function CodeStep({ email, cooldown, heldPassword, onChanged, onRestart }: CodeS
           error={newPasswordError}
           onChange={(value) => {
             form.setField('newPassword', value);
+            onDraftChange({ newPassword: value, confirmPassword: form.values.confirmPassword });
             setSameAsCurrent(false);
             change.clearError();
           }}
         />
+
+        <StrengthMeter password={form.values.newPassword} />
 
         <PasswordField
           label="Confirm new password"
@@ -326,13 +443,9 @@ function CodeStep({ email, cooldown, heldPassword, onChanged, onRestart }: CodeS
           error={form.errors.confirmPassword}
           onChange={(value) => {
             form.setField('confirmPassword', value);
+            onDraftChange({ newPassword: form.values.newPassword, confirmPassword: value });
           }}
         />
-
-        <p className="text-outline -mt-sm text-[13px]">
-          At least {REGISTER_PASSWORD_MIN_LENGTH} characters, with upper and lower case letters and
-          a number. Passwords found in known data breaches are turned down.
-        </p>
 
         {isCodeDead && (
           <p role="alert" className="text-error text-[14px]">

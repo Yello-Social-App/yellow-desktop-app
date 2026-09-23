@@ -1,4 +1,4 @@
-import type { UpdateState } from '@shared/ipc-types';
+import type { UpdateMode, UpdateState } from '@shared/ipc-types';
 import {
   CircleAlert,
   CircleCheck,
@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Spinner } from '@/components/ui/Spinner';
+import { Switch } from '@/components/ui/Switch';
 import { useAppUpdates, type AppUpdates } from '@/features/updates/hooks';
 import { relativeTime } from '@/lib/relative-time';
 
@@ -28,48 +29,62 @@ import { relativeTime } from '@/lib/relative-time';
  * will deliver it after Microsoft's review — never offered an installer from
  * elsewhere, which would put a second, separate copy on the machine.
  */
+const BUILD_KINDS: Record<UpdateMode, string> = {
+  installer: 'Installed build',
+  store: 'Microsoft Store build',
+  notify: 'Installed build',
+  unavailable: 'Development build',
+};
+
 export function UpdateSettings() {
   const updates = useAppUpdates();
   const { state } = updates;
 
   return (
-    <section className="gap-sm flex flex-col">
-      <h2 className="text-on-surface-variant text-caption font-semibold tracking-wider uppercase">
-        Updates
-      </h2>
-      <Card className="divide-outline-variant flex flex-col divide-y">
-        {state === null ? (
-          <div className="px-lg py-md">
-            <Spinner label="Reading update status" />
-          </div>
-        ) : (
-          <>
-            <StatusRow state={state} updates={updates} />
-            {state.mode !== 'unavailable' && (
-              <label className="px-lg py-md gap-md flex cursor-pointer items-center justify-between">
-                <span className="min-w-0">
-                  <span className="text-on-surface block text-[15px]">
-                    Check for updates automatically
-                  </span>
-                  <span className="text-on-surface-variant mt-0.5 block text-[13px]">
-                    When Yello opens and every few hours after. Nothing is downloaded until you
-                    choose to.
-                  </span>
+    <Card className="flex flex-col gap-[18px] p-[22px]">
+      <div className="flex items-center gap-3.5">
+        <span
+          aria-hidden
+          className="bg-primary-container text-on-primary-container flex size-12 shrink-0 items-center justify-center rounded-xl text-[22px] font-bold"
+        >
+          Y
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-on-surface text-[18px] font-semibold">
+            Yello {state?.currentVersion ?? ''}
+          </span>
+          <span className="text-on-surface-variant text-[13px]">
+            {state === null ? '—' : BUILD_KINDS[state.mode]}
+          </span>
+        </div>
+      </div>
+
+      {state === null ? (
+        <Spinner label="Reading update status" />
+      ) : (
+        <>
+          <StatusRow state={state} updates={updates} />
+          {state.mode !== 'unavailable' && (
+            <div className="border-outline-variant flex items-center gap-4 border-t pt-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-on-surface text-[14px] font-medium">
+                  Check for updates automatically
                 </span>
-                <input
-                  type="checkbox"
-                  checked={state.autoCheck}
-                  onChange={(event) => {
-                    updates.setAutoCheck(event.target.checked);
-                  }}
-                  className="accent-primary-container size-4 shrink-0 cursor-pointer"
-                />
-              </label>
-            )}
-          </>
-        )}
-      </Card>
-    </section>
+                <span className="text-on-surface-variant text-[12px]">
+                  When Yello opens and every few hours after. Nothing is downloaded until you choose
+                  to.
+                </span>
+              </div>
+              <Switch
+                label="Check for updates automatically"
+                checked={state.autoCheck}
+                onChange={updates.setAutoCheck}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -95,12 +110,7 @@ function StatusRow({ state, updates }: StatusRowProps) {
       : `You have version ${state.currentVersion}. Checked ${relativeTime(new Date(state.checkedAt).toISOString())}.`;
 
   const checkButton = (label: string) => (
-    <Button
-      size="sm"
-      variant="secondary"
-      leadingIcon={<RefreshCw className="size-4" />}
-      onClick={updates.check}
-    >
+    <Button size="sm" leadingIcon={<RefreshCw className="size-4" />} onClick={updates.check}>
       {label}
     </Button>
   );
@@ -130,7 +140,7 @@ function StatusRow({ state, updates }: StatusRowProps) {
       if (state.mode === 'installer') {
         return (
           <Row
-            icon={<Sparkles aria-hidden className="text-primary size-5" />}
+            icon={<Sparkles aria-hidden className="text-primary size-4" />}
             title={`Version ${version} is available`}
             detail={`You have ${state.currentVersion}. ${
               state.asksForPassword
@@ -154,7 +164,7 @@ function StatusRow({ state, updates }: StatusRowProps) {
       }
       return (
         <Row
-          icon={<Sparkles aria-hidden className="text-primary size-5" />}
+          icon={<Sparkles aria-hidden className="text-primary size-4" />}
           title={`Version ${version} is out`}
           detail={`You have ${state.currentVersion}. ${elsewhereHint(state)}`}
           actions={
@@ -169,8 +179,11 @@ function StatusRow({ state, updates }: StatusRowProps) {
 
     case 'downloading':
       return (
-        <div className="px-lg py-md flex flex-col gap-2">
-          <span className="text-on-surface text-[15px]">
+        <div
+          role="status"
+          className="bg-surface-container-low border-outline-variant flex flex-col gap-2 rounded-[10px] border px-3.5 py-3"
+        >
+          <span className="text-on-surface text-[13px]">
             {`Downloading version ${state.latestVersion ?? ''}…`}
           </span>
           {/* Native, because the production CSP refuses inline width styles. */}
@@ -191,7 +204,7 @@ function StatusRow({ state, updates }: StatusRowProps) {
       // most often a password prompt that was dismissed.
       return (
         <Row
-          icon={<CircleCheck aria-hidden className="text-tertiary size-5" />}
+          icon={<CircleCheck aria-hidden className="text-tertiary size-4" />}
           title={`Version ${state.latestVersion ?? ''} is downloaded`}
           detail={
             state.asksForPassword
@@ -226,7 +239,7 @@ function StatusRow({ state, updates }: StatusRowProps) {
     case 'error':
       return (
         <Row
-          icon={<CircleAlert aria-hidden className="text-error size-5" />}
+          icon={<CircleAlert aria-hidden className="text-error size-4" />}
           title={state.error ?? 'Something went wrong with the update.'}
           detail={checkedLine}
           actions={checkButton('Try again')}
@@ -238,15 +251,15 @@ function StatusRow({ state, updates }: StatusRowProps) {
       if (state.mode === 'unavailable') {
         return (
           <Row
-            icon={<CircleCheck aria-hidden className="text-on-surface-variant size-5" />}
-            title={`Version ${state.currentVersion}`}
+            icon={<CircleCheck aria-hidden className="text-tertiary size-4" />}
+            title="You’re running a development build."
             detail="Updates are checked in installed builds, not in development."
           />
         );
       }
       return (
         <Row
-          icon={<CircleCheck aria-hidden className="text-tertiary size-5" />}
+          icon={<CircleCheck aria-hidden className="text-tertiary size-4" />}
           title={state.status === 'up-to-date' ? 'Yello is up to date' : 'Updates'}
           detail={checkedLine}
           actions={checkButton('Check now')}
@@ -255,6 +268,7 @@ function StatusRow({ state, updates }: StatusRowProps) {
   }
 }
 
+/** The status box, then what can be done about it beneath. */
 function Row({
   icon,
   title,
@@ -267,13 +281,18 @@ function Row({
   actions?: ReactNode;
 }) {
   return (
-    <div className="px-lg py-md gap-md flex items-center">
-      <span className="flex size-6 shrink-0 items-center justify-center">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="text-on-surface block text-[15px]">{title}</span>
-        <span className="text-on-surface-variant mt-0.5 block text-[13px]">{detail}</span>
-      </span>
-      {actions !== undefined && <span className="flex shrink-0 items-center gap-2">{actions}</span>}
+    <div className="flex flex-col gap-3">
+      <div
+        role="status"
+        className="bg-surface-container-low border-outline-variant flex items-start gap-2.5 rounded-[10px] border px-3.5 py-3"
+      >
+        <span className="flex size-5 shrink-0 items-center justify-center">{icon}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-on-surface text-[13px] font-medium">{title}</span>
+          <span className="text-on-surface-variant text-[12px]">{detail}</span>
+        </span>
+      </div>
+      {actions !== undefined && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

@@ -12,7 +12,7 @@ export const THEMES = ['dark', 'light', 'system'] as const;
 export type Theme = (typeof THEMES)[number];
 
 const STORAGE_KEY = 'yello.theme';
-const DEFAULT_THEME: Theme = 'dark';
+export const DEFAULT_THEME: Theme = 'dark';
 
 const listeners = new Set<() => void>();
 let current: Theme = readStoredTheme();

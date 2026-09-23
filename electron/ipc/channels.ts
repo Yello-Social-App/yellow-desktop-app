@@ -119,6 +119,7 @@ export const IPC_CHANNELS = {
   LINKS_PREVIEW: 'links:preview',
   FS_EXPORT_POSTS: 'fs:export-posts',
   FS_READ_APP_INFO: 'fs:read-app-info',
+  FS_COPY_APP_INFO: 'fs:copy-app-info',
   UPDATES_STATE: 'updates:state',
   UPDATES_CHECK: 'updates:check',
   UPDATES_UPDATE_NOW: 'updates:update-now',

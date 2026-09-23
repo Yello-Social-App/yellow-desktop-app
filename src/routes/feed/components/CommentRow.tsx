@@ -145,7 +145,7 @@ export const CommentRow = memo(function CommentRow({
           </div>
         ) : (
           <>
-            <p className="text-on-surface mt-0.5 text-[14px] leading-relaxed whitespace-pre-wrap">
+            <p className="text-on-surface text-content-sm mt-0.5 leading-relaxed whitespace-pre-wrap">
               <RichText text={comment.content} />
             </p>
             {firstLink !== undefined && (
