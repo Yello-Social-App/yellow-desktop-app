@@ -13,6 +13,7 @@ import type {
   ReactionSummary,
   ReactionType,
   ReactorPage,
+  SaveState,
   ShareLinkCopiedResponse,
   StagedImage,
   UpdatePostRequest,
@@ -114,6 +115,15 @@ export async function copyShareLink(
   postId: string,
 ): Promise<Result<ShareLinkCopiedResponse, FeedError>> {
   const result = await ipc.copyPostShareLink({ postId });
+  return result.ok ? ok(result.data) : fail(result.error);
+}
+
+/**
+ * Flips the viewer's save of a post and answers with where it landed — which,
+ * for a toggle, is the only trustworthy account of it.
+ */
+export async function toggleSave(postId: string): Promise<Result<SaveState, FeedError>> {
+  const result = await ipc.togglePostSave({ postId });
   return result.ok ? ok(result.data) : fail(result.error);
 }
 

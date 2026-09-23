@@ -1,6 +1,6 @@
 /**
- * Everything a post card can do to a post: react, edit, delete, repost, copy a
- * share link.
+ * Everything a post card can do to a post: react, edit, delete, repost, save
+ * (bookmark), copy a share link.
  *
  * The problem shape is one set of operations against several different lists —
  * the home feed lives in a zustand store, a profile timeline in local state,
@@ -15,7 +15,7 @@
  * `ACCESS_DENIED` regardless (OWASP A01).
  */
 import type { Post, ReactionType, UpdatePostRequest } from '@shared/ipc-types';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import {
   copyShareLink,
@@ -23,6 +23,7 @@ import {
   editPost,
   repost as repostRequest,
   toggleReaction as toggleReactionRequest,
+  toggleSave as toggleSaveRequest,
   type FeedError,
 } from './api';
 import { PRIMARY_REACTION } from './types';
@@ -37,6 +38,12 @@ export interface PostSink {
 
 export type PostEdit = Omit<UpdatePostRequest, 'postId'>;
 
+/**
+ * How a save toggle ended. `gone` is a 404: the post was deleted or is no
+ * longer visible to the viewer, and has been dropped from the list.
+ */
+export type SaveOutcome = 'saved' | 'removed' | 'gone' | 'failed';
+
 export interface PostActions {
   /**
    * With no `type`: the heart — adds a LIKE, or removes whatever is held.
@@ -48,8 +55,16 @@ export interface PostActions {
   repost: (post: Post, content?: string) => Promise<boolean>;
   /** Copies the link in the main process and returns it for the confirmation. */
   copyLink: (post: Post) => Promise<string | null>;
+  /**
+   * Bookmarks the post, or removes the bookmark. Not `save`, which is an edit.
+   * A press while the post's last toggle is in flight is ignored: the endpoint
+   * flips, so a double tap would undo itself.
+   */
+  toggleSaved: (post: Post) => Promise<SaveOutcome | null>;
   /** The post id with an operation in flight, so one card can show its own state. */
   pendingPostId: string | null;
+  /** Posts with a save toggle in flight — tracked apart from `pendingPostId`, so saving never blocks an edit. */
+  savingPostIds: ReadonlySet<string>;
   error: FeedError | null;
   clearError: () => void;
 }
@@ -65,6 +80,9 @@ export function canEdit(post: Post, viewerId: string | undefined): boolean {
 export function usePostActions(sink: PostSink): PostActions {
   const [pendingPostId, setPendingPostId] = useState<string | null>(null);
   const [error, setError] = useState<FeedError | null>(null);
+  const [savingPostIds, setSavingPostIds] = useState<ReadonlySet<string>>(() => new Set());
+  /** The same set, read synchronously: state lags a render behind a fast double tap. */
+  const savesInFlight = useRef(new Set<string>());
 
   const toggleReaction = useCallback(
     async (post: Post, type?: ReactionType) => {
@@ -166,6 +184,37 @@ export function usePostActions(sink: PostSink): PostActions {
     return result.data.url;
   }, []);
 
+  const toggleSaved = useCallback(
+    async (post: Post): Promise<SaveOutcome | null> => {
+      if (savesInFlight.current.has(post.id)) {
+        return null;
+      }
+      savesInFlight.current.add(post.id);
+      setSavingPostIds(new Set(savesInFlight.current));
+
+      // Optimistic: flip the icon now, then take the server's word for it.
+      sink.replace({ ...post, isSaved: !post.isSaved });
+      const result = await toggleSaveRequest(post.id);
+
+      savesInFlight.current.delete(post.id);
+      setSavingPostIds(new Set(savesInFlight.current));
+
+      if (!result.ok) {
+        if (result.error.apiCode === 'RESOURCE_NOT_FOUND') {
+          // Deleted, or no longer visible to this viewer: it has no place here.
+          sink.remove(post.id);
+          return 'gone';
+        }
+        sink.replace(post);
+        return 'failed';
+      }
+
+      sink.replace({ ...post, isSaved: result.data.isSaved });
+      return result.data.isSaved ? 'saved' : 'removed';
+    },
+    [sink],
+  );
+
   const clearError = useCallback(() => {
     setError(null);
   }, []);
@@ -176,7 +225,9 @@ export function usePostActions(sink: PostSink): PostActions {
     remove,
     repost,
     copyLink,
+    toggleSaved,
     pendingPostId,
+    savingPostIds,
     error,
     clearError,
   };

@@ -1,5 +1,6 @@
 import {
   Bell,
+  Bookmark,
   CircleUser,
   House,
   LayoutGrid,
@@ -39,6 +40,7 @@ const NAV_GROUPS: readonly (readonly NavItem[])[] = [
     { to: '/feed', label: 'Home', icon: (c) => <House className={c} /> },
     { to: '/communities', label: 'Communities', icon: (c) => <UsersRound className={c} /> },
     { to: '/showcase', label: 'Showcase', icon: (c) => <LayoutGrid className={c} /> },
+    { to: '/saved', label: 'Saved', icon: (c) => <Bookmark className={c} /> },
   ],
   [
     { to: '/messages', label: 'Messages', icon: (c) => <MessagesSquare className={c} /> },

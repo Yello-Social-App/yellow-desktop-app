@@ -24,6 +24,7 @@ const ProjectPage = lazy(() => import('@/routes/showcase/ProjectPage'));
 const MessagesPage = lazy(() => import('@/routes/messages/MessagesPage'));
 const NotificationsPage = lazy(() => import('@/routes/notifications/NotificationsPage'));
 const ProfilePage = lazy(() => import('@/routes/profile/ProfilePage'));
+const SavedPage = lazy(() => import('@/routes/saved/SavedPage'));
 const UserProfilePage = lazy(() => import('@/routes/profile/UserProfilePage'));
 const SettingsPage = lazy(() => import('@/routes/settings/SettingsPage'));
 
@@ -70,6 +71,7 @@ export function App() {
                 <Route path="/c/:slug" element={<CommunityPage />} />
                 <Route path="/showcase" element={<ShowcasePage />} />
                 <Route path="/showcase/:projectId" element={<ProjectPage />} />
+                <Route path="/saved" element={<SavedPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/users/:userId" element={<UserProfilePage />} />
                 <Route path="/settings" element={<Navigate to="/settings/appearance" replace />} />

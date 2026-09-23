@@ -29,6 +29,10 @@ export const ENDPOINTS = {
     logout: `${base}/auth/logout`,
     forgotPassword: `${base}/auth/forgot-password`,
     resetPassword: `${base}/auth/reset-password`,
+    /** Signed in: checks the current password, then emails a code. */
+    changePasswordOtp: `${base}/auth/change-password/otp`,
+    /** Spends that code; answers with a new token pair and revokes every other. */
+    changePassword: `${base}/auth/change-password`,
   },
   users: {
     /** GET reads the caller's own profile; POST edits it (JSON, or multipart with images). */
@@ -40,6 +44,7 @@ export const ENDPOINTS = {
     /** Mute (POST) and unmute (DELETE); both idempotent, both 204. */
     mute: (userId: string) => `${base}/users/${seg(userId)}/mute`,
     muted: `${base}/users/me/muted`,
+    savedPosts: `${base}/users/me/saved-posts`,
   },
   feed: {
     list: `${base}/feed`,
@@ -52,6 +57,8 @@ export const ENDPOINTS = {
     reports: (postId: string) => `${base}/posts/${seg(postId)}/reports`,
     /** Hide (POST) and unhide (DELETE) for the caller's own feed; both 204. */
     hide: (postId: string) => `${base}/posts/${seg(postId)}/hide`,
+    /** A toggle: saves, or removes the save; answers with the state after. */
+    save: (postId: string) => `${base}/posts/${seg(postId)}/save`,
   },
   feedback: {
     create: `${base}/feedback`,

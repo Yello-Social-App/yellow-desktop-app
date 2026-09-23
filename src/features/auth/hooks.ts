@@ -8,8 +8,10 @@ import { OTP_RESEND_COOLDOWN_MS, SESSION_EXPIRY_CHECK_MS } from '@/lib/constants
 import type { Result } from '@/lib/result';
 
 import {
+  changePassword,
   login,
   register,
+  requestChangePasswordCode,
   resendOtp,
   resetPassword,
   verifyOtp,
@@ -140,6 +142,53 @@ export function useResetPassword() {
   return useSubmission(resetPassword);
 }
 
+export function useRequestChangePasswordCode() {
+  return useSubmission(requestChangePasswordCode);
+}
+
+export function useChangePassword() {
+  return useSubmission(changePassword);
+}
+
+export interface Cooldown {
+  /** Seconds left; 0 when the wait is over. */
+  seconds: number;
+  /** Starts (or restarts) the wait from now. */
+  start: () => void;
+}
+
+/**
+ * A countdown for a "Resend code" button. Ticks only while there is a
+ * countdown to show, so an idle form costs no timer.
+ */
+export function useCooldown(durationMs: number): Cooldown {
+  const [availableAt, setAvailableAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const seconds = availableAt === null ? 0 : Math.max(0, Math.ceil((availableAt - now) / 1000));
+  const isCoolingDown = seconds > 0;
+
+  useEffect(() => {
+    if (!isCoolingDown) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [isCoolingDown]);
+
+  const start = useCallback(() => {
+    const at = Date.now();
+    setNow(at);
+    setAvailableAt(at + durationMs);
+  }, [durationMs]);
+
+  return { seconds, start };
+}
+
 export interface ResendOtp {
   resend: () => void;
   isResending: boolean;
@@ -159,31 +208,17 @@ export interface ResendOtp {
  */
 export function useResendOtp(email: string): ResendOtp {
   const [hasResent, setHasResent] = useState(false);
-  const [availableAt, setAvailableAt] = useState<number | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  const cooldown = useCooldown(OTP_RESEND_COOLDOWN_MS);
+  const startCooldown = cooldown.start;
 
   const onSuccess = useCallback(() => {
     setHasResent(true);
-    setAvailableAt(Date.now() + OTP_RESEND_COOLDOWN_MS);
-  }, []);
+    startCooldown();
+  }, [startCooldown]);
   const { submit, isSubmitting, error } = useSubmission(resendOtp, onSuccess);
 
-  const cooldownSeconds =
-    availableAt === null ? 0 : Math.max(0, Math.ceil((availableAt - now) / 1000));
+  const cooldownSeconds = cooldown.seconds;
   const isCoolingDown = cooldownSeconds > 0;
-
-  // Ticks only while there is a countdown to show.
-  useEffect(() => {
-    if (!isCoolingDown) {
-      return;
-    }
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [isCoolingDown]);
 
   const resend = useCallback(() => {
     if (isCoolingDown) {

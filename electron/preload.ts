@@ -120,6 +120,10 @@ import type {
   SearchUsersRequest,
   ResendOtpRequest,
   ResetPasswordRequest,
+  ChangePasswordOtpRequest,
+  ChangePasswordRequest,
+  SaveState,
+  SavedPostsRequest,
   SendChatMessageRequest,
   SessionResponse,
   ShareLinkCopiedResponse,
@@ -168,6 +172,10 @@ const bridge: YelloBridge = {
       invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_VERIFY_RESET_OTP, request),
     resetPassword: (request: ResetPasswordRequest) =>
       invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_RESET_PASSWORD, request),
+    requestChangePasswordCode: (request: ChangePasswordOtpRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_CHANGE_PASSWORD_OTP, request),
+    changePassword: (request: ChangePasswordRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.AUTH_CHANGE_PASSWORD, request),
     listAccounts: () => invoke<AccountListResponse>(IPC_CHANNELS.AUTH_LIST_ACCOUNTS),
     switchAccount: (request: AccountIdRequest) =>
       invoke<SessionResponse>(IPC_CHANNELS.AUTH_SWITCH_ACCOUNT, request),
@@ -191,6 +199,10 @@ const bridge: YelloBridge = {
     repost: (request: RepostRequest) => invoke<PostResponse>(IPC_CHANNELS.POSTS_REPOST, request),
     copyShareLink: (request: PostIdRequest) =>
       invoke<ShareLinkCopiedResponse>(IPC_CHANNELS.POSTS_COPY_SHARE_LINK, request),
+    toggleSave: (request: PostIdRequest) =>
+      invoke<SaveState>(IPC_CHANNELS.POSTS_TOGGLE_SAVE, request),
+    listSaved: (request: SavedPostsRequest) =>
+      invoke<UserPostsResponse>(IPC_CHANNELS.POSTS_LIST_SAVED, request),
   },
   comments: {
     create: (request: CreateCommentRequest) =>

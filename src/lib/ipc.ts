@@ -119,6 +119,10 @@ import {
   type SearchUsersRequest,
   type ResendOtpRequest,
   type ResetPasswordRequest,
+  type ChangePasswordOtpRequest,
+  type ChangePasswordRequest,
+  type SavedPostsRequest,
+  saveStateSchema,
   type SendChatMessageRequest,
   type StageImagesRequest,
   type SubmitFeedbackRequest,
@@ -238,6 +242,14 @@ export const ipc = {
     guarded('auth.resetPassword', acknowledgedResponseSchema, (api) =>
       api.auth.resetPassword(request),
     ),
+  requestChangePasswordCode: (request: ChangePasswordOtpRequest) =>
+    guarded('auth.requestChangePasswordCode', acknowledgedResponseSchema, (api) =>
+      api.auth.requestChangePasswordCode(request),
+    ),
+  changePassword: (request: ChangePasswordRequest) =>
+    guarded('auth.changePassword', acknowledgedResponseSchema, (api) =>
+      api.auth.changePassword(request),
+    ),
 
   listAccounts: () =>
     guarded('auth.listAccounts', accountListResponseSchema, (api) => api.auth.listAccounts()),
@@ -271,6 +283,10 @@ export const ipc = {
     guarded('posts.copyShareLink', shareLinkCopiedResponseSchema, (api) =>
       api.posts.copyShareLink(request),
     ),
+  togglePostSave: (request: PostIdRequest) =>
+    guarded('posts.toggleSave', saveStateSchema, (api) => api.posts.toggleSave(request)),
+  listSavedPosts: (request: SavedPostsRequest) =>
+    guarded('posts.listSaved', userPostsResponseSchema, (api) => api.posts.listSaved(request)),
 
   createComment: (request: CreateCommentRequest) =>
     guarded('comments.create', commentResponseSchema, (api) => api.comments.create(request)),

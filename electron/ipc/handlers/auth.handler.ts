@@ -10,6 +10,10 @@
  * code with a single-use reset token; that token is held here, in memory, and
  * spent by the reset call — the renderer is told the code was accepted and
  * nothing more.
+ *
+ * Changing the password while signed in ends the same way: the server answers
+ * with a new token pair, and it is adopted here. The renderer sends a code and
+ * a new password, and learns only that the change went through.
  */
 import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
@@ -50,6 +54,8 @@ import {
   accountIdRequestSchema,
   accountListResponseSchema,
   acknowledgedResponseSchema,
+  changePasswordOtpRequestSchema,
+  changePasswordRequestSchema,
   emptyRequestSchema,
   forgotPasswordRequestSchema,
   ipcFail,
@@ -528,6 +534,59 @@ export function registerAuthHandlers(): void {
       // Neither the token nor the password reaches the log (A09).
       log.info(result.ok ? 'password_reset_completed' : 'password_reset_failed', {});
       return result.ok ? ipcOk(ACKNOWLEDGED) : result;
+    },
+  );
+
+  registerIpcHandler(
+    IPC_CHANNELS.AUTH_CHANGE_PASSWORD_OTP,
+    changePasswordOtpRequestSchema,
+    async ({ currentPassword }): Promise<IpcResult<AcknowledgedResponse>> => {
+      // Authenticated, so a stale access token is refreshed and retried like
+      // any other call. A wrong password is a 400, not a 401: the session is
+      // fine and nothing here signs the user out.
+      const result = await apiRequest({
+        method: 'post',
+        url: ENDPOINTS.auth.changePasswordOtp,
+        body: { currentPassword },
+        schema: ignoredDataSchema,
+      });
+
+      // Only the outcome's code: never the password (A09).
+      log.info(result.ok ? 'change_password_code_sent' : 'change_password_code_failed', {
+        ...(result.ok ? {} : { apiCode: result.error.apiCode }),
+      });
+      return result.ok ? ipcOk(ACKNOWLEDGED) : result;
+    },
+  );
+
+  registerIpcHandler(
+    IPC_CHANNELS.AUTH_CHANGE_PASSWORD,
+    changePasswordRequestSchema,
+    async ({ code, newPassword }): Promise<IpcResult<AcknowledgedResponse>> => {
+      const result = await apiRequest({
+        method: 'post',
+        url: ENDPOINTS.auth.changePassword,
+        body: { code, newPassword },
+        schema: tokenPairResponseSchema,
+      });
+
+      if (!result.ok) {
+        log.info('change_password_failed', { apiCode: result.error.apiCode });
+        return result;
+      }
+
+      // The token that made this call is already revoked, as is every other
+      // session: only this pair works now. Adopting it also rotates the vault's
+      // copy, so a remembered account still resumes after a restart (A07).
+      adoptTokenPair(result.data);
+
+      // The socket authenticated with the revoked token. Reconnecting makes it
+      // fetch the new one rather than trust a session the server has ended.
+      chatSocket.disconnect();
+      chatSocket.connect();
+
+      log.info('password_changed', {});
+      return ipcOk(ACKNOWLEDGED);
     },
   );
 }
