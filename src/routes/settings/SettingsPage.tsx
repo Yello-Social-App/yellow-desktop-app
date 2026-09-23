@@ -5,6 +5,7 @@ import { Navigate, NavLink, useParams } from 'react-router-dom';
 import { cn } from '@/lib/cn';
 
 import { AppearanceSettings } from './components/AppearanceSettings';
+import { ChangePasswordSettings } from './components/ChangePasswordSettings';
 import { FeedbackSettings } from './components/FeedbackSettings';
 import { NotificationSettings } from './components/NotificationSettings';
 import { PrivacySettings } from './components/PrivacySettings';
@@ -42,6 +43,7 @@ const PANES: readonly SettingsPane[] = [
     label: 'Privacy & safety',
     render: (appInfo) => <PrivacySettings appInfo={appInfo} />,
   },
+  { slug: 'password', label: 'Change password', render: () => <ChangePasswordSettings /> },
   { slug: 'updates', label: 'Updates', render: (appInfo) => <UpdatesPane appInfo={appInfo} /> },
   {
     slug: 'feedback',

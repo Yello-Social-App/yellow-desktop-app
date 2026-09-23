@@ -32,6 +32,7 @@ const PAGE_TITLES: readonly (readonly [string, string])[] = [
   ['/communities', 'Communities'],
   ['/c/', 'Communities'],
   ['/showcase', 'Showcase'],
+  ['/saved', 'Saved'],
   ['/messages', 'Messages'],
   ['/notifications', 'Notifications'],
   ['/friends', 'Friends'],

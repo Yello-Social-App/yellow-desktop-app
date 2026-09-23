@@ -1,4 +1,5 @@
 import {
+  Bookmark,
   Ellipsis,
   EyeOff,
   Flag,
@@ -106,8 +107,8 @@ export const PostCard = memo(function PostCard({
   const permalink = `/posts/${post.id}`;
   const [dialog, setDialog] = useState<OpenDialog>('none');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  /** A one-line confirmation under the post ("Link copied"), cleared on a timer. */
-  const [notice, setNotice] = useState<string | null>(null);
+  /** A one-line note under the post ("Link copied"), cleared on a timer. */
+  const [notice, setNotice] = useState<{ text: string; isError: boolean } | null>(null);
   const navigate = useNavigate();
   const moderation = usePostModeration(post);
   const restrictions = useRestrictions();
@@ -279,7 +280,7 @@ export const PostCard = memo(function PostCard({
                     closeMenu();
                     void actions.copyLink(post).then((link) => {
                       if (link !== null) {
-                        setNotice('Link copied');
+                        setNotice({ text: 'Link copied', isError: false });
                       }
                     });
                   }}
@@ -490,8 +491,11 @@ export const PostCard = memo(function PostCard({
         )}
 
         {notice !== null && (
-          <p role="status" className="text-tertiary text-[13px]">
-            {notice}
+          <p
+            role={notice.isError ? 'alert' : 'status'}
+            className={cn('text-[13px]', notice.isError ? 'text-error' : 'text-tertiary')}
+          >
+            {notice.text}
           </p>
         )}
 
@@ -545,6 +549,32 @@ export const PostCard = memo(function PostCard({
 
           <ReactionBreakdown post={post} />
 
+          {viewerId !== undefined && (
+            <button
+              type="button"
+              aria-pressed={post.isSaved}
+              aria-label={post.isSaved ? 'Remove from saved' : 'Save post'}
+              title={post.isSaved ? 'Remove from saved' : 'Save post'}
+              disabled={actions.savingPostIds.has(post.id)}
+              onClick={() => {
+                void actions.toggleSaved(post).then((outcome) => {
+                  if (outcome === 'failed') {
+                    setNotice({ text: 'That didn’t go through. Try again.', isError: true });
+                  }
+                });
+              }}
+              className={cn(
+                ACTION_CLASS,
+                'ml-auto',
+                post.isSaved
+                  ? 'text-primary hover:bg-primary-fixed'
+                  : 'text-on-surface-variant hover:bg-primary-fixed hover:text-primary',
+              )}
+            >
+              <Bookmark aria-hidden className={cn('size-[18px]', post.isSaved && 'fill-current')} />
+            </button>
+          )}
+
           <button
             type="button"
             aria-haspopup="dialog"
@@ -559,7 +589,8 @@ export const PostCard = memo(function PostCard({
             }}
             className={cn(
               ACTION_CLASS,
-              'text-on-surface-variant hover:bg-primary-fixed hover:text-primary ml-auto',
+              'text-on-surface-variant hover:bg-primary-fixed hover:text-primary',
+              viewerId === undefined && 'ml-auto',
             )}
           >
             <Link2 aria-hidden className="size-[18px]" />

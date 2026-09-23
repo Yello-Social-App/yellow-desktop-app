@@ -1,5 +1,6 @@
 /**
- * Single-post reads and writes: fetch, edit, delete, repost, copy share link.
+ * Single-post reads and writes: fetch, edit, delete, repost, copy share link,
+ * and the caller's saves (bookmarks) with the list they make.
  *
  * Authorisation is not re-implemented here and must not be: the server decides
  * whether the caller may see or edit a post, and answers `POST_NOT_VISIBLE` or
@@ -24,21 +25,27 @@ import {
   deletedResponseSchema,
   ipcFail,
   ipcOk,
+  pageOf,
   postIdRequestSchema,
   postResponseSchema,
   postSchema,
   repostRequestSchema,
+  savedPostsRequestSchema,
+  saveStateSchema,
   shareLinkCopiedResponseSchema,
   updatePostRequestSchema,
+  userPostsResponseSchema,
   type DeletedResponse,
   type IpcResult,
   type PostResponse,
+  type SaveState,
   type ShareLinkCopiedResponse,
+  type UserPostsResponse,
 } from '../../../shared/ipc-types';
 
 const log = createLogger('ipc.posts');
 
-/** A 204 hands the parser `undefined`; nothing else is acceptable. */
+const postPageSchema = pageOf(postSchema);
 
 export function registerPostHandlers(): void {
   registerIpcHandler(
@@ -202,6 +209,61 @@ export function registerPostHandlers(): void {
 
       log.info('share_link_copied', { copied });
       return ipcOk(shareLinkCopiedResponseSchema.parse({ url, copied }));
+    },
+  );
+
+  /**
+   * A toggle upstream, so the renderer names the post and nothing else: which
+   * way it went is the server's answer, not a flag the page sends. Saves are
+   * private — the author is never told — and removing one works even on a post
+   * the viewer can no longer see.
+   */
+  registerIpcHandler(
+    IPC_CHANNELS.POSTS_TOGGLE_SAVE,
+    postIdRequestSchema,
+    async ({ postId }): Promise<IpcResult<SaveState>> => {
+      const result = await apiRequest({
+        method: 'post',
+        url: ENDPOINTS.posts.save(postId),
+        schema: saveStateSchema,
+      });
+
+      if (result.ok) {
+        log.info(result.data.isSaved ? 'post_saved' : 'post_unsaved', {});
+      }
+      return result;
+    },
+  );
+
+  /**
+   * The caller's saved posts, newest save first. No user id goes up: the list
+   * is the token's owner's, so it cannot be pointed at someone else's (A01).
+   * Posts the viewer may no longer see are left out by the server.
+   */
+  registerIpcHandler(
+    IPC_CHANNELS.POSTS_LIST_SAVED,
+    savedPostsRequestSchema,
+    async ({ page, size }): Promise<IpcResult<UserPostsResponse>> => {
+      const result = await apiRequest({
+        method: 'get',
+        url: ENDPOINTS.users.savedPosts,
+        schema: postPageSchema,
+        params: { page, size },
+      });
+
+      if (!result.ok) {
+        return result;
+      }
+
+      return ipcOk(
+        userPostsResponseSchema.parse({
+          posts: result.data.content,
+          page: result.data.page,
+          totalElements: result.data.totalElements,
+          totalPages: result.data.totalPages,
+          last: result.data.last,
+        }),
+      );
     },
   );
 }

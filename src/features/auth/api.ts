@@ -95,3 +95,28 @@ export async function resetPassword(newPassword: string): Promise<Result<true, A
   const result = await ipc.resetPassword({ newPassword });
   return result.ok ? ok(true) : fail(result.error);
 }
+
+/**
+ * Step one of changing the password while signed in: proves the current one
+ * and has a code emailed. Calling it again is the resend — inside the server's
+ * 60-second window nothing new is sent and the code already emailed stays good.
+ */
+export async function requestChangePasswordCode(
+  currentPassword: string,
+): Promise<Result<true, AuthError>> {
+  const result = await ipc.requestChangePasswordCode({ currentPassword });
+  return result.ok ? ok(true) : fail(result.error);
+}
+
+/**
+ * Step two: spends the code and sets the new password. The server answers with
+ * a new token pair, which the main process has already adopted by the time this
+ * resolves — this session carries on, every other one is signed out.
+ */
+export async function changePassword(
+  code: string,
+  newPassword: string,
+): Promise<Result<true, AuthError>> {
+  const result = await ipc.changePassword({ code, newPassword });
+  return result.ok ? ok(true) : fail(result.error);
+}

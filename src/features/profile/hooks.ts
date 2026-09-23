@@ -156,6 +156,11 @@ interface PublicProfileState {
   user: User | null;
   status: PublicProfileStatus;
   error: string | null;
+  /**
+   * The server answered not-found: a deleted account, or one in a block with
+   * the viewer. The API never says which, so neither does the screen.
+   */
+  isUnavailable: boolean;
   reload: () => void;
 }
 
@@ -170,7 +175,11 @@ export function usePublicProfile(userId: string | undefined): PublicProfileState
   // rather than briefly showing the previous person, and the effect never has
   // to reset state synchronously.
   const [loaded, setLoaded] = useState<{ id: string; user: User } | null>(null);
-  const [failure, setFailure] = useState<{ id: string; message: string } | null>(null);
+  const [failure, setFailure] = useState<{
+    id: string;
+    message: string;
+    notFound: boolean;
+  } | null>(null);
   const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
@@ -184,10 +193,18 @@ export function usePublicProfile(userId: string | undefined): PublicProfileState
       if (cancelled) {
         return;
       }
+      // Each answer replaces the other: a profile that 404'd while blocked
+      // has to read as loaded again after the unblock, and the reverse.
       if (result.ok) {
         setLoaded({ id: userId, user: result.data });
+        setFailure(null);
       } else {
-        setFailure({ id: userId, message: result.error.message });
+        setLoaded(null);
+        setFailure({
+          id: userId,
+          message: result.error.message,
+          notFound: result.error.apiCode === 'RESOURCE_NOT_FOUND',
+        });
       }
     });
 
@@ -197,19 +214,35 @@ export function usePublicProfile(userId: string | undefined): PublicProfileState
   }, [userId, generation]);
 
   const reload = useCallback(() => {
+    // A failure is not kept up while the re-read runs: after an unblock, the
+    // old not-found would otherwise show until the profile arrives. A loaded
+    // profile stays up instead, so a friendship change does not blink.
+    setFailure(null);
     setGeneration((current) => current + 1);
   }, []);
 
   if (userId === undefined) {
-    return { user: null, status: 'error', error: 'No profile was requested.', reload };
+    return {
+      user: null,
+      status: 'error',
+      error: 'No profile was requested.',
+      isUnavailable: false,
+      reload,
+    };
   }
   if (failure?.id === userId) {
-    return { user: null, status: 'error', error: failure.message, reload };
+    return {
+      user: null,
+      status: 'error',
+      error: failure.message,
+      isUnavailable: failure.notFound,
+      reload,
+    };
   }
   if (loaded?.id === userId) {
-    return { user: loaded.user, status: 'ready', error: null, reload };
+    return { user: loaded.user, status: 'ready', error: null, isUnavailable: false, reload };
   }
-  return { user: null, status: 'loading', error: null, reload };
+  return { user: null, status: 'loading', error: null, isUnavailable: false, reload };
 }
 
 /**

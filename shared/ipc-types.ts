@@ -112,6 +112,15 @@ const postBaseShape = {
     .boolean()
     .nullish()
     .transform((value) => value ?? false),
+  /**
+   * Whether the viewer bookmarked this post — their own state, never anyone
+   * else's. On a quoted original it is the viewer's save of the original, which
+   * is separate from a save of the repost.
+   */
+  isSaved: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
 };
 
 /** A repost embeds the post it quotes; nesting stops at one level. */
@@ -383,6 +392,22 @@ export const resetPasswordRequestSchema = z.object({
 
 export const acknowledgedResponseSchema = z.object({ acknowledged: z.boolean() });
 
+/**
+ * Changing the password while signed in is two calls. The first proves the
+ * current password and has a `CHANGE_PASSWORD` code emailed; the second spends
+ * that code and answers with a new token pair, which the main process adopts —
+ * the renderer is told it worked and nothing more (A02). Every other session,
+ * this one's old token included, is revoked by the server.
+ */
+export const changePasswordOtpRequestSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+});
+
+export const changePasswordRequestSchema = z.object({
+  code: z.string().regex(OTP_CODE_PATTERN),
+  newPassword: z.string().min(12).max(128),
+});
+
 /* -- feed & posts -- */
 
 export const feedRequestSchema = z.object({
@@ -462,6 +487,18 @@ export const createPostRequestSchema = z
   });
 
 export const postResponseSchema = z.object({ post: postSchema });
+
+/** `POST /posts/{id}/save` is a toggle; this is the state *after* the call. */
+export const saveStateSchema = z.object({
+  postId: z.string().min(1).max(64),
+  isSaved: z.boolean(),
+});
+
+/** The caller's saved posts, most recently saved first; the user is the token's. */
+export const savedPostsRequestSchema = z.object({
+  page: z.number().int().min(0).max(1000),
+  size: z.number().int().min(1).max(50),
+});
 
 export const postIdRequestSchema = z.object({
   postId: z.string().min(1).max(64),
@@ -2208,6 +2245,8 @@ export type ForgotPasswordRequest = z.infer<typeof forgotPasswordRequestSchema>;
 export type ResendOtpRequest = z.infer<typeof resendOtpRequestSchema>;
 export type VerifyResetOtpRequest = z.infer<typeof verifyResetOtpRequestSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
+export type ChangePasswordOtpRequest = z.infer<typeof changePasswordOtpRequestSchema>;
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
 export type AcknowledgedResponse = z.infer<typeof acknowledgedResponseSchema>;
 export type PublicUserRequest = z.infer<typeof publicUserRequestSchema>;
 export type PostIdRequest = z.infer<typeof postIdRequestSchema>;
@@ -2242,6 +2281,8 @@ export type ImagePurpose = (typeof IMAGE_PURPOSES)[number];
 export type StageImagesResponse = z.infer<typeof stageImagesResponseSchema>;
 export type DiscardImagesRequest = z.infer<typeof discardImagesRequestSchema>;
 export type PostResponse = z.infer<typeof postResponseSchema>;
+export type SaveState = z.infer<typeof saveStateSchema>;
+export type SavedPostsRequest = z.infer<typeof savedPostsRequestSchema>;
 export type ToggleReactionRequest = z.infer<typeof toggleReactionRequestSchema>;
 export type ReactionSummary = z.infer<typeof reactionSummarySchema>;
 export type ListReactorsRequest = z.infer<typeof listReactorsRequestSchema>;
@@ -2268,6 +2309,10 @@ export interface YelloBridge {
     forgotPassword(request: ForgotPasswordRequest): Promise<IpcResult<AcknowledgedResponse>>;
     verifyResetOtp(request: VerifyResetOtpRequest): Promise<IpcResult<AcknowledgedResponse>>;
     resetPassword(request: ResetPasswordRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    requestChangePasswordCode(
+      request: ChangePasswordOtpRequest,
+    ): Promise<IpcResult<AcknowledgedResponse>>;
+    changePassword(request: ChangePasswordRequest): Promise<IpcResult<AcknowledgedResponse>>;
     listAccounts(): Promise<IpcResult<AccountListResponse>>;
     switchAccount(request: AccountIdRequest): Promise<IpcResult<SessionResponse>>;
     forgetAccount(request: AccountIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
@@ -2285,6 +2330,9 @@ export interface YelloBridge {
     remove(request: PostIdRequest): Promise<IpcResult<DeletedResponse>>;
     repost(request: RepostRequest): Promise<IpcResult<PostResponse>>;
     copyShareLink(request: PostIdRequest): Promise<IpcResult<ShareLinkCopiedResponse>>;
+    /** Saves the post if it is not saved, removes the save if it is. */
+    toggleSave(request: PostIdRequest): Promise<IpcResult<SaveState>>;
+    listSaved(request: SavedPostsRequest): Promise<IpcResult<UserPostsResponse>>;
   };
   readonly comments: {
     create(request: CreateCommentRequest): Promise<IpcResult<CommentResponse>>;

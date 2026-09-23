@@ -65,7 +65,42 @@ export const resetPasswordFormSchema = z
     path: ['confirmPassword'],
   });
 
+/**
+ * A new password as the change-password endpoint judges it: 12–128 characters,
+ * upper and lower case, and a digit. Whether it differs from the current one,
+ * and whether it appears in a known breach, only the server can say.
+ */
+const newPasswordRule = z
+  .string()
+  .min(REGISTER_PASSWORD_MIN_LENGTH, `Use at least ${REGISTER_PASSWORD_MIN_LENGTH} characters.`)
+  .max(PASSWORD_MAX_LENGTH, 'That password is too long.')
+  .regex(/[a-z]/, 'Include a lowercase letter.')
+  .regex(/[A-Z]/, 'Include an uppercase letter.')
+  .regex(/[0-9]/, 'Include a number.');
+
+/** Change password, step one: the password in use now. */
+export const currentPasswordFormSchema = z.object({
+  currentPassword: z
+    .string()
+    .min(1, 'Enter your current password.')
+    .max(PASSWORD_MAX_LENGTH, 'That password is too long.'),
+});
+
+/** Change password, step two: the emailed code and the new password, confirmed. */
+export const changePasswordFormSchema = z
+  .object({
+    code: verifyOtpFormSchema.shape.code,
+    newPassword: newPasswordRule,
+    confirmPassword: z.string(),
+  })
+  .refine((values) => values.newPassword === values.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  });
+
 export type LoginFormValues = z.infer<typeof loginFormSchema>;
 export type RegisterFormValues = z.infer<typeof registerFormSchema>;
 export type VerifyOtpFormValues = z.infer<typeof verifyOtpFormSchema>;
 export type ResetPasswordFormValues = z.infer<typeof resetPasswordFormSchema>;
+export type CurrentPasswordFormValues = z.infer<typeof currentPasswordFormSchema>;
+export type ChangePasswordFormValues = z.infer<typeof changePasswordFormSchema>;
