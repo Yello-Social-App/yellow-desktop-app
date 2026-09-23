@@ -6,12 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-24
+
+Stories are real now: post text or photos, reply from the viewer, and see a
+ring on anyone who has one. Settings is redesigned, with new appearance
+controls.
+
 ### Added
 
-- **Stories are live.** The rings on Home now show your friends' real
-  stories, and what you post is kept, instead of being sample data that
-  disappeared when you restarted. A ring starts at the first story you haven't
-  watched, and turns grey once you've seen them all.
+- **Stories are live.** The rings on Home show your friends' real stories,
+  and what you post is kept, instead of being sample data that disappeared
+  when you restarted. A ring starts at the first story you haven't watched,
+  and turns grey once you've seen them all.
 - **Photo stories.** Add to your story with a photo and an optional caption,
   as well as with text on a backdrop. Choose whether your friends or everyone
   can see it.
@@ -22,8 +28,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   You can delete one from the viewer.
 - **Story archive.** Settings → Story archive lists every story you've posted,
   including expired ones, which only you can see.
-- **Stories on profiles.** When someone has a story you can watch, their
-  profile photo gets a ring. Click it to watch.
+- **Story rings everywhere.** Anyone with a story you can watch has a ring
+  around their profile photo across the app: posts, comments, chats, friends,
+  search and notifications. Click the ring on their profile to watch.
+- **Appearance settings.** Choose an accent colour, compact or comfortable
+  spacing, text size, whether the activity sidebar shows, and reduced motion,
+  with a live preview. Reset to defaults puts them all back.
+- **Find a setting.** Settings has a search box that finds the pane holding a
+  control.
+- **Jump to latest.** Scrolled up in a chat, a button takes you back to the
+  newest message and counts what arrived meanwhile.
+
+### Changed
+
+- **Settings redesign.** Settings is grouped into Preferences, Account, Your
+  activity and About, and uses the full window width like Messages.
+- **Unblocking asks first.** Unblock buttons confirm before acting, since
+  unblocking lets the person see your profile and message you again.
+
+### Fixed
+
+- Switching chats kept the previous scroll position instead of opening on the
+  newest message, and late-loading images could push it out of view.
 
 ## [0.8.0] - 2026-09-23
 
