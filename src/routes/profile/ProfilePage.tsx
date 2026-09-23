@@ -8,6 +8,8 @@ import { useCurrentUser } from '@/features/auth/hooks';
 import { usePostActions } from '@/features/feed/post-actions';
 import { useFriendList, useFriendsLoader } from '@/features/friends/hooks';
 import { useProfilePosts } from '@/features/profile/hooks';
+import { useStoryRingState } from '@/features/stories/hooks';
+import { useStoriesStore } from '@/features/stories/store';
 import { PostCard } from '@/routes/feed/components/PostCard';
 
 import { EditProfileDialog } from './components/EditProfileDialog';
@@ -35,6 +37,9 @@ export default function ProfilePage() {
     adjustCommentCount,
   } = useProfilePosts(user?.id, { isOwnProfile: true });
   const actions = usePostActions(sink);
+  // Your own ring comes from `/stories/me`, which the app already keeps loaded.
+  const storyRing = useStoryRingState(user?.id);
+  const openStories = useStoriesStore((state) => state.open);
 
   if (user === null) {
     return (
@@ -55,6 +60,21 @@ export default function ProfilePage() {
         user={user}
         postCount={totalPosts}
         friendCount={friends.total}
+        story={
+          storyRing === undefined
+            ? undefined
+            : {
+                hasUnseen: storyRing === 'unseen',
+                onOpen: (rect) => {
+                  openStories([user.id], {
+                    x: rect.left,
+                    y: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                  });
+                },
+              }
+        }
         action={
           <Button
             variant="outline"

@@ -12,6 +12,8 @@ import { useRelationship } from '@/features/friends/hooks';
 import { useFriendsStore } from '@/features/friends/store';
 import { useIsOnline, useStartConversation } from '@/features/messages/hooks';
 import { useProfilePosts, usePublicProfile } from '@/features/profile/hooks';
+import { useUserStoryRing } from '@/features/stories/hooks';
+import { useStoriesStore } from '@/features/stories/store';
 import { PostCard } from '@/routes/feed/components/PostCard';
 import { displayName } from '@/lib/user-display';
 
@@ -82,6 +84,8 @@ export default function UserProfilePage() {
     adjustCommentCount,
   } = useProfilePosts(userId);
   const actions = usePostActions(sink);
+  const { ring: storyRing, reload: reloadStories } = useUserStoryRing(userId);
+  const openStories = useStoriesStore((state) => state.open);
 
   // Becoming (or ceasing to be) friends changes which posts are visible and
   // what the server says about the relationship: re-read both.
@@ -91,8 +95,9 @@ export default function UserProfilePage() {
       previous.current = relationship.relationship;
       reload();
       reloadPosts();
+      reloadStories();
     }
-  }, [relationship.relationship, reload, reloadPosts]);
+  }, [relationship.relationship, reload, reloadPosts, reloadStories]);
 
   // Your own id in the URL is the same page as /profile.
   if (userId !== undefined && viewer !== null && viewer.id === userId) {
@@ -189,6 +194,21 @@ export default function UserProfilePage() {
             user={user}
             postCount={totalPosts}
             isOnline={isOnline}
+            story={
+              storyRing === null
+                ? undefined
+                : {
+                    hasUnseen: storyRing.hasUnseen,
+                    onOpen: (rect) => {
+                      openStories([storyRing.author.id], {
+                        x: rect.left,
+                        y: rect.top,
+                        width: rect.width,
+                        height: rect.height,
+                      });
+                    },
+                  }
+            }
             action={
               <FriendshipControls
                 control={relationship}

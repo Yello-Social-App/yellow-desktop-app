@@ -13,13 +13,12 @@ import {
 import { Fragment, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { usePendingRequestCount } from '@/features/friends/hooks';
 import { useUnreadMessageCount } from '@/features/messages/hooks';
 import { useUnreadNotificationCount } from '@/features/notifications/hooks';
 import { cn } from '@/lib/cn';
-import { displayName, initialsOf } from '@/lib/user-display';
 import { useLayoutStore } from '@/stores/layout-store';
 
 import { AccountMenu } from './AccountMenu';
@@ -246,12 +245,7 @@ function IconRail() {
             )
           }
         >
-          <Avatar
-            initials={initialsOf(user)}
-            name={displayName(user)}
-            imageUrl={user.avatarUrl}
-            size="sm"
-          />
+          <UserAvatar user={user} size="sm" />
           <RailTooltip label="Your profile" />
         </NavLink>
       )}

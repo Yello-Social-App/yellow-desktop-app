@@ -2,7 +2,7 @@ import { TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
@@ -12,7 +12,7 @@ import { useRelationship } from '@/features/friends/hooks';
 import { REACTION_TYPES, type ReactionType, type Reactor } from '@shared/ipc-types';
 import { cn } from '@/lib/cn';
 import { relativeTime } from '@/lib/relative-time';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 import { FriendshipControls } from '@/routes/profile/components/FriendshipControls';
 
 interface ReactorsDialogProps {
@@ -204,7 +204,7 @@ function ReactorRow({ reactor }: ReactorRowProps) {
   return (
     <li className="gap-md animate-fade-up flex items-center">
       <Link to={`/users/${reactor.user.id}`}>
-        <Avatar initials={initialsOf(reactor.user)} name={name} imageUrl={reactor.user.avatarUrl} />
+        <UserAvatar user={reactor.user} />
       </Link>
       <div className="min-w-0 flex-1">
         <Link

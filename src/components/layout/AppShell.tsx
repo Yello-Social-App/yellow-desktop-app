@@ -5,8 +5,11 @@ import { useFriendsSync } from '@/features/friends/hooks';
 import { useChatSubscription } from '@/features/messages/hooks';
 import { useSafetySync } from '@/features/moderation/hooks';
 import { useNotificationSubscription } from '@/features/notifications/hooks';
+import { useStoriesSync } from '@/features/stories/hooks';
+import { useStoriesStore } from '@/features/stories/store';
 import { useAppearance } from '@/lib/appearance';
 import { cn } from '@/lib/cn';
+import { StoryViewer } from '@/routes/home/components/StoryViewer';
 
 import { RightRail } from './RightRail';
 import { Sidebar } from './Sidebar';
@@ -72,6 +75,9 @@ export function AppShell() {
   useNotificationSubscription();
   useFriendsSync();
   useSafetySync();
+  useStoriesSync();
+  // One story viewer for the whole app: Home's rings and a profile's avatar both open it.
+  const isStoryOpen = useStoriesStore((state) => state.viewer !== null);
 
   return (
     <div className="bg-background flex h-full flex-col">
@@ -102,6 +108,7 @@ export function AppShell() {
         </main>
         <RightRail isCollapsed={isWide || !showActivityRail} />
       </div>
+      {isStoryOpen && <StoryViewer />}
     </div>
   );
 }

@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Stories are live.** The rings on Home now show your friends' real
+  stories, and what you post is kept, instead of being sample data that
+  disappeared when you restarted. A ring starts at the first story you haven't
+  watched, and turns grey once you've seen them all.
+- **Photo stories.** Add to your story with a photo and an optional caption,
+  as well as with text on a backdrop. Choose whether your friends or everyone
+  can see it.
+- **Reply to a story.** Replying from the viewer sends a direct message, which
+  shows a small preview of the story in the chat. The preview reads "Story
+  unavailable" once the story has expired or been deleted.
+- **Seen by.** Your own stories show how many people watched them, and who.
+  You can delete one from the viewer.
+- **Story archive.** Settings → Story archive lists every story you've posted,
+  including expired ones, which only you can see.
+- **Stories on profiles.** When someone has a story you can watch, their
+  profile photo gets a ring. Click it to watch.
+
 ## [0.8.0] - 2026-09-23
 
 Save posts to read later, change your password from Settings, and see clearly

@@ -1,5 +1,6 @@
 /**
- * The hosts chat media may come from: one list, read by two consumers.
+ * The hosts chat media and story photos may come from: one list, read by two
+ * consumers. Both are presigned links on the private bucket's S3 API host.
  *
  * The CSP uses it as `img-src` host-sources, so a presigned image renders
  * inline; the attachment download uses it as an allowlist before the main

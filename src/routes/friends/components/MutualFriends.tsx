@@ -1,8 +1,8 @@
 import type { Author } from '@shared/ipc-types';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { cn } from '@/lib/cn';
-import { displayName, initialsOf } from '@/lib/user-display';
+import { displayName } from '@/lib/user-display';
 
 const MAX_FACES = 3;
 
@@ -29,12 +29,7 @@ export function MutualFriends({ friends }: MutualFriendsProps) {
               index > 0 && '-ml-1.5',
             )}
           >
-            <Avatar
-              initials={initialsOf(friend)}
-              name={displayName(friend)}
-              imageUrl={friend.avatarUrl}
-              size="xs"
-            />
+            <UserAvatar user={friend} size="xs" />
           </span>
         ))}
       </span>

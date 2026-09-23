@@ -2,6 +2,7 @@ import { Check, ChevronDown, ChevronsUpDown, LogOut, Plus, ShieldAlert, X } from
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Avatar } from '@/components/ui/Avatar';
 import { IconButton } from '@/components/ui/IconButton';
 import { Popover } from '@/components/ui/Popover';
@@ -101,12 +102,7 @@ export function AccountMenu({ variant = 'row' }: AccountMenuProps) {
                 {friendCount === 1 ? 'friend' : 'friends'}
               </span>
               <span aria-hidden className="bg-outline-strong h-4 w-px" />
-              <Avatar
-                initials={initialsOf(user)}
-                name={displayName(user)}
-                imageUrl={user.avatarUrl}
-                size="xs"
-              />
+              <UserAvatar user={user} size="xs" />
               <ChevronDown aria-hidden className="text-outline size-3.5" />
             </button>
           ) : (
@@ -122,12 +118,7 @@ export function AccountMenu({ variant = 'row' }: AccountMenuProps) {
                 isOpen && 'bg-surface-container-low',
               )}
             >
-              <Avatar
-                initials={initialsOf(user)}
-                name={displayName(user)}
-                imageUrl={user.avatarUrl}
-                size="sm"
-              />
+              <UserAvatar user={user} size="sm" />
               <span className="min-w-0 flex-1">
                 <span className="text-on-surface block truncate text-[13.5px] font-semibold">
                   {displayName(user)}

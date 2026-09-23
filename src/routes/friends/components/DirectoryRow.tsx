@@ -1,12 +1,12 @@
 import { memo } from 'react';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { useCommunitiesStore } from '@/features/communities/store';
 import { useSampleRelationship } from '@/features/people/hooks';
 import type { DirectoryPerson } from '@/features/people/types';
 import { relativeTime } from '@/lib/relative-time';
 import { FriendshipControls } from '@/routes/profile/components/FriendshipControls';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 interface DirectoryRowProps {
   person: DirectoryPerson;
@@ -52,7 +52,7 @@ export const DirectoryRow = memo(function DirectoryRow({ person }: DirectoryRowP
 
   return (
     <article className="gap-md px-lg py-md hover:bg-surface-container-lowest/60 transition-tone flex items-center">
-      <Avatar initials={initialsOf(user)} name={displayName(user)} imageUrl={user.avatarUrl} />
+      <UserAvatar user={user} />
 
       <div className="min-w-0 flex-1">
         <p className="text-on-surface truncate text-[15px] font-bold">{displayName(user)}</p>

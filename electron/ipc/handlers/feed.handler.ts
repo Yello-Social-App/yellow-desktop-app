@@ -5,8 +5,9 @@
  * previous response's `nextCursor` rather than an offset, so a post arriving
  * mid-scroll cannot shift a page boundary and duplicate a row.
  *
- * Images are staged before they are posted — post images, and the avatar and
- * cover a profile edit sends (profile.handler.ts): the picker runs here, the bytes stay here (staged-images.ts),
+ * Images are staged before they are posted — post images, the avatar and
+ * cover a profile edit sends (profile.handler.ts), and a story's photo
+ * (stories.handler.ts): the picker runs here, the bytes stay here (staged-images.ts),
  * and the renderer gets a token and a thumbnail. It never names a path (OWASP
  * A01) and never holds the bytes — and the user gets to look at what they
  * picked before it is published.
@@ -20,7 +21,7 @@ import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiRequest } from '../../api/http-client';
 import { IPC_CHANNELS } from '../channels';
-import { pickImageFiles, readImagePart, toPreviewDataUrl } from '../image-picker';
+import { imagePixelCount, pickImageFiles, readImagePart, toPreviewDataUrl } from '../image-picker';
 import { registerIpcHandler } from '../register';
 import {
   discardStagedImages,
@@ -35,8 +36,10 @@ import {
   discardImagesRequestSchema,
   feedRequestSchema,
   feedResponseSchema,
+  ipcFail,
   ipcOk,
   POST_MAX_IMAGES,
+  STORY_IMAGE_MAX_PIXELS,
   postResponseSchema,
   postSchema,
   stageImagesRequestSchema,
@@ -55,6 +58,7 @@ const PICKER_TITLES: Readonly<Record<ImagePurpose, string>> = {
   post: 'Choose images for your post',
   avatar: 'Choose a profile photo',
   cover: 'Choose a cover image',
+  story: 'Choose a photo for your story',
 };
 
 const cursorPageSchema = z.object({
@@ -129,6 +133,17 @@ export function registerFeedHandlers(): void {
         // The thumbnail is derived from the same bytes that will be uploaded,
         // so what the user approves is exactly what gets sent.
         const bytes = Buffer.from(await part.data.blob.arrayBuffer());
+
+        // A phone photo is about 12 MP; the story endpoint refuses above 16,
+        // and saying so here beats a failed upload after the user wrote a caption.
+        const pixels = purpose === 'story' ? imagePixelCount(bytes) : null;
+        if (pixels !== null && pixels > STORY_IMAGE_MAX_PIXELS) {
+          return ipcFail(
+            'INVALID_PAYLOAD',
+            'That photo is over 16 megapixels. Choose a smaller one, or resize it first.',
+          );
+        }
+
         images.push({
           token: stageImage(part.data),
           fileName: part.data.fileName,

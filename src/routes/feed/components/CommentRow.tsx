@@ -4,14 +4,14 @@ import { Link } from 'react-router-dom';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { COMMENT_MAX_LENGTH, type Comment } from '@/features/comments/types';
 import type { ReactionType } from '@shared/ipc-types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { relativeTime } from '@/lib/relative-time';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 import { ReactionButton } from './ReactionButton';
 
@@ -70,12 +70,7 @@ export const CommentRow = memo(function CommentRow({
           branch into each reply below has something to come off. */}
       <div className="flex shrink-0 flex-col items-center">
         <Link to={`/users/${comment.author.id}`} className="shrink-0">
-          <Avatar
-            initials={initialsOf(comment.author)}
-            name={author}
-            imageUrl={comment.author.avatarUrl}
-            size="sm"
-          />
+          <UserAvatar user={comment.author} size="sm" />
         </Link>
         {hasReplies && <span aria-hidden className="bg-outline-variant mt-1 w-px flex-1" />}
       </div>

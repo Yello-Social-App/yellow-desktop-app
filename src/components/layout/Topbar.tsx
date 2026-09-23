@@ -1,12 +1,11 @@
 import { PanelLeftClose, PanelLeftOpen, Settings, Wifi, WifiOff } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { IconButton } from '@/components/ui/IconButton';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useSocketStatus } from '@/features/messages/hooks';
 import { cn } from '@/lib/cn';
-import { displayName, initialsOf } from '@/lib/user-display';
 import { useLayoutStore } from '@/stores/layout-store';
 
 import { AccountMenu } from './AccountMenu';
@@ -161,12 +160,7 @@ export function Topbar({ searchQuery, onSearchChange }: TopbarProps) {
         )}
         {!isCompact && user !== null && (
           <Link to="/profile" className="ml-1 rounded-full" aria-label="Your profile">
-            <Avatar
-              initials={initialsOf(user)}
-              name={displayName(user)}
-              imageUrl={user.avatarUrl}
-              size="sm"
-            />
+            <UserAvatar user={user} size="sm" />
           </Link>
         )}
         <span aria-hidden className="bg-outline-variant mx-sm h-5 w-px" />

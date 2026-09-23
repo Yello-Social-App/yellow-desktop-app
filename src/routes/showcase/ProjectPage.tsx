@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { InlineAlert } from '@/components/ui/InlineAlert';
@@ -15,7 +15,7 @@ import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { coverClass } from '@/mocks/people';
 import { calendarDay } from '@/lib/relative-time';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 import { formatCount } from '@/lib/format';
 
@@ -161,11 +161,7 @@ function ProjectView({ project }: { project: Project }) {
         </section>
 
         <section className="bg-surface-container-lowest border-outline-variant flex items-center gap-3 rounded-2xl border p-4">
-          <Avatar
-            initials={initialsOf(project.author)}
-            name={displayName(project.author)}
-            imageUrl={project.author.avatarUrl}
-          />
+          <UserAvatar user={project.author} />
           <span className="min-w-0 flex-1">
             <span className="text-on-surface block text-[15px] font-bold">
               {displayName(project.author)}

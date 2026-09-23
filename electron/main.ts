@@ -36,6 +36,7 @@ import { registerProfileHandlers } from './ipc/handlers/profile.handler';
 import { registerReactionHandlers } from './ipc/handlers/reactions.handler';
 import { registerSafetyHandlers } from './ipc/handlers/safety.handler';
 import { registerShowcaseHandlers } from './ipc/handlers/showcase.handler';
+import { registerStoryHandlers } from './ipc/handlers/stories.handler';
 import { registerUpdateHandlers } from './ipc/handlers/updates.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
 import { chatAlerts } from './chat/alerts';
@@ -308,6 +309,7 @@ function bootstrap(): void {
       registerUpdateHandlers();
       registerCommunityHandlers();
       registerShowcaseHandlers();
+      registerStoryHandlers();
       registerFeedbackHandlers();
       registerSafetyHandlers();
       registerProfileHandlers();

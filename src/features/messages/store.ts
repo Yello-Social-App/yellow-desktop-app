@@ -229,9 +229,9 @@ function reconcile(thread: Thread, message: ChatMessage): Thread {
   return { ...thread, messages: [...thread.messages, confirmed] };
 }
 
-/** An unsent line: the text, files and reactions go; the line stays in history. */
+/** An unsent line: the text, files, reactions and story reference go; the line stays in history. */
 function tombstone(message: ThreadMessage, deletedAt: string): ThreadMessage {
-  return { ...message, body: '', attachments: [], reactions: [], deletedAt };
+  return { ...message, body: '', attachments: [], reactions: [], storyReply: null, deletedAt };
 }
 
 /** Marks every reply quoting `messageId` as quoting a deleted line. */
@@ -703,6 +703,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
         attachments,
         reactions: [],
         groupInvite: null,
+        storyReply: null,
         createdAt: new Date().toISOString(),
         editedAt: null,
         deletedAt: null,

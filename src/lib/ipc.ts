@@ -73,6 +73,19 @@ import {
   sessionResponseSchema,
   shareLinkCopiedResponseSchema,
   stageImagesResponseSchema,
+  storyFeedPageSchema,
+  storyListSchema,
+  storyPageSchema,
+  storyReplyAcceptedSchema,
+  storyResponseSchema,
+  storyViewerPageSchema,
+  type CreateStoryRequest,
+  type ReplyToStoryRequest,
+  type StoryArchiveRequest,
+  type StoryFeedRequest,
+  type StoryIdRequest,
+  type StoryViewersRequest,
+  type UserStoriesRequest,
   techCountListSchema,
   unreadCountSchema,
   userPostsResponseSchema,
@@ -492,6 +505,26 @@ export const ipc = {
     guarded('showcase.like', projectLikeSchema, (api) => api.showcase.like(request)),
   unlikeProject: (request: ProjectIdRequest) =>
     guarded('showcase.unlike', projectLikeSchema, (api) => api.showcase.unlike(request)),
+
+  storyFeed: (request: StoryFeedRequest) =>
+    guarded('stories.feed', storyFeedPageSchema, (api) => api.stories.feed(request)),
+  myStories: () => guarded('stories.mine', storyListSchema, (api) => api.stories.mine()),
+  userStories: (request: UserStoriesRequest) =>
+    guarded('stories.ofUser', storyListSchema, (api) => api.stories.ofUser(request)),
+  getStory: (request: StoryIdRequest) =>
+    guarded('stories.get', storyResponseSchema, (api) => api.stories.get(request)),
+  createStory: (request: CreateStoryRequest) =>
+    guarded('stories.create', storyResponseSchema, (api) => api.stories.create(request)),
+  markStorySeen: (request: StoryIdRequest) =>
+    guarded('stories.markSeen', acknowledgedResponseSchema, (api) => api.stories.markSeen(request)),
+  storyViewers: (request: StoryViewersRequest) =>
+    guarded('stories.viewers', storyViewerPageSchema, (api) => api.stories.viewers(request)),
+  storyArchive: (request: StoryArchiveRequest) =>
+    guarded('stories.archive', storyPageSchema, (api) => api.stories.archive(request)),
+  deleteStory: (request: StoryIdRequest) =>
+    guarded('stories.remove', deletedResponseSchema, (api) => api.stories.remove(request)),
+  replyToStory: (request: ReplyToStoryRequest) =>
+    guarded('stories.reply', storyReplyAcceptedSchema, (api) => api.stories.reply(request)),
 
   submitFeedback: (request: SubmitFeedbackRequest) =>
     guarded('feedback.submit', feedbackResponseSchema, (api) => api.feedback.submit(request)),

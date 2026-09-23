@@ -18,7 +18,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { IconButton } from '@/components/ui/IconButton';
 import { Popover } from '@/components/ui/Popover';
 import { ImageLightbox } from '@/components/ui/ImageLightbox';
@@ -34,7 +34,7 @@ import { reasonLabel } from '@/features/moderation/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { relativeTime, shortRelativeTime } from '@/lib/relative-time';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -169,12 +169,7 @@ export const PostCard = memo(function PostCard({
       <div className="flex min-w-0 flex-col gap-2.5">
         <div className="flex items-center gap-2.5">
           <Link to={`/users/${post.author.id}`} className="shrink-0">
-            <Avatar
-              initials={initialsOf(post.author)}
-              name={author}
-              imageUrl={post.author.avatarUrl}
-              size="sm"
-            />
+            <UserAvatar user={post.author} size="sm" />
           </Link>
           <div className="text-outline flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 text-[13px]">
             <Link
@@ -440,12 +435,7 @@ export const PostCard = memo(function PostCard({
             className="border-outline-variant hover:bg-surface-container-low transition-tone gap-xs p-md flex cursor-pointer flex-col rounded-2xl border"
           >
             <span className="gap-xs flex items-center text-[13px]">
-              <Avatar
-                initials={initialsOf(post.originalPost.author)}
-                name={displayName(post.originalPost.author)}
-                imageUrl={post.originalPost.author.avatarUrl}
-                size="xs"
-              />
+              <UserAvatar user={post.originalPost.author} size="xs" />
               <Link
                 to={`/users/${post.originalPost.author.id}`}
                 className="text-on-surface font-semibold hover:underline"

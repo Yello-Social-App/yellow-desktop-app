@@ -113,6 +113,15 @@ export async function readImagePart(
 export const PREVIEW_MAX_EDGE = 320;
 
 /**
+ * The decoded pixel count, or null when the platform decoder cannot read the
+ * format (GIF and WebP on some platforms) — the server then judges it alone.
+ */
+export function imagePixelCount(bytes: Buffer): number | null {
+  const { width, height } = nativeImage.createFromBuffer(bytes).getSize();
+  return width === 0 || height === 0 ? null : width * height;
+}
+
+/**
  * A `data:` URL preview of the given bytes, downscaled. Falls back to the
  * original bytes when the image cannot be decoded, so a valid-but-exotic file
  * still shows something rather than an empty box (A10).

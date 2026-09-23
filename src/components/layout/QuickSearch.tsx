@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { HighlightMatch } from '@/components/content/HighlightMatch';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Popover } from '@/components/ui/Popover';
@@ -15,7 +15,7 @@ import {
   type FriendsLocationState,
 } from '@/features/people/types';
 import { cn } from '@/lib/cn';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 import type { FriendEntry } from '@shared/ipc-types';
 
 interface QuickSearchProps {
@@ -232,12 +232,7 @@ export function QuickSearch({ query, onQueryChange }: QuickSearchProps) {
                   </div>
                 )}
                 <button type="button" {...common} className={cn(optionClass(index), 'py-2')}>
-                  <Avatar
-                    initials={initialsOf(user)}
-                    name={displayName(user)}
-                    imageUrl={user.avatarUrl}
-                    size="sm"
-                  />
+                  <UserAvatar user={user} size="sm" />
                   <span className="min-w-0 flex-1">
                     <span className="text-on-surface block truncate text-[14px] font-semibold">
                       <HighlightMatch text={displayName(user)} query={query} />

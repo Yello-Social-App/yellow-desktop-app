@@ -1,5 +1,14 @@
 # Backend endpoints for Stories
 
+> **Status (2026-09-24): shipped, and the app is built on it.** This was the
+> request sent to the backend before the endpoints existed. The live contract
+> is the API's Swagger at `/docs` (`StoryController`), and it differs from this
+> draft in a few places: errors are `RESOURCE_NOT_FOUND` / `RATE_LIMIT_EXCEEDED`,
+> a non-image upload is `VALIDATION_FAILED` / `INVALID_IMAGE`, and a reply
+> (`POST /v1/stories/{id}/replies`) becomes a DM whose message has
+> `storyReply`. The client is in `electron/ipc/handlers/stories.handler.ts`
+> and `src/features/stories/`.
+
 The desktop app already has Stories on the home screen: the row of rings across the top, a full-screen viewer, and an "Add to your story" composer. It runs on sample data (`src/mocks/stories.ts`), and a story you add is forgotten on restart, because the API has no endpoints for it yet.
 
 This document is the contract the app will be built against. It covers:
