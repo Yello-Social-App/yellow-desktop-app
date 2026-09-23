@@ -129,7 +129,13 @@ export default function UserProfilePage() {
             user={blockedIdentity}
             postCount={0}
             isBlocked
-            action={<FriendshipControls control={relationship} showBlock />}
+            action={
+              <FriendshipControls
+                control={relationship}
+                name={displayName(blockedIdentity)}
+                showBlock
+              />
+            }
           />
           <div className="m-lg bg-surface-container-low border-outline-variant gap-sm p-lg flex flex-col items-center rounded-2xl border text-center">
             <span
@@ -186,6 +192,7 @@ export default function UserProfilePage() {
             action={
               <FriendshipControls
                 control={relationship}
+                name={displayName(user)}
                 showBlock
                 isMessaging={isStarting}
                 onMessage={

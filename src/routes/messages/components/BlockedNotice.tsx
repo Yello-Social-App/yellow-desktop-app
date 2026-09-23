@@ -2,6 +2,7 @@ import type { Author } from '@shared/ipc-types';
 import { Ban } from 'lucide-react';
 import { useState } from 'react';
 
+import { UnblockDialog } from '@/components/people/UnblockDialog';
 import { Button } from '@/components/ui/Button';
 import { useFriendsStore } from '@/features/friends/store';
 import type { DirectBlock } from '@/features/messages/hooks';
@@ -27,7 +28,7 @@ export function BlockedNotice({ kind, conversationId, peer }: BlockedNoticeProps
   const unblock = useFriendsStore((state) => state.unblock);
   const isPending = useFriendsStore((state) => state.pendingIds.has(peer.id));
   const clearRefusal = useMessagesStore((state) => state.clearRefusal);
-  const [failed, setFailed] = useState(false);
+  const [isUnblockOpen, setIsUnblockOpen] = useState(false);
   const name = displayName(peer);
 
   if (kind === 'unreachable') {
@@ -65,23 +66,26 @@ export function BlockedNotice({ kind, conversationId, peer }: BlockedNoticeProps
         className="w-full max-w-[360px]"
         isLoading={isPending}
         onClick={() => {
-          setFailed(false);
-          void unblock(peer.id).then((done) => {
-            if (done) {
-              // A send refused while the block stood says nothing about now.
-              clearRefusal(conversationId);
-            } else {
-              setFailed(true);
-            }
-          });
+          setIsUnblockOpen(true);
         }}
       >
         {isPending ? 'Unblocking…' : 'Unblock'}
       </Button>
-      {failed && (
-        <p role="alert" className="text-error text-[13px]">
-          That didn’t go through. Try again.
-        </p>
+      {isUnblockOpen && (
+        <UnblockDialog
+          name={name}
+          onConfirm={async () => {
+            const done = await unblock(peer.id);
+            if (done) {
+              // A send refused while the block stood says nothing about now.
+              clearRefusal(conversationId);
+            }
+            return done;
+          }}
+          onClose={() => {
+            setIsUnblockOpen(false);
+          }}
+        />
       )}
     </div>
   );

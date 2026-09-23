@@ -3,6 +3,7 @@ import { Download, LogOut, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { SignOutDialog } from '@/components/layout/SignOutDialog';
+import { UnblockDialog } from '@/components/people/UnblockDialog';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -43,6 +44,7 @@ export function PrivacySettings({ appInfo }: PrivacySettingsProps) {
   const user = useCurrentUser();
   const posts = useLoadedPosts();
   const [isSignOutOpen, setIsSignOutOpen] = useState(false);
+  const [unblocking, setUnblocking] = useState<RestrictedAccount | null>(null);
   const muted = useModerationStore((state) => state.muted);
   const mutedStatus = useModerationStore((state) => state.mutedStatus);
   const reports = useModerationStore((state) => state.reports);
@@ -173,9 +175,18 @@ export function PrivacySettings({ appInfo }: PrivacySettingsProps) {
         status={blockedList.status}
         actionLabel="Unblock"
         onAction={(id) => {
-          void restrictions.unblock(id);
+          setUnblocking(blocked.find((account) => account.id === id) ?? null);
         }}
       />
+      {unblocking !== null && (
+        <UnblockDialog
+          name={unblocking.name}
+          onConfirm={() => restrictions.unblock(unblocking.id)}
+          onClose={() => {
+            setUnblocking(null);
+          }}
+        />
+      )}
 
       <SettingsSection title="Your reports">
         <Card className="divide-outline-variant flex flex-col divide-y">

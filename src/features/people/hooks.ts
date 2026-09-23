@@ -202,7 +202,10 @@ export function useSampleRelationship(person: DirectoryPerson): RelationshipCont
       decline: run('decline'),
       unfriend: run('unfriend'),
       block: run('block'),
-      unblock: run('unblock'),
+      unblock: () => {
+        apply(userId, 'unblock');
+        return Promise.resolve(true);
+      },
     };
   }, [apply, userId, relationship]);
 }

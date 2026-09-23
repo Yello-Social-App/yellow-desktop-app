@@ -62,7 +62,7 @@ export const DirectoryRow = memo(function DirectoryRow({ person }: DirectoryRowP
       </div>
 
       <div className="shrink-0">
-        <FriendshipControls control={control} />
+        <FriendshipControls control={control} name={displayName(user)} />
       </div>
     </article>
   );

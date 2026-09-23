@@ -80,7 +80,8 @@ export interface RelationshipControl {
   decline: () => void;
   unfriend: () => void;
   block: () => void;
-  unblock: () => void;
+  /** Resolves to whether it went through, so its confirmation can stay open on a refusal. */
+  unblock: () => Promise<boolean>;
 }
 
 /**
@@ -159,7 +160,7 @@ export function useRelationship(
       decline: run(decline),
       unfriend: run(unfriend),
       block: run(block),
-      unblock: run(unblock),
+      unblock: () => (userId === undefined ? Promise.resolve(false) : unblock(userId)),
     };
   }, [
     relationship,

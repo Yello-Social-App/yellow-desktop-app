@@ -219,7 +219,7 @@ function ReactorRow({ reactor }: ReactorRowProps) {
         </p>
       </div>
       <div className="shrink-0">
-        <FriendshipControls control={control} />
+        <FriendshipControls control={control} name={name} />
       </div>
     </li>
   );
