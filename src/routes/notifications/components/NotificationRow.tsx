@@ -12,13 +12,12 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { IconButton } from '@/components/ui/IconButton';
 import { useUsers } from '@/features/users/hooks';
 import { routeFor, type Notification } from '@/features/notifications/types';
 import { cn } from '@/lib/cn';
 import { relativeTime } from '@/lib/relative-time';
-import { displayName, initialsOf } from '@/lib/user-display';
 
 const ICON_CLASS = 'size-3.5';
 
@@ -85,12 +84,7 @@ export function NotificationRow({
             <Bell className="size-4" />
           </span>
         ) : (
-          <Avatar
-            initials={initialsOf(actor)}
-            name={displayName(actor)}
-            imageUrl={actor.avatarUrl}
-            size="md"
-          />
+          <UserAvatar user={actor} size="md" />
         )}
         <span
           aria-hidden

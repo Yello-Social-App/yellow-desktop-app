@@ -2,7 +2,7 @@ import { Globe, ImagePlus, Lock, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { Popover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
@@ -16,7 +16,6 @@ import {
   type PostVisibility,
 } from '@/features/feed/types';
 import { POST_MAX_IMAGES, type StagedImage } from '@shared/ipc-types';
-import { displayName, initialsOf } from '@/lib/user-display';
 
 /** Bytes, rounded for a caption under a thumbnail. */
 function formatSize(bytes: number): string {
@@ -157,15 +156,7 @@ export function PostComposer() {
 
   return (
     <form className="flex gap-3 p-3.5" onSubmit={handleSubmit}>
-      {user !== null && (
-        <Avatar
-          initials={initialsOf(user)}
-          name={displayName(user)}
-          imageUrl={user.avatarUrl}
-          size="sm"
-          className="self-start"
-        />
-      )}
+      {user !== null && <UserAvatar user={user} size="sm" className="self-start" />}
 
       <div className="gap-sm flex min-w-0 flex-1 flex-col">
         <label className="sr-only" htmlFor="post-composer">

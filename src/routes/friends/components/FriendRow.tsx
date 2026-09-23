@@ -2,13 +2,13 @@ import { memo } from 'react';
 import { Link } from 'react-router-dom';
 
 import { HighlightMatch } from '@/components/content/HighlightMatch';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { useRelationship } from '@/features/friends/hooks';
 import type { FriendEntry } from '@/features/friends/types';
 import { useIsOnline, useStartConversation } from '@/features/messages/hooks';
 import { FriendshipControls } from '@/routes/profile/components/FriendshipControls';
 import { relativeTime } from '@/lib/relative-time';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 interface FriendRowProps {
   entry: FriendEntry;
@@ -37,12 +37,7 @@ export const FriendRow = memo(function FriendRow({
   return (
     <article className="gap-md px-lg py-md hover:bg-surface-container-lowest/60 transition-tone flex items-center">
       <Link to={`/users/${person.id}`} className="shrink-0">
-        <Avatar
-          initials={initialsOf(person)}
-          name={name}
-          imageUrl={person.avatarUrl}
-          isOnline={isOnline || undefined}
-        />
+        <UserAvatar user={person} isOnline={isOnline || undefined} />
       </Link>
 
       <div className="min-w-0 flex-1">

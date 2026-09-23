@@ -2,13 +2,13 @@ import { Repeat2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { REPOST_MAX_LENGTH, type Post } from '@/features/feed/types';
 import { extractLinks } from '@/lib/links';
 import { relativeTime } from '@/lib/relative-time';
-import { displayName, initialsOf } from '@/lib/user-display';
+import { displayName } from '@/lib/user-display';
 
 interface RepostDialogProps {
   post: Post;
@@ -77,12 +77,7 @@ export function RepostDialog({ post, isOpen, isBusy, onRepost, onClose }: Repost
 
       <blockquote className="border-outline-variant gap-xs p-md flex flex-col rounded-lg border">
         <div className="gap-sm flex items-center">
-          <Avatar
-            initials={initialsOf(post.author)}
-            name={displayName(post.author)}
-            imageUrl={post.author.avatarUrl}
-            size="sm"
-          />
+          <UserAvatar user={post.author} size="sm" />
           <span className="font-small text-small text-on-surface-variant truncate">
             {displayName(post.author)} · {relativeTime(post.createdAt)}
           </span>

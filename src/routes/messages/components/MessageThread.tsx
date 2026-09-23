@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, Info, Paperclip } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Spinner } from '@/components/ui/Spinner';
@@ -23,7 +23,7 @@ import { useMessagesStore } from '@/features/messages/store';
 import { describeChange, type ThreadMessage } from '@/features/messages/types';
 import { useUsers } from '@/features/users/hooks';
 import { calendarDay } from '@/lib/relative-time';
-import { displayName, initialsOf } from '@/lib/user-display';
+import { displayName } from '@/lib/user-display';
 
 import { BlockedNotice } from './BlockedNotice';
 import { GroupAvatar } from './GroupAvatar';
@@ -191,10 +191,8 @@ export function MessageThread({ row }: MessageThreadProps) {
           <GroupAvatar row={row} size="sm" />
         ) : (
           <Link to={`/users/${peer.id}`}>
-            <Avatar
-              initials={initialsOf(peer)}
-              name={displayName(peer)}
-              imageUrl={peer.avatarUrl}
+            <UserAvatar
+              user={peer}
               size="sm"
               isOnline={(showPresence && row.isOnline) || undefined}
             />

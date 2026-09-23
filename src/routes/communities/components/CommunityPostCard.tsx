@@ -4,13 +4,13 @@ import { Link } from 'react-router-dom';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { useCommunitiesStore } from '@/features/communities/store';
 import type { CommunityPost } from '@/features/communities/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { relativeTime } from '@/lib/relative-time';
-import { displayName, initialsOf } from '@/lib/user-display';
+import { displayName } from '@/lib/user-display';
 
 interface CommunityPostCardProps {
   post: CommunityPost;
@@ -91,12 +91,7 @@ export const CommunityPostCard = memo(function CommunityPostCard({
               c/{community.slug}
             </Link>
           )}
-          <Avatar
-            initials={initialsOf(post.author)}
-            name={displayName(post.author)}
-            imageUrl={post.author.avatarUrl}
-            size="xs"
-          />
+          <UserAvatar user={post.author} size="xs" />
           <span className="text-on-surface font-medium">{displayName(post.author)}</span>
           <span aria-hidden>·</span>
           <span>{relativeTime(post.createdAt)}</span>

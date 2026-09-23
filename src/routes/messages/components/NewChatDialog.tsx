@@ -1,7 +1,7 @@
 import { Search, Users } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -9,7 +9,7 @@ import { useFriendList, useFriendsLoader } from '@/features/friends/hooks';
 import { useStartConversation } from '@/features/messages/hooks';
 import { CHAT_GROUP_TITLE_MAX } from '@shared/ipc-types';
 import { cn } from '@/lib/cn';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 interface NewChatDialogProps {
   isOpen: boolean;
@@ -140,12 +140,7 @@ export function NewChatDialog({ isOpen, onClose }: NewChatDialogProps) {
                     aria-label={displayName(user)}
                     className="border-outline-variant accent-primary-container size-4 cursor-pointer rounded-sm border"
                   />
-                  <Avatar
-                    initials={initialsOf(user)}
-                    name={displayName(user)}
-                    imageUrl={user.avatarUrl}
-                    size="sm"
-                  />
+                  <UserAvatar user={user} size="sm" />
                   <span className="min-w-0 flex-1">
                     <span className="text-on-surface block truncate text-[14px] font-semibold">
                       {displayName(user)}

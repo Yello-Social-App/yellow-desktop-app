@@ -2,12 +2,12 @@ import { Eye, Heart, Star } from 'lucide-react';
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { useProjectLike } from '@/features/showcase/hooks';
 import type { Project } from '@/features/showcase/types';
 import { cn } from '@/lib/cn';
 import { coverClass } from '@/mocks/people';
-import { displayName, initialsOf } from '@/lib/user-display';
+import { displayName } from '@/lib/user-display';
 
 import { formatCount } from '@/lib/format';
 
@@ -72,12 +72,7 @@ export const ProjectCard = memo(function ProjectCard({
         </div>
 
         <div className="mt-auto flex items-center gap-2 pt-1">
-          <Avatar
-            initials={initialsOf(project.author)}
-            name={displayName(project.author)}
-            imageUrl={project.author.avatarUrl}
-            size="xs"
-          />
+          <UserAvatar user={project.author} size="xs" />
           <span className="text-on-surface-variant truncate text-[12px]">
             {displayName(project.author)}
           </span>

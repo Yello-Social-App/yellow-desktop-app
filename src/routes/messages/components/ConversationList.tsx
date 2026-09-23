@@ -1,11 +1,10 @@
 import { Link } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Badge } from '@/components/ui/Badge';
 import type { ConversationRow } from '@/features/messages/hooks';
 import { cn } from '@/lib/cn';
 import { relativeTime } from '@/lib/relative-time';
-import { displayName, initialsOf } from '@/lib/user-display';
 
 import { GroupAvatar } from './GroupAvatar';
 
@@ -20,14 +19,7 @@ function ConversationAvatar({ row }: { row: ConversationRow }) {
   if (row.conversation.type === 'GROUP' || first === undefined) {
     return <GroupAvatar row={row} />;
   }
-  return (
-    <Avatar
-      initials={initialsOf(first)}
-      name={displayName(first)}
-      imageUrl={first.avatarUrl}
-      isOnline={row.isOnline || undefined}
-    />
-  );
+  return <UserAvatar user={first} isOnline={row.isOnline || undefined} />;
 }
 
 /** The left rail of the messages screen. */

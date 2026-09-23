@@ -13,17 +13,18 @@ import type { Author } from '@shared/ipc-types';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { useMessageActions } from '@/features/messages/hooks';
 import { messageAnchor, type ThreadMessage } from '@/features/messages/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { clockTime } from '@/lib/relative-time';
-import { displayName, initialsOf } from '@/lib/user-display';
+import { displayName } from '@/lib/user-display';
 
 import { InviteCard } from './InviteCard';
 import { MessageAttachments } from './MessageAttachments';
 import { ReactionChips, ReactionPicker } from './MessageReactions';
+import { StoryReplyCard } from './StoryReplyCard';
 
 interface MessageBubbleProps {
   message: ThreadMessage;
@@ -87,14 +88,7 @@ export const MessageBubble = memo(function MessageBubble({
     >
       {!isMine && (
         <span className="w-8 shrink-0">
-          {!continues && sender !== undefined && (
-            <Avatar
-              initials={initialsOf(sender)}
-              name={displayName(sender)}
-              imageUrl={sender.avatarUrl}
-              size="sm"
-            />
-          )}
+          {!continues && sender !== undefined && <UserAvatar user={sender} size="sm" />}
         </span>
       )}
 
@@ -103,6 +97,10 @@ export const MessageBubble = memo(function MessageBubble({
           <span className="text-on-surface-variant ml-1 text-[12px] font-semibold">
             {displayName(sender)}
           </span>
+        )}
+
+        {message.storyReply !== null && !isDeleted && (
+          <StoryReplyCard reply={message.storyReply} isMine={isMine} viewerId={viewerId} />
         )}
 
         {message.replyTo !== null && !isDeleted && (

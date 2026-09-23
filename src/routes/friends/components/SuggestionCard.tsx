@@ -1,13 +1,13 @@
 import { UserCheck, UserPlus, X } from 'lucide-react';
 import { memo } from 'react';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { useSampleRelationship } from '@/features/people/hooks';
 import { usePeopleStore } from '@/features/people/store';
 import type { DirectoryPerson } from '@/features/people/types';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 import { MutualFriends } from './MutualFriends';
 
@@ -38,7 +38,7 @@ export const SuggestionCard = memo(function SuggestionCard({ person }: Suggestio
         }}
       />
 
-      <Avatar initials={initialsOf(user)} name={name} imageUrl={user.avatarUrl} size="lg" />
+      <UserAvatar user={user} size="lg" />
       <p className="text-on-surface mt-3 w-full truncate text-[15px] font-bold">{name}</p>
       <p className="text-on-surface-variant w-full truncate text-[13px]">{handleOf(user)}</p>
 

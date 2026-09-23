@@ -1,5 +1,6 @@
 import type { AppInfoResponse } from '@shared/ipc-types';
 import {
+  Archive,
   Bell,
   KeyRound,
   MessageSquareText,
@@ -19,10 +20,11 @@ import { ChangePasswordSettings } from './components/ChangePasswordSettings';
 import { FeedbackSettings } from './components/FeedbackSettings';
 import { AlertsSummary, NotificationSettings } from './components/NotificationSettings';
 import { PrivacySettings } from './components/PrivacySettings';
+import { StoryArchiveSettings } from './components/StoryArchiveSettings';
 import { UpdatesPane } from './components/UpdatesPane';
 import { useAppInfo } from './use-app-info';
 
-type PaneGroup = 'Preferences' | 'Account' | 'About';
+type PaneGroup = 'Preferences' | 'Account' | 'Your activity' | 'About';
 
 interface SettingsPane {
   slug: string;
@@ -88,6 +90,15 @@ const PANES: readonly SettingsPane[] = [
     render: () => <ChangePasswordSettings />,
   },
   {
+    slug: 'story-archive',
+    group: 'Your activity',
+    label: 'Story archive',
+    description: 'Every story you’ve posted, kept after its 24 hours. Only you can see them.',
+    icon: Archive,
+    keywords: 'stories story archive history expired viewers seen by views delete photos',
+    render: () => <StoryArchiveSettings />,
+  },
+  {
     slug: 'updates',
     group: 'About',
     label: 'Updates',
@@ -107,7 +118,7 @@ const PANES: readonly SettingsPane[] = [
   },
 ];
 
-const GROUPS: readonly PaneGroup[] = ['Preferences', 'Account', 'About'];
+const GROUPS: readonly PaneGroup[] = ['Preferences', 'Account', 'Your activity', 'About'];
 
 const DEFAULT_PANE = 'appearance';
 

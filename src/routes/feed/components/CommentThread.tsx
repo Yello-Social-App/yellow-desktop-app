@@ -1,7 +1,7 @@
 import { SendHorizonal, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { useCurrentUser } from '@/features/auth/hooks';
@@ -16,7 +16,7 @@ import { useCommentsStore } from '@/features/comments/store';
 import { cn } from '@/lib/cn';
 import { handleOf } from '@/lib/user-display';
 import type { Post } from '@/features/feed/types';
-import { displayName, initialsOf } from '@/lib/user-display';
+import { displayName } from '@/lib/user-display';
 
 import { CommentRow } from './CommentRow';
 
@@ -215,14 +215,7 @@ export function CommentThread({ post, onCommentCountChange, loadAll = false }: C
       )}
 
       <form className="gap-sm flex items-start" onSubmit={handleSubmit}>
-        {viewer !== null && (
-          <Avatar
-            initials={initialsOf(viewer)}
-            name={displayName(viewer)}
-            imageUrl={viewer.avatarUrl}
-            size="sm"
-          />
-        )}
+        {viewer !== null && <UserAvatar user={viewer} size="sm" />}
         <div className="gap-xs flex min-w-0 flex-1 flex-col">
           <label className="sr-only" htmlFor={`comment-${post.id}`}>
             {thread.replyTo === null ? 'Write a comment' : 'Write a reply'}

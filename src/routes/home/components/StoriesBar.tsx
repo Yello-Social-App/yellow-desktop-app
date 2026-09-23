@@ -1,34 +1,38 @@
-import { Plus } from 'lucide-react';
+import { ChevronRight, Plus, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { useCurrentUser } from '@/features/auth/hooks';
+import { useStoriesRow } from '@/features/stories/hooks';
 import { useStoriesStore, type Origin } from '@/features/stories/store';
+import type { StoryRing } from '@/features/stories/types';
 import { cn } from '@/lib/cn';
 import { displayName, initialsOf } from '@/lib/user-display';
 
 import { StoryComposer } from './StoryComposer';
-import { StoryViewer } from './StoryViewer';
+
+/** The ring's box, so the viewer can grow out of exactly where it was tapped. */
+function originOf(element: HTMLElement): Origin {
+  const rect = element.getBoundingClientRect();
+  return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+}
+
+/** Rings in the order the viewer walks them: yours first, then everyone else's. */
+function sequenceOf(mine: StoryRing | null, rings: readonly StoryRing[]): string[] {
+  return [...(mine === null ? [] : [mine.author.id]), ...rings.map((ring) => ring.author.id)];
+}
 
 /**
  * The row of story rings across the top of Home. Yours first, with a "+"
- * to add; unseen rings wear the gradient, seen ones a hairline.
+ * to add; unwatched rings wear the gradient, watched ones a hairline. The
+ * viewer itself is mounted once by the app shell, so a profile can open it too.
  */
 export function StoriesBar() {
   const user = useCurrentUser();
-  const stories = useStoriesStore((state) => state.stories);
-  const mine = useStoriesStore((state) => state.mine);
-  const openId = useStoriesStore((state) => state.openId);
+  const { mine, rings, status, error, hasMore, isLoadingMore, loadMore, reload } = useStoriesRow();
   const open = useStoriesStore((state) => state.open);
   const [isComposing, setIsComposing] = useState(false);
-
-  const ordered = [...stories].sort((a, b) => Number(a.isSeen) - Number(b.isSeen));
-
-  /** The ring's box, so the viewer can grow out of exactly where it was tapped. */
-  const originOf = (element: HTMLElement): Origin => {
-    const rect = element.getBoundingClientRect();
-    return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
-  };
+  const sequence = sequenceOf(mine, rings);
 
   return (
     <div>
@@ -43,10 +47,10 @@ export function StoriesBar() {
                   if (mine === null) {
                     setIsComposing(true);
                   } else {
-                    open(mine.id, originOf(event.currentTarget));
+                    open(sequence, originOf(event.currentTarget));
                   }
                 }}
-                className={cn('block rounded-full p-0.5', mine === null ? '' : 'story-ring')}
+                className={cn('flex rounded-full p-0.5', mine === null ? '' : 'story-ring')}
                 title={mine === null ? 'Add to your story' : 'Your story'}
               >
                 <Avatar
@@ -74,40 +78,91 @@ export function StoriesBar() {
           </li>
         )}
 
-        {ordered.map((story) => (
-          <li key={story.id} className="flex w-[68px] shrink-0 flex-col items-center gap-1.5">
+        {status === 'loading' &&
+          rings.length === 0 &&
+          [0, 1, 2, 3].map((index) => (
+            <li
+              key={index}
+              aria-hidden
+              className="flex w-[68px] shrink-0 flex-col items-center gap-1.5"
+            >
+              <span className="bg-surface-container-high size-[60px] animate-pulse rounded-full" />
+              <span className="bg-surface-container-high h-2.5 w-12 animate-pulse rounded-full" />
+            </li>
+          ))}
+
+        {rings.map((ring) => (
+          <li key={ring.author.id} className="flex w-[68px] shrink-0 flex-col items-center gap-1.5">
             <button
               type="button"
               aria-haspopup="dialog"
               onClick={(event) => {
-                open(story.id, originOf(event.currentTarget));
+                open(
+                  sequence.slice(sequence.indexOf(ring.author.id)),
+                  originOf(event.currentTarget),
+                );
               }}
               className={cn(
-                'rounded-full p-0.5 transition-transform duration-200 hover:scale-105 active:scale-90',
-                story.isSeen ? 'story-ring-seen' : 'story-ring',
+                'flex rounded-full p-0.5 transition-transform duration-200 hover:scale-105 active:scale-90',
+                ring.hasUnseen ? 'story-ring' : 'story-ring-seen',
               )}
-              title={`${displayName(story.author)}'s story`}
+              title={`${displayName(ring.author)}'s story`}
             >
               <Avatar
-                initials={initialsOf(story.author)}
-                name={displayName(story.author)}
-                imageUrl={story.author.avatarUrl}
+                initials={initialsOf(ring.author)}
+                name={displayName(ring.author)}
+                imageUrl={ring.author.avatarUrl}
                 size="lg"
               />
             </button>
             <span
               className={cn(
                 'w-full truncate text-center text-[11px]',
-                story.isSeen ? 'text-on-surface-variant' : 'text-on-surface',
+                ring.hasUnseen ? 'text-on-surface' : 'text-on-surface-variant',
               )}
             >
-              {story.author.username}
+              {ring.author.username}
             </span>
           </li>
         ))}
+
+        {status === 'ready' && rings.length === 0 && (
+          <li className="text-on-surface-variant flex min-w-0 flex-col justify-center gap-0.5 pb-5 text-[12.5px]">
+            <span className="text-on-surface font-medium">No stories from friends right now</span>
+            <span>Stories from your friends show up here for 24 hours.</span>
+          </li>
+        )}
+
+        {hasMore && (
+          <li className="flex w-[68px] shrink-0 flex-col items-center gap-1.5">
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={isLoadingMore}
+              aria-label="More stories"
+              className="border-outline-variant text-on-surface-variant hover:bg-surface-container-high transition-tone grid size-[60px] place-items-center rounded-full border border-dashed disabled:opacity-60"
+            >
+              <ChevronRight aria-hidden className="size-5" />
+            </button>
+            <span className="text-on-surface-variant text-[11px]">More</span>
+          </li>
+        )}
+
+        {status === 'error' && (
+          <li className="flex shrink-0 items-center">
+            <button
+              type="button"
+              onClick={reload}
+              title={error ?? undefined}
+              className="text-on-surface-variant hover:text-on-surface transition-tone flex items-center gap-1.5 text-[12px]"
+            >
+              <RotateCw aria-hidden className="size-3.5" />
+              Couldn’t load stories · Retry
+            </button>
+          </li>
+        )}
       </ul>
 
-      {openId !== null && <StoryViewer />}
       {isComposing && (
         <StoryComposer
           onClose={() => {
@@ -124,19 +179,18 @@ const CHIP_FACES = 3;
 
 /**
  * The stories row folded into a chip, for the compact frame: the first few
- * faces stacked, unseen first, beside the word "stories". Opening it plays the
- * first story in the same viewer the full row uses, and the viewer's own
- * next/previous walks the rest. With nothing to watch, it offers to post one.
+ * faces stacked, unwatched first, beside the word "stories". Opening it plays
+ * from the first ring in the same viewer the full row uses, and the viewer's
+ * own next/previous walks the rest. With nothing to watch, it offers to post one.
  */
 export function StoriesChip() {
-  const stories = useStoriesStore((state) => state.stories);
-  const openId = useStoriesStore((state) => state.openId);
+  const { mine, rings } = useStoriesRow();
   const open = useStoriesStore((state) => state.open);
   const [isComposing, setIsComposing] = useState(false);
 
-  const ordered = [...stories].sort((a, b) => Number(a.isSeen) - Number(b.isSeen));
-  const [first] = ordered;
-  const unseen = ordered.filter((story) => !story.isSeen).length;
+  const ordered = mine === null ? rings : [mine, ...rings];
+  const unseen = rings.filter((ring) => ring.hasUnseen).length;
+  const isEmpty = ordered.length === 0;
 
   return (
     <>
@@ -144,36 +198,40 @@ export function StoriesChip() {
         type="button"
         aria-haspopup="dialog"
         aria-label={
-          first === undefined
+          isEmpty
             ? 'Add to your story'
             : `Stories, ${String(unseen)} new of ${String(ordered.length)}`
         }
         onClick={(event) => {
-          if (first === undefined) {
+          if (isEmpty) {
             setIsComposing(true);
             return;
           }
-          const rect = event.currentTarget.getBoundingClientRect();
-          open(first.id, { x: rect.left, y: rect.top, width: rect.width, height: rect.height });
+          // Friends' unwatched rings first; yours only when there is nothing else.
+          const sequence = sequenceOf(null, rings);
+          open(
+            sequence.length > 0 ? sequence : sequenceOf(mine, []),
+            originOf(event.currentTarget),
+          );
         }}
         className="text-outline hover:text-on-surface-variant transition-tone flex items-center gap-2 pb-2.5 text-[12.5px]"
       >
-        {first === undefined ? (
+        {isEmpty ? (
           <Plus aria-hidden className="size-3.5" />
         ) : (
           <span className="flex -space-x-1.5">
-            {ordered.slice(0, CHIP_FACES).map((story) => (
+            {ordered.slice(0, CHIP_FACES).map((ring) => (
               <span
-                key={story.id}
+                key={ring.author.id}
                 className={cn(
                   'ring-background rounded-full ring-2',
-                  !story.isSeen && 'outline-primary outline-1',
+                  ring.hasUnseen && 'outline-primary outline-1',
                 )}
               >
                 <Avatar
-                  initials={initialsOf(story.author)}
-                  name={displayName(story.author)}
-                  imageUrl={story.author.avatarUrl}
+                  initials={initialsOf(ring.author)}
+                  name={displayName(ring.author)}
+                  imageUrl={ring.author.avatarUrl}
                   size="xs"
                 />
               </span>
@@ -183,7 +241,6 @@ export function StoriesChip() {
         stories
       </button>
 
-      {openId !== null && <StoryViewer />}
       {isComposing && (
         <StoryComposer
           onClose={() => {

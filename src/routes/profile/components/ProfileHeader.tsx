@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import type { User } from '@shared/ipc-types';
 
 import { Avatar } from '@/components/ui/Avatar';
+import { cn } from '@/lib/cn';
 import { calendarDay } from '@/lib/relative-time';
 import { displayName, handleOf, initialsOf } from '@/lib/user-display';
 
@@ -19,6 +20,8 @@ interface ProfileHeaderProps {
    * the way Discord shows a blocked profile.
    */
   isBlocked?: boolean;
+  /** Set when they have a story you may watch: the avatar wears a ring and opens it. */
+  story?: { hasUnseen: boolean; onOpen: (origin: DOMRect) => void };
 }
 
 /**
@@ -59,22 +62,44 @@ export function ProfileHeader({
   isOnline,
   action,
   isBlocked = false,
+  story,
 }: ProfileHeaderProps) {
+  const avatar = (
+    <Avatar
+      initials={initialsOf(user)}
+      name={displayName(user)}
+      imageUrl={user.avatarUrl}
+      size="xl"
+      isOnline={isBlocked ? undefined : isOnline}
+    />
+  );
+
   return (
     <header className="border-outline-variant border-b">
       <Cover url={isBlocked ? undefined : user.coverUrl} />
 
       <div className="px-lg pb-lg">
+        {/* The avatar overlaps the cover, which is positioned; the avatar's
+            wrapper is positioned too, or the cover paints over its top half. */}
         <div className="gap-md -mt-12 flex items-end justify-between">
-          <div className="ring-background rounded-full ring-4">
-            <Avatar
-              initials={initialsOf(user)}
-              name={displayName(user)}
-              imageUrl={user.avatarUrl}
-              size="xl"
-              isOnline={isBlocked ? undefined : isOnline}
-            />
-          </div>
+          {story === undefined || isBlocked ? (
+            <div className="ring-background relative rounded-full ring-4">{avatar}</div>
+          ) : (
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              title={`${displayName(user)}'s story`}
+              onClick={(event) => {
+                story.onOpen(event.currentTarget.getBoundingClientRect());
+              }}
+              className={cn(
+                'ring-background relative flex rounded-full p-1 ring-4 transition-transform hover:scale-[1.03]',
+                story.hasUnseen ? 'story-ring' : 'story-ring-seen',
+              )}
+            >
+              {avatar}
+            </button>
+          )}
           <div className="pb-1">{action}</div>
         </div>
 

@@ -40,6 +40,8 @@ export const ENDPOINTS = {
     search: `${base}/users/search`,
     byId: (userId: string) => `${base}/users/${seg(userId)}`,
     posts: (userId: string) => `${base}/users/${seg(userId)}/posts`,
+    /** Their active stories that the caller may see; 404 when either blocked the other. */
+    stories: (userId: string) => `${base}/users/${seg(userId)}/stories`,
     block: (userId: string) => `${base}/users/${seg(userId)}/block`,
     /** Mute (POST) and unmute (DELETE); both idempotent, both 204. */
     mute: (userId: string) => `${base}/users/${seg(userId)}/mute`,
@@ -59,6 +61,19 @@ export const ENDPOINTS = {
     hide: (postId: string) => `${base}/posts/${seg(postId)}/hide`,
     /** A toggle: saves, or removes the save; answers with the state after. */
     save: (postId: string) => `${base}/posts/${seg(postId)}/save`,
+  },
+  stories: {
+    /** POST: JSON for a text story, multipart with one `image` for a photo. */
+    create: `${base}/stories`,
+    feed: `${base}/stories/feed`,
+    mine: `${base}/stories/me`,
+    /** The owner's own, expired ones included. */
+    archive: `${base}/stories/archive`,
+    /** GET reads one; DELETE removes it (owner only), from the ring and the archive. */
+    byId: (storyId: string) => `${base}/stories/${seg(storyId)}`,
+    view: (storyId: string) => `${base}/stories/${seg(storyId)}/view`,
+    viewers: (storyId: string) => `${base}/stories/${seg(storyId)}/viewers`,
+    replies: (storyId: string) => `${base}/stories/${seg(storyId)}/replies`,
   },
   feedback: {
     create: `${base}/feedback`,

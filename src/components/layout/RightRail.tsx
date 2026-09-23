@@ -2,7 +2,7 @@ import { FolderKanban, SquarePen } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useFriendList, useFriendsLoader } from '@/features/friends/hooks';
 import { useConversationRows, type ConversationRow } from '@/features/messages/hooks';
@@ -10,7 +10,7 @@ import { useMessagesStore } from '@/features/messages/store';
 import { useProjectList } from '@/features/showcase/hooks';
 import { cn } from '@/lib/cn';
 import { relativeTime, shortRelativeTime } from '@/lib/relative-time';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 import { GroupAvatar } from '@/routes/messages/components/GroupAvatar';
 import { NewChatDialog } from '@/routes/messages/components/NewChatDialog';
 import { useLayoutStore, type CompactPanelTab } from '@/stores/layout-store';
@@ -152,13 +152,7 @@ function ChatRow({ row, isRoomy }: { row: ConversationRow; isRoomy: boolean }) {
       {row.conversation.type === 'GROUP' || peer === undefined ? (
         <GroupAvatar row={row} size={isRoomy ? 'md' : 'sm'} />
       ) : (
-        <Avatar
-          initials={initialsOf(peer)}
-          name={displayName(peer)}
-          imageUrl={peer.avatarUrl}
-          size={isRoomy ? 'md' : 'sm'}
-          isOnline={row.isOnline || undefined}
-        />
+        <UserAvatar user={peer} size={isRoomy ? 'md' : 'sm'} isOnline={row.isOnline || undefined} />
       )}
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span
@@ -231,12 +225,7 @@ function QuietRail() {
       {user !== null && (
         <section className="bg-surface-container-lowest border-outline-variant flex flex-col gap-2.5 rounded-[14px] border p-3.5">
           <div className="flex items-center gap-[11px]">
-            <Avatar
-              initials={initialsOf(user)}
-              name={displayName(user)}
-              imageUrl={user.avatarUrl}
-              size="md"
-            />
+            <UserAvatar user={user} size="md" />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-on-surface truncate text-[15px] font-semibold">
                 {displayName(user)}

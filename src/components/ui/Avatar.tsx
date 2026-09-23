@@ -27,8 +27,24 @@ interface AvatarProps {
   size?: AvatarSize;
   /** A presence dot: green when true, nothing when undefined. */
   isOnline?: boolean | undefined;
+  /**
+   * A story ring: the accent when there is a story not yet watched, a quiet
+   * hairline once all are watched, nothing when undefined. Drawn as an outline
+   * with a transparent gap, so it never changes the avatar's box or needs to
+   * know the colour behind it.
+   */
+  storyRing?: 'unseen' | 'seen' | undefined;
   className?: string;
 }
+
+/** The ring's weight and gap, scaled so a 24px avatar is not drowned by it. */
+const STORY_RING_CLASSES: Record<AvatarSize, string> = {
+  xs: 'outline-[1.5px] outline-offset-1',
+  sm: 'outline-2 outline-offset-[1.5px]',
+  md: 'outline-2 outline-offset-2',
+  lg: 'outline-2 outline-offset-2',
+  xl: 'outline-3 outline-offset-3',
+};
 
 /**
  * Shows the profile image when the API has one, and falls back to initials —
@@ -41,6 +57,7 @@ export function Avatar({
   imageUrl,
   size = 'md',
   isOnline,
+  storyRing,
   className,
 }: AvatarProps) {
   // Track the URL that failed rather than a bare flag, so a new imageUrl retries
@@ -52,12 +69,15 @@ export function Avatar({
     <span className={cn('relative inline-flex shrink-0', className)}>
       <span
         title={name}
-        aria-label={name}
+        aria-label={storyRing === 'unseen' ? `${name}, has a new story` : name}
         role="img"
         className={cn(
           'bg-surface-container-high text-on-surface-variant font-label inline-flex items-center justify-center',
           'ring-outline-strong overflow-hidden rounded-full uppercase ring-1',
           SIZE_CLASSES[size],
+          storyRing !== undefined && STORY_RING_CLASSES[size],
+          storyRing === 'unseen' && 'outline-primary',
+          storyRing === 'seen' && 'outline-outline-strong',
         )}
       >
         {showImage ? (

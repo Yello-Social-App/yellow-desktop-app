@@ -452,7 +452,7 @@ export const stagedImageSchema = z.object({
  * What the pick is for. A post takes several; an avatar or a cover is one
  * image, so the picker opens single-select with a title that says which.
  */
-export const IMAGE_PURPOSES = ['post', 'avatar', 'cover'] as const;
+export const IMAGE_PURPOSES = ['post', 'avatar', 'cover', 'story'] as const;
 
 export const stageImagesRequestSchema = z
   .object({
@@ -875,6 +875,19 @@ export const groupInviteCardSchema = z.object({
   photoUrlExpiresAt: nullableTimestamp,
 });
 
+/**
+ * A story reply: an ordinary DM that names the story it answers. Chat stores
+ * the reference only — never the story's text or image — so the bubble loads
+ * its preview from the API and says "unavailable" once that answers 404.
+ */
+export const storyReplySchema = z.object({
+  storyId: z.string().min(1).max(64),
+  storyAuthorId: z.string().min(1).max(64),
+  /** Text rather than the enum, so a type added later cannot void the message (A10). */
+  storyType: z.string().max(16),
+  storyExpiresAt: timestamp,
+});
+
 export const chatMessageSchema = z.object({
   id: z.string().min(1).max(64),
   conversationId: z.string().min(1).max(64),
@@ -895,6 +908,8 @@ export const chatMessageSchema = z.object({
     .transform((value) => value ?? []),
   reactions: chatReactionListSchema,
   groupInvite: groupInviteCardSchema.nullish().transform((value) => value ?? null),
+  /** Set when this line replied to a story; null for every other message and a tombstone. */
+  storyReply: storyReplySchema.nullish().transform((value) => value ?? null),
   createdAt: timestamp,
   editedAt: nullableTimestamp,
   /** Set on a tombstone: the line stays in history as "Message deleted". */
@@ -1311,6 +1326,7 @@ export type ChatAttachment = z.infer<typeof chatAttachmentSchema>;
 export type ChatReaction = z.infer<typeof chatReactionSchema>;
 export type ReplyPreview = z.infer<typeof replyPreviewSchema>;
 export type GroupInviteCard = z.infer<typeof groupInviteCardSchema>;
+export type StoryReply = z.infer<typeof storyReplySchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;
 export type ConversationSummary = z.infer<typeof conversationSummarySchema>;
@@ -2023,6 +2039,189 @@ export type ListProjectTechRequest = z.infer<typeof listProjectTechRequestSchema
 export type ProjectIdRequest = z.infer<typeof projectIdRequestSchema>;
 export type PublishProjectRequest = z.infer<typeof publishProjectRequestSchema>;
 
+/* -- stories -- */
+
+/**
+ * 24-hour stories. One `Story` is one slide; the feed groups them by author
+ * into rings. Every request is the token owner's own — no user id rides in a
+ * body, and the one route that takes a user id reads *their* stories under the
+ * server's visibility rules (OWASP A01).
+ */
+export const STORY_TYPES = ['TEXT', 'IMAGE'] as const;
+export const STORY_VISIBILITIES = ['FRIENDS', 'PUBLIC'] as const;
+/**
+ * Backdrop keys, not colours: the server never stores CSS. Held to this closed
+ * set in both directions, because the value lands in a `className` (A05).
+ */
+export const STORY_BACKGROUNDS = [
+  'cover-0',
+  'cover-1',
+  'cover-2',
+  'cover-3',
+  'cover-4',
+  'cover-5',
+  'cover-6',
+  'cover-7',
+] as const;
+export const STORY_TEXT_MAX = 140;
+export const STORY_REPLY_MAX = 4000;
+/** `/stories/me` and `/users/{id}/stories` are plain arrays of at most this many. */
+export const STORY_LIST_MAX = 100;
+/** The server caps every stories page at 50. */
+export const STORY_PAGE_SIZE_MAX = 50;
+/** Above this the server answers INVALID_IMAGE; the picker refuses it first. */
+export const STORY_IMAGE_MAX_PIXELS = 16_000_000;
+/** The reply's idempotency key: the API's own alphabet and length. */
+export const STORY_CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+export type StoryType = (typeof STORY_TYPES)[number];
+export type StoryVisibility = (typeof STORY_VISIBILITIES)[number];
+export type StoryBackground = (typeof STORY_BACKGROUNDS)[number];
+
+function isStoryBackground(value: unknown): value is StoryBackground {
+  return typeof value === 'string' && (STORY_BACKGROUNDS as readonly string[]).includes(value);
+}
+
+const storyId = z.string().min(1).max(64);
+
+export const storyImageSchema = z.object({
+  /** Signed for 15 minutes on the private bucket's host; https only, or null. */
+  url: mediaUrl,
+  /** The stored size, for layout before the image loads. */
+  width: nonNegativeCount,
+  height: nonNegativeCount,
+  urlExpiresAt: nullableTimestamp,
+});
+
+export const storySchema = z.object({
+  id: storyId,
+  author: authorSchema,
+  type: z.enum(STORY_TYPES),
+  /** TEXT: the story. IMAGE: an optional caption. Untrusted — rendered as text only. */
+  text: optionalText(STORY_TEXT_MAX * 4),
+  /** TEXT only. An unknown key reads as none, and the app falls back to its first backdrop. */
+  background: z
+    .string()
+    .max(16)
+    .nullish()
+    .transform((value) => (isStoryBackground(value) ? value : null)),
+  image: storyImageSchema.nullish().transform((value) => value ?? null),
+  /** An unknown value reads as FRIENDS, the narrower audience. */
+  visibility: z
+    .string()
+    .max(16)
+    .nullish()
+    .transform((value): StoryVisibility => (value === 'PUBLIC' ? 'PUBLIC' : 'FRIENDS')),
+  createdAt: timestamp,
+  /** Always createdAt + 24h, set by the server. */
+  expiresAt: timestamp,
+  /** True only in the owner's own archive; nobody else is sent an expired story. */
+  isExpired: flag,
+  isOwner: flag,
+  /** Whether the viewer watched it; always true on their own. */
+  isSeen: flag,
+  /** Distinct viewers — the owner's only, null for everyone else. Outlives the name list. */
+  viewCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .nullish()
+    .transform((value) => value ?? null),
+});
+
+/** One ring: an author and their active stories, oldest first (the play order). */
+export const storyFeedGroupSchema = z.object({
+  author: authorSchema,
+  stories: rowsOf(storySchema, STORY_LIST_MAX),
+  hasUnseen: flag,
+  latestAt: timestamp,
+});
+
+export const storyViewerSchema = z.object({
+  user: authorSchema,
+  viewedAt: timestamp,
+});
+
+export const storyFeedPageSchema = lenientPageOf(storyFeedGroupSchema);
+export const storyPageSchema = lenientPageOf(storySchema);
+export const storyViewerPageSchema = lenientPageOf(storyViewerSchema);
+/** The wire answer of `/stories/me` and `/users/{id}/stories`: a bare array. */
+export const storyRowsSchema = rowsOf(storySchema, STORY_LIST_MAX);
+/** What crosses to the renderer: the rows, wrapped. */
+export const storyListSchema = z.object({
+  stories: z.array(storySchema).max(STORY_LIST_MAX),
+});
+export const storyResponseSchema = z.object({ story: storySchema });
+
+/** `202 Accepted`: handed to chat, not yet delivered — the DM arrives over the socket. */
+export const storyReplyAcceptedSchema = z.object({
+  storyId,
+  /** The story's author: the other side of the DM. */
+  recipientId: z.string().min(1).max(64),
+  clientId: z.string().min(1).max(64),
+});
+
+export const storyFeedRequestSchema = z.object({
+  page: pageNumber,
+  size: z.number().int().min(1).max(STORY_PAGE_SIZE_MAX),
+});
+
+export const storyIdRequestSchema = z.object({ storyId });
+
+export const userStoriesRequestSchema = z.object({ userId: z.string().min(1).max(64) });
+
+export const storyViewersRequestSchema = storyFeedRequestSchema.extend({ storyId });
+
+export const storyArchiveRequestSchema = storyFeedRequestSchema.extend({
+  type: z.enum(STORY_TYPES).optional(),
+});
+
+/**
+ * A text story is JSON; a photo story is one staged image, sent as multipart
+ * by the main process — the renderer hands back the staging token, never a
+ * path or the bytes (A01). `expiresAt`, the author and the counts are the
+ * server's, and are not fields here at all.
+ */
+export const createStoryRequestSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('TEXT'),
+    text: z.string().trim().min(1).max(STORY_TEXT_MAX),
+    background: z.enum(STORY_BACKGROUNDS),
+    visibility: z.enum(STORY_VISIBILITIES),
+  }),
+  z.object({
+    type: z.literal('IMAGE'),
+    imageToken: z.string().min(1).max(64),
+    text: z.string().trim().max(STORY_TEXT_MAX).optional(),
+    visibility: z.enum(STORY_VISIBILITIES),
+  }),
+]);
+
+export const replyToStoryRequestSchema = z.object({
+  storyId,
+  text: z.string().trim().min(1).max(STORY_REPLY_MAX),
+  /** Generated per reply; a retry resends the same one, so it is delivered once. */
+  clientId: z.string().regex(STORY_CLIENT_ID_PATTERN),
+});
+
+export type StoryImage = z.infer<typeof storyImageSchema>;
+export type Story = z.infer<typeof storySchema>;
+export type StoryFeedGroup = z.infer<typeof storyFeedGroupSchema>;
+export type StoryViewer = z.infer<typeof storyViewerSchema>;
+export type StoryFeedPage = z.infer<typeof storyFeedPageSchema>;
+export type StoryPage = z.infer<typeof storyPageSchema>;
+export type StoryViewerPage = z.infer<typeof storyViewerPageSchema>;
+export type StoryList = z.infer<typeof storyListSchema>;
+export type StoryResponse = z.infer<typeof storyResponseSchema>;
+export type StoryReplyAccepted = z.infer<typeof storyReplyAcceptedSchema>;
+export type StoryFeedRequest = z.infer<typeof storyFeedRequestSchema>;
+export type StoryIdRequest = z.infer<typeof storyIdRequestSchema>;
+export type UserStoriesRequest = z.infer<typeof userStoriesRequestSchema>;
+export type StoryViewersRequest = z.infer<typeof storyViewersRequestSchema>;
+export type StoryArchiveRequest = z.infer<typeof storyArchiveRequestSchema>;
+export type CreateStoryRequest = z.infer<typeof createStoryRequestSchema>;
+export type ReplyToStoryRequest = z.infer<typeof replyToStoryRequestSchema>;
+
 /* -- feedback & safety -- */
 
 /**
@@ -2444,6 +2643,18 @@ export interface YelloBridge {
     publish(request: PublishProjectRequest): Promise<IpcResult<ProjectResponse>>;
     like(request: ProjectIdRequest): Promise<IpcResult<ProjectLike>>;
     unlike(request: ProjectIdRequest): Promise<IpcResult<ProjectLike>>;
+  };
+  readonly stories: {
+    feed(request: StoryFeedRequest): Promise<IpcResult<StoryFeedPage>>;
+    mine(): Promise<IpcResult<StoryList>>;
+    ofUser(request: UserStoriesRequest): Promise<IpcResult<StoryList>>;
+    get(request: StoryIdRequest): Promise<IpcResult<StoryResponse>>;
+    create(request: CreateStoryRequest): Promise<IpcResult<StoryResponse>>;
+    markSeen(request: StoryIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    viewers(request: StoryViewersRequest): Promise<IpcResult<StoryViewerPage>>;
+    archive(request: StoryArchiveRequest): Promise<IpcResult<StoryPage>>;
+    remove(request: StoryIdRequest): Promise<IpcResult<DeletedResponse>>;
+    reply(request: ReplyToStoryRequest): Promise<IpcResult<StoryReplyAccepted>>;
   };
   readonly feedback: {
     submit(request: SubmitFeedbackRequest): Promise<IpcResult<FeedbackResponse>>;

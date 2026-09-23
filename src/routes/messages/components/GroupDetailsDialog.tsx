@@ -2,7 +2,7 @@ import { CHAT_GROUP_SIZE_LIMIT, CHAT_GROUP_TITLE_MAX, type Participant } from '@
 import { Camera, Crown, LogOut, Search, ShieldCheck, UserPlus } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 
-import { Avatar } from '@/components/ui/Avatar';
+import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -12,7 +12,7 @@ import { useMessagesStore } from '@/features/messages/store';
 import { groupRights } from '@/features/messages/types';
 import { useUsers } from '@/features/users/hooks';
 import { cn } from '@/lib/cn';
-import { displayName, handleOf, initialsOf } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 import { GroupAvatar } from './GroupAvatar';
 
@@ -296,7 +296,7 @@ function MemberRow({
       {person === undefined ? (
         <span className="bg-surface-container size-8 shrink-0 rounded-full" />
       ) : (
-        <Avatar initials={initialsOf(person)} name={name} imageUrl={person.avatarUrl} size="sm" />
+        <UserAvatar user={person} size="sm" />
       )}
       <span className="min-w-0 flex-1">
         <span className="text-on-surface flex items-center gap-1.5 truncate text-[14px] font-semibold">
@@ -422,12 +422,7 @@ function AddPeople({ conversationId, memberIds, room, onDone }: AddPeopleProps) 
                   aria-label={displayName(user)}
                   className="accent-primary-container size-4 cursor-pointer"
                 />
-                <Avatar
-                  initials={initialsOf(user)}
-                  name={displayName(user)}
-                  imageUrl={user.avatarUrl}
-                  size="xs"
-                />
+                <UserAvatar user={user} size="xs" />
                 <span className="text-on-surface truncate text-[14px]">{displayName(user)}</span>
               </label>
             </li>

@@ -130,6 +130,19 @@ import type {
   ShareLinkCopiedResponse,
   StageImagesRequest,
   StageImagesResponse,
+  CreateStoryRequest,
+  ReplyToStoryRequest,
+  StoryArchiveRequest,
+  StoryFeedPage,
+  StoryFeedRequest,
+  StoryIdRequest,
+  StoryList,
+  StoryPage,
+  StoryReplyAccepted,
+  StoryResponse,
+  StoryViewerPage,
+  StoryViewersRequest,
+  UserStoriesRequest,
   SubmitFeedbackRequest,
   SubmitReportRequest,
   TechCountList,
@@ -376,6 +389,25 @@ const bridge: YelloBridge = {
     like: (request: ProjectIdRequest) => invoke<ProjectLike>(IPC_CHANNELS.SHOWCASE_LIKE, request),
     unlike: (request: ProjectIdRequest) =>
       invoke<ProjectLike>(IPC_CHANNELS.SHOWCASE_UNLIKE, request),
+  },
+  stories: {
+    feed: (request: StoryFeedRequest) => invoke<StoryFeedPage>(IPC_CHANNELS.STORIES_FEED, request),
+    mine: () => invoke<StoryList>(IPC_CHANNELS.STORIES_MINE),
+    ofUser: (request: UserStoriesRequest) =>
+      invoke<StoryList>(IPC_CHANNELS.STORIES_OF_USER, request),
+    get: (request: StoryIdRequest) => invoke<StoryResponse>(IPC_CHANNELS.STORIES_GET, request),
+    create: (request: CreateStoryRequest) =>
+      invoke<StoryResponse>(IPC_CHANNELS.STORIES_CREATE, request),
+    markSeen: (request: StoryIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.STORIES_MARK_SEEN, request),
+    viewers: (request: StoryViewersRequest) =>
+      invoke<StoryViewerPage>(IPC_CHANNELS.STORIES_VIEWERS, request),
+    archive: (request: StoryArchiveRequest) =>
+      invoke<StoryPage>(IPC_CHANNELS.STORIES_ARCHIVE, request),
+    remove: (request: StoryIdRequest) =>
+      invoke<DeletedResponse>(IPC_CHANNELS.STORIES_DELETE, request),
+    reply: (request: ReplyToStoryRequest) =>
+      invoke<StoryReplyAccepted>(IPC_CHANNELS.STORIES_REPLY, request),
   },
   feedback: {
     submit: (request: SubmitFeedbackRequest) =>
