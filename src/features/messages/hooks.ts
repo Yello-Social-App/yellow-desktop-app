@@ -14,6 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import { useNavigate } from 'react-router-dom';
 
 import { useCurrentUser } from '@/features/auth/hooks';
+import { useFriendsStore } from '@/features/friends/store';
+import { LOCAL_BLOCKED_STATUS } from '@/features/friends/types';
 import { useUsers } from '@/features/users/hooks';
 import { TYPING_IDLE_MS } from '@/lib/constants';
 import { onChatEvent } from '@/lib/ipc';
@@ -632,4 +634,36 @@ export function useFileDrop(): FileDrop {
   );
 
   return { isDragging, refusal, handlers };
+}
+
+/**
+ * Why a direct chat cannot be written to, the way Messenger splits it:
+ *   - `you-blocked`: the viewer blocked the other person, which the app knows
+ *     from the friends store, so it can say so and offer Unblock;
+ *   - `unreachable`: the service refused a send for a block the viewer did not
+ *     make. Who blocked whom is never exposed, so neither is it here.
+ * Group chats are never blocked as a whole, so they answer null.
+ */
+export type DirectBlock = 'you-blocked' | 'unreachable' | null;
+
+export function useDirectBlock(row: ConversationRow): DirectBlock {
+  const conversationId = row.conversation.id;
+  const peerId = row.conversation.type === 'DIRECT' ? row.peers[0]?.id : undefined;
+  const youBlocked = useFriendsStore(
+    (state) =>
+      peerId !== undefined &&
+      (state.statuses[peerId] === LOCAL_BLOCKED_STATUS ||
+        state.lists.blocked.entries.some((entry) => entry.user.id === peerId)),
+  );
+  const isRefused = useMessagesStore((state) =>
+    state.refusedConversationIds.includes(conversationId),
+  );
+
+  if (peerId === undefined) {
+    return null;
+  }
+  if (youBlocked) {
+    return 'you-blocked';
+  }
+  return isRefused ? 'unreachable' : null;
 }

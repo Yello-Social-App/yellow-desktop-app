@@ -13,6 +13,12 @@ interface ProfileHeaderProps {
   isOnline?: boolean;
   /** What sits on the right of the avatar row: relationship controls, elsewhere. */
   action?: ReactNode;
+  /**
+   * Someone the viewer blocked: who they are stays (avatar, name, handle), and
+   * what they wrote about themselves goes — cover, bio, stats and presence —
+   * the way Discord shows a blocked profile.
+   */
+  isBlocked?: boolean;
 }
 
 /**
@@ -52,10 +58,11 @@ export function ProfileHeader({
   friendCount,
   isOnline,
   action,
+  isBlocked = false,
 }: ProfileHeaderProps) {
   return (
     <header className="border-outline-variant border-b">
-      <Cover url={user.coverUrl} />
+      <Cover url={isBlocked ? undefined : user.coverUrl} />
 
       <div className="px-lg pb-lg">
         <div className="gap-md -mt-12 flex items-end justify-between">
@@ -65,7 +72,7 @@ export function ProfileHeader({
               name={displayName(user)}
               imageUrl={user.avatarUrl}
               size="xl"
-              isOnline={isOnline}
+              isOnline={isBlocked ? undefined : isOnline}
             />
           </div>
           <div className="pb-1">{action}</div>
@@ -78,13 +85,16 @@ export function ProfileHeader({
           <p className="text-on-surface-variant text-[15px]">{handleOf(user)}</p>
         </div>
 
-        {user.bio !== undefined && (
+        {!isBlocked && user.bio !== undefined && (
           <p className="text-on-surface mt-md text-[15px] leading-relaxed whitespace-pre-wrap">
             {user.bio}
           </p>
         )}
 
-        <div className="text-on-surface-variant mt-md flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
+        <div
+          hidden={isBlocked}
+          className="text-on-surface-variant mt-md flex flex-wrap gap-x-5 gap-y-1 text-[14px]"
+        >
           {user.createdAt !== undefined && (
             <span className="gap-xs flex items-center">
               <CalendarDays aria-hidden className="size-4" />

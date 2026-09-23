@@ -126,6 +126,13 @@ interface MessagesState {
   notices: Record<string, GroupNotice[]>;
   /** The open conversation the viewer just lost access to, so the page can leave it. */
   removedConversationId: string | null;
+  /**
+   * Direct chats whose last send the service refused with FORBIDDEN. In a
+   * one-to-one chat that means a block stands between the two, and the API
+   * deliberately never says who blocked whom — so this is learned from the
+   * refusal, for this session, rather than read from anywhere.
+   */
+  refusedConversationIds: readonly string[];
 
   /** Attaches to the pushed frames; returns the detach. Mount once per session. */
   subscribe: (viewerId: string) => () => void;
@@ -166,6 +173,8 @@ interface MessagesState {
   respondToInvite: (inviteId: string, accept: boolean) => Promise<string | null>;
 
   handleEvent: (event: ChatEvent) => void;
+  /** Forgets a refusal, once something says the chat can be written to again. */
+  clearRefusal: (conversationId: string) => void;
   clearError: () => void;
   acknowledgeRemoval: () => void;
 }
@@ -427,6 +436,16 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
           m.clientId === clientId ? { ...m, delivery: 'failed' } : m,
         ),
       }));
+      const conversation = get().conversations.find((item) => item.id === conversationId);
+      if (result.error.apiCode === 'FORBIDDEN' && conversation?.type === 'DIRECT') {
+        // Not an error to banner: the thread swaps its composer for a notice.
+        set((state) => ({
+          refusedConversationIds: state.refusedConversationIds.includes(conversationId)
+            ? state.refusedConversationIds
+            : [...state.refusedConversationIds, conversationId],
+        }));
+        return false;
+      }
       set({ error: result.error.message });
       return false;
     }
@@ -518,6 +537,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     isAttaching: false,
     notices: {},
     removedConversationId: null,
+    refusedConversationIds: [],
 
     subscribe: (viewerId) => {
       set({ viewerId });
@@ -546,6 +566,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
           drafts: {},
           notices: {},
           removedConversationId: null,
+          refusedConversationIds: [],
         });
       };
     },
@@ -1173,6 +1194,10 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
           if (get().threads[message.conversationId] !== undefined) {
             withThread(message.conversationId, (thread) => reconcile(thread, message));
           }
+          // A line from them got through, so nothing blocks the chat any more.
+          if (!isMine) {
+            get().clearRefusal(message.conversationId);
+          }
 
           void adopt(message.conversationId).then((conversation) => {
             if (conversation === null) {
@@ -1338,6 +1363,15 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
           return;
         }
       }
+    },
+
+    clearRefusal: (conversationId) => {
+      if (!get().refusedConversationIds.includes(conversationId)) {
+        return;
+      }
+      set((state) => ({
+        refusedConversationIds: state.refusedConversationIds.filter((id) => id !== conversationId),
+      }));
     },
 
     clearError: () => {

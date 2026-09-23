@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Spinner } from '@/components/ui/Spinner';
 import { useCurrentUser } from '@/features/auth/hooks';
+import { useFriendsLoader } from '@/features/friends/hooks';
 import {
   useActiveThread,
+  useDirectBlock,
   useFileDrop,
   useReadReceipts,
   useSocketStatus,
@@ -23,6 +25,7 @@ import { useUsers } from '@/features/users/hooks';
 import { calendarDay } from '@/lib/relative-time';
 import { displayName, initialsOf } from '@/lib/user-display';
 
+import { BlockedNotice } from './BlockedNotice';
 import { GroupAvatar } from './GroupAvatar';
 import { GroupDetailsDialog } from './GroupDetailsDialog';
 import { MessageBubble } from './MessageBubble';
@@ -52,6 +55,9 @@ export function MessageThread({ row }: MessageThreadProps) {
   const memberOf = useMemo(() => new Set(conversations.map((c) => c.id)), [conversations]);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const drop = useFileDrop();
+  // The blocked list is what says a direct chat is one the viewer blocked.
+  useFriendsLoader();
+  const block = useDirectBlock(row);
   // Senders, the people their lines quote, and whoever a group change names.
   const senderIds = [
     ...new Set([
@@ -95,8 +101,14 @@ export function MessageThread({ row }: MessageThreadProps) {
 
   const [peer] = row.peers;
   const isGroup = row.conversation.type === 'GROUP';
-  const subtitle =
-    typing.length > 0
+  // Once a block stands, the other side's presence and typing are not shown —
+  // the service stops sending them, and a stale "Active now" would mislead.
+  const showPresence = block === null;
+  const subtitle = !showPresence
+    ? block === 'you-blocked'
+      ? 'Blocked'
+      : ''
+    : typing.length > 0
       ? `${typing.map(displayName).join(', ')} ${typing.length === 1 ? 'is' : 'are'} typing…`
       : isGroup
         ? `${String(row.conversation.participants.length)} members`
@@ -199,7 +211,7 @@ export function MessageThread({ row }: MessageThreadProps) {
               name={displayName(peer)}
               imageUrl={peer.avatarUrl}
               size="sm"
-              isOnline={row.isOnline || undefined}
+              isOnline={(showPresence && row.isOnline) || undefined}
             />
           </Link>
         )}
@@ -207,16 +219,18 @@ export function MessageThread({ row }: MessageThreadProps) {
           <h2 className="text-on-surface truncate text-[15px] leading-tight font-bold">
             {row.title}
           </h2>
-          <p
-            className={
-              typing.length > 0
-                ? 'text-primary animate-pulse text-[12px]'
-                : 'text-on-surface-variant text-[12px]'
-            }
-            aria-live="polite"
-          >
-            {subtitle}
-          </p>
+          {subtitle !== '' && (
+            <p
+              className={
+                showPresence && typing.length > 0
+                  ? 'text-primary animate-pulse text-[12px]'
+                  : 'text-on-surface-variant text-[12px]'
+              }
+              aria-live="polite"
+            >
+              {subtitle}
+            </p>
+          )}
         </div>
         {isGroup && (
           <IconButton
@@ -265,7 +279,11 @@ export function MessageThread({ row }: MessageThreadProps) {
         <div ref={endRef} />
       </div>
 
-      <MessageComposer />
+      {block !== null && peer !== undefined ? (
+        <BlockedNotice kind={block} conversationId={row.conversation.id} peer={peer} />
+      ) : (
+        <MessageComposer />
+      )}
 
       {isDetailsOpen && (
         <GroupDetailsDialog

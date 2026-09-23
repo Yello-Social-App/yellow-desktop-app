@@ -1,4 +1,5 @@
-import { ArrowLeft, PenLine, TriangleAlert } from 'lucide-react';
+import type { Author, User } from '@shared/ipc-types';
+import { ArrowLeft, Ban, PenLine, TriangleAlert, UserX } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 
@@ -8,6 +9,7 @@ import { PostSkeleton, RowSkeleton } from '@/components/ui/Skeleton';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { usePostActions } from '@/features/feed/post-actions';
 import { useRelationship } from '@/features/friends/hooks';
+import { useFriendsStore } from '@/features/friends/store';
 import { useIsOnline, useStartConversation } from '@/features/messages/hooks';
 import { useProfilePosts, usePublicProfile } from '@/features/profile/hooks';
 import { PostCard } from '@/routes/feed/components/PostCard';
@@ -23,12 +25,48 @@ import { ProfileHeader } from './components/ProfileHeader';
  * Visibility is applied inside the server's query, so the page count matches
  * what arrives — a non-friend simply sees fewer posts, and nothing here has to
  * filter (OWASP A01: the client is not the place that decision is made).
+ *
+ * Blocks, as Discord shows them. Someone the viewer blocked keeps a face and a
+ * name — taken from the blocked list, since the server answers not-found for
+ * anyone in a block — and loses everything else, with Unblock as the one way
+ * back. Someone who blocked the viewer cannot be told apart from a deleted
+ * account (the API never reveals it), so both read as unavailable.
  */
+/** A blocked-list row as a profile: who they are, and nothing they wrote. */
+function asProfile(author: Author): User {
+  return {
+    ...author,
+    coverUrl: undefined,
+    bio: undefined,
+    status: undefined,
+    createdAt: undefined,
+    friendStatus: undefined,
+  };
+}
+
 export default function UserProfilePage() {
   const { userId } = useParams<{ userId: string }>();
   const viewer = useCurrentUser();
-  const { user, status: profileStatus, error: profileError, reload } = usePublicProfile(userId);
+  const {
+    user,
+    status: profileStatus,
+    error: profileError,
+    isUnavailable,
+    reload,
+  } = usePublicProfile(userId);
   const relationship = useRelationship(userId, user?.friendStatus);
+  const isBlocked = relationship.relationship === 'blocked';
+  const blockedAuthor = useFriendsStore(
+    (state) => state.lists.blocked.entries.find((entry) => entry.user.id === userId)?.user,
+  );
+  const blockedListStatus = useFriendsStore((state) => state.lists.blocked.status);
+  const blockedIdentity: User | null = isBlocked
+    ? (user ?? (blockedAuthor === undefined ? null : asProfile(blockedAuthor)))
+    : null;
+  // A not-found may yet turn out to be a block of the viewer's own: wait for
+  // the blocked list before calling the account unavailable.
+  const isResolvingBlock =
+    isUnavailable && (blockedListStatus === 'idle' || blockedListStatus === 'loading');
   const isOnline = useIsOnline(userId);
   const { direct, isStarting } = useStartConversation();
   const {
@@ -73,32 +111,73 @@ export default function UserProfilePage() {
         </Link>
         <div className="min-w-0">
           <h1 className="font-heading text-h1 text-on-surface truncate">
-            {user === null ? 'Profile' : displayName(user)}
+            {blockedIdentity !== null
+              ? displayName(blockedIdentity)
+              : user === null
+                ? 'Profile'
+                : displayName(user)}
           </h1>
-          {user !== null && (
+          {user !== null && !isBlocked && (
             <p className="text-on-surface-variant text-[13px]">{totalPosts} posts</p>
           )}
         </div>
       </header>
 
-      {profileStatus === 'loading' && (
-        <div aria-busy>
-          <RowSkeleton />
-          <PostSkeleton />
-        </div>
+      {blockedIdentity !== null && (
+        <>
+          <ProfileHeader
+            user={blockedIdentity}
+            postCount={0}
+            isBlocked
+            action={<FriendshipControls control={relationship} showBlock />}
+          />
+          <div className="m-lg bg-surface-container-low border-outline-variant gap-sm p-lg flex flex-col items-center rounded-2xl border text-center">
+            <span
+              aria-hidden
+              className="bg-error-container text-on-error-container flex size-11 items-center justify-center rounded-full"
+            >
+              <Ban className="size-5" />
+            </span>
+            <h2 className="font-heading text-h3 text-on-surface">
+              You blocked {displayName(blockedIdentity)}
+            </h2>
+            <p className="text-on-surface-variant max-w-copy text-[14px]">
+              You won’t see their posts or messages, and they can’t see yours or message you. They
+              aren’t told that you blocked them.
+            </p>
+          </div>
+        </>
       )}
 
-      {(profileStatus === 'error' || (profileStatus === 'ready' && user === null)) && (
-        <p
-          role="alert"
-          className="text-on-error-container bg-error-container/40 m-lg gap-sm px-md py-sm flex items-center rounded-xl text-[14px]"
-        >
-          <TriangleAlert aria-hidden className="size-4 shrink-0" />
-          {profileError ?? 'That profile could not be loaded.'}
-        </p>
+      {blockedIdentity === null &&
+        (profileStatus === 'loading' || (isResolvingBlock && !isBlocked)) && (
+          <div aria-busy>
+            <RowSkeleton />
+            <PostSkeleton />
+          </div>
+        )}
+
+      {blockedIdentity === null && isUnavailable && !isResolvingBlock && (
+        <EmptyState
+          icon={<UserX className="size-6" />}
+          title="This account isn’t available"
+          description="It may have been deleted, or you can’t view it right now."
+        />
       )}
 
-      {profileStatus === 'ready' && user !== null && (
+      {blockedIdentity === null &&
+        !isUnavailable &&
+        (profileStatus === 'error' || (profileStatus === 'ready' && user === null)) && (
+          <p
+            role="alert"
+            className="text-on-error-container bg-error-container/40 m-lg gap-sm px-md py-sm flex items-center rounded-xl text-[14px]"
+          >
+            <TriangleAlert aria-hidden className="size-4 shrink-0" />
+            {profileError ?? 'That profile could not be loaded.'}
+          </p>
+        )}
+
+      {blockedIdentity === null && profileStatus === 'ready' && user !== null && (
         <>
           <ProfileHeader
             user={user}
