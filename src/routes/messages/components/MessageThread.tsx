@@ -1,6 +1,6 @@
 import { CHAT_ATTACHMENT_MAX_BYTES, CHAT_MESSAGE_MAX_ATTACHMENTS } from '@shared/ipc-types';
-import { ArrowUp, Info, Paperclip } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ArrowDown, ArrowUp, Info, Paperclip } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -30,6 +30,7 @@ import { GroupAvatar } from './GroupAvatar';
 import { GroupDetailsDialog } from './GroupDetailsDialog';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
+import { useThreadScroll } from './use-thread-scroll';
 
 interface MessageThreadProps {
   row: ConversationRow;
@@ -71,28 +72,12 @@ export function MessageThread({ row }: MessageThreadProps) {
   ];
   const people = useUsers(senderIds);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
   const lastId = thread.messages[thread.messages.length - 1]?.id;
-  const firstId = thread.messages[0]?.id;
-  const previousFirst = useRef<string | undefined>(undefined);
-  const previousHeight = useRef(0);
-
-  // New line at the bottom: follow it. Older page at the top: hold the view
-  // where it was, so the transcript does not jump under the reader.
-  useLayoutEffect(() => {
-    const scroller = scrollRef.current;
-    if (scroller === null) {
-      return;
-    }
-    if (previousFirst.current !== undefined && firstId !== previousFirst.current) {
-      scroller.scrollTop += scroller.scrollHeight - previousHeight.current;
-    } else {
-      endRef.current?.scrollIntoView({ block: 'end' });
-    }
-    previousFirst.current = firstId;
-    previousHeight.current = scroller.scrollHeight;
-  }, [lastId, firstId, thread.messages.length]);
+  const { scrollRef, contentRef, showJump, unseen, jumpToLatest } = useThreadScroll({
+    conversationId: row.conversation.id,
+    messages: thread.messages,
+    viewerId: viewer?.id ?? null,
+  });
 
   // Reading is looking: while the thread is on screen, new lines are read.
   useEffect(() => {
@@ -244,39 +229,65 @@ export function MessageThread({ row }: MessageThreadProps) {
         )}
       </header>
 
-      <div ref={scrollRef} className="px-lg py-md flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {thread.nextCursor !== null && (
-          <div className="mb-md flex justify-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              leadingIcon={<ArrowUp className="size-4" />}
-              isLoading={thread.isLoadingOlder}
-              onClick={thread.loadOlder}
-            >
-              Older messages
-            </Button>
-          </div>
-        )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={scrollRef} className="px-lg py-md flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {thread.nextCursor !== null && (
+            <div className="mb-md flex justify-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<ArrowUp className="size-4" />}
+                isLoading={thread.isLoadingOlder}
+                onClick={thread.loadOlder}
+              >
+                Older messages
+              </Button>
+            </div>
+          )}
 
-        {thread.status === 'loading' && thread.messages.length === 0 && (
-          <div className="flex flex-1 items-center justify-center">
-            <Spinner label="Loading messages…" />
-          </div>
-        )}
+          {thread.status === 'loading' && thread.messages.length === 0 && (
+            <div className="flex flex-1 items-center justify-center">
+              <Spinner label="Loading messages…" />
+            </div>
+          )}
 
-        {thread.status === 'ready' && thread.messages.length === 0 && (
-          <p className="text-on-surface-variant m-auto text-center text-[14px]">
-            Say hello — this is the start of your conversation.
-          </p>
-        )}
+          {thread.status === 'ready' && thread.messages.length === 0 && (
+            <p className="text-on-surface-variant m-auto text-center text-[14px]">
+              Say hello — this is the start of your conversation.
+            </p>
+          )}
 
-        {/* Keyed on the conversation: opening another thread fades its
+          {/* Keyed on the conversation: opening another thread fades its
             transcript in, and nothing else on the screen moves. */}
-        <div key={row.conversation.id} className="animate-fade-in mt-auto flex flex-col gap-0.5">
-          {lines}
+          <div
+            key={row.conversation.id}
+            ref={contentRef}
+            className="animate-fade-in mt-auto flex flex-col gap-0.5"
+          >
+            {lines}
+          </div>
         </div>
-        <div ref={endRef} />
+
+        {showJump && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            aria-label={
+              unseen > 0
+                ? `Jump to latest, ${String(unseen)} new ${unseen === 1 ? 'message' : 'messages'}`
+                : 'Jump to latest'
+            }
+            title="Jump to latest"
+            className="animate-scale-in bg-surface-container-highest text-on-surface hover:bg-surface-container-high border-outline-variant absolute bottom-4 left-1/2 z-20 flex size-10 -translate-x-1/2 items-center justify-center rounded-full border shadow-lg transition-colors"
+          >
+            <ArrowDown className="size-5" />
+            {unseen > 0 && (
+              <span className="bg-primary-container text-on-primary-container absolute -top-1.5 -right-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums">
+                {unseen > 99 ? '99+' : String(unseen)}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {block !== null && peer !== undefined ? (
