@@ -6,6 +6,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-23
+
+Save posts to read later, change your password from Settings, and see clearly
+when a chat or profile is blocked.
+
+### Added
+
+- **Save posts.** Every post has a bookmark button. Saved posts are private:
+  the author isn't told, and nobody else can see your list.
+- **Saved.** A new Saved item in the sidebar lists what you've saved, most
+  recent first. Removing a save there takes the post off the list straight
+  away.
+- **Change password.** Settings → Change password asks for your current
+  password, emails you a 6-digit code, then sets the new one. You stay signed
+  in on this device; every other device and browser is signed out and needs
+  the new password.
+
+### Changed
+
+- **Blocked chats.** In a chat with someone you blocked, the message box is
+  replaced by "You blocked {name}" with an Unblock button, and their online
+  status and typing indicator are hidden. If a message can't be delivered
+  because the other person isn't accepting it, the chat says "You can't reply
+  to this conversation".
+- **Blocked profiles.** The profile of someone you blocked shows only their
+  photo, name and username, with a note that you blocked them and an Unblock
+  button. Their cover, bio and posts are hidden.
+
+### Fixed
+
+- Opening the profile of someone you blocked showed "That profile could not be
+  loaded". A profile you can't view now says "This account isn't available".
+- After unblocking someone, their profile loads again without having to leave
+  and come back.
+
 ## [0.7.0] - 2026-09-23
 
 Send feedback, report posts, and mute or hide what you'd rather not see, all
