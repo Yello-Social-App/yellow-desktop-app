@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
+import { prefersReducedMotion } from '@/lib/appearance';
+
 /** This close to the bottom still counts as reading the newest line. */
 const PINNED_SLACK_PX = 80;
 /** Scrolled further up than this, the jump-to-latest button shows. */
@@ -139,8 +141,10 @@ export function useThreadScroll({
       return;
     }
     isPinned.current = true;
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
+    scroller.scrollTo({
+      top: scroller.scrollHeight,
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
   }, []);
 
   // Counted from the anchor rather than kept as a tally, so a thread switch

@@ -1,9 +1,10 @@
 import type { AppInfoResponse, IpcError } from '@shared/ipc-types';
-import { Check, Star } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { Send, Star } from 'lucide-react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Switch } from '@/components/ui/Switch';
 import { submitFeedback } from '@/features/feedback/api';
 import { useFeedbackStore } from '@/features/feedback/store';
 import {
@@ -12,14 +13,13 @@ import {
   RATING_LABELS,
   featureLabel,
   notePromptFor,
-  type FeedbackEntry,
   type FeedbackFeatureId,
 } from '@/features/feedback/types';
 import { cn } from '@/lib/cn';
 import { createLogger } from '@/lib/logger';
 import { relativeTime } from '@/lib/relative-time';
 
-import { PaneHeader, SettingsSection } from './SettingsSection';
+import { AsideLabel, SuccessNote } from './SettingsSection';
 
 const log = createLogger('settings.feedback');
 
@@ -30,10 +30,13 @@ interface FeedbackSettingsProps {
 }
 
 /**
- * Rate one feature, 1–5, with an optional note.
+ * Rate one feature, 1–5, with an optional note; what was sent is listed beside
+ * the form.
  *
  * Send stays clickable while the form is incomplete — pressing it marks what
  * is missing, which a disabled button cannot do — and is only toned down.
+ * A sent rating clears the form and says so at its top; the new entry is
+ * already in the list on the right.
  */
 export function FeedbackSettings({ appInfo }: FeedbackSettingsProps) {
   const [featureId, setFeatureId] = useState<FeedbackFeatureId | null>(null);
@@ -44,7 +47,7 @@ export function FeedbackSettings({ appInfo }: FeedbackSettingsProps) {
   const [hasTried, setHasTried] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<IpcError | null>(null);
-  const [sent, setSent] = useState<FeedbackEntry | null>(null);
+  const [justSent, setJustSent] = useState(false);
   const history = useFeedbackStore((state) => state.sent);
   const historyStatus = useFeedbackStore((state) => state.status);
   const addSent = useFeedbackStore((state) => state.add);
@@ -60,14 +63,14 @@ export function FeedbackSettings({ appInfo }: FeedbackSettingsProps) {
   const prompt = notePromptFor(rating);
   const platform = appInfo === null ? null : `${appInfo.platform} (${appInfo.arch})`;
 
-  const reset = (): void => {
+  const clearForm = (): void => {
     setFeatureId(null);
     setRating(0);
     setHover(0);
     setNote('');
+    setAttachDetails(true);
     setHasTried(false);
     setError(null);
-    setSent(null);
   };
 
   const send = (): void => {
@@ -80,6 +83,7 @@ export function FeedbackSettings({ appInfo }: FeedbackSettingsProps) {
     }
     setIsSending(true);
     setError(null);
+    setJustSent(false);
     void submitFeedback({
       featureId,
       rating,
@@ -97,242 +101,245 @@ export function FeedbackSettings({ appInfo }: FeedbackSettingsProps) {
         return;
       }
       addSent(result.data);
-      setSent(result.data);
+      clearForm();
+      setJustSent(true);
     });
   };
 
-  if (sent !== null) {
-    return (
-      <div className="gap-md mx-auto mt-16 flex max-w-[420px] flex-col items-center text-center">
-        <span className="bg-tertiary-fixed text-tertiary flex size-14 items-center justify-center rounded-2xl">
-          <Check aria-hidden className="size-7" strokeWidth={2.2} />
-        </span>
-        <h1 className="font-heading text-h1 text-on-surface">Thanks — your feedback is in</h1>
-        <p className="text-on-surface-variant text-[15px] leading-relaxed">
-          You rated{' '}
-          <span className="text-on-surface font-semibold">{featureLabel(sent.featureId)}</span>{' '}
-          {sent.rating} out of 5. The Yello team reads every note; if you left one, we may reply in
-          Notifications.
-        </p>
-        <StarRow value={sent.rating} size="sm" />
-        <Button className="mt-sm" onClick={reset}>
-          Rate another feature
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <PaneHeader
-        title="Send feedback"
-        description="Tell us how a feature is working for you. It takes about 20 seconds."
-      />
-
-      <section className="flex flex-col gap-3">
-        <h2 className="font-heading text-h3 text-on-surface">Which feature?</h2>
-        <div role="radiogroup" aria-label="Feature" className="flex flex-wrap gap-2">
-          {FEEDBACK_FEATURES.map((feature) => {
-            const isSelected = feature.id === featureId;
-            return (
-              <button
-                key={feature.id}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                onClick={() => {
-                  setFeatureId(feature.id);
-                }}
-                className={cn(
-                  'transition-tone h-9 rounded-full border px-3.5 text-[13px] font-medium',
-                  isSelected
-                    ? 'border-primary-container bg-primary-fixed-dim text-on-primary-fixed'
-                    : cn(
-                        'bg-surface-container-lowest text-on-surface-variant hover:text-on-surface hover:border-outline',
-                        hasTried && featureId === null
-                          ? 'border-error/60'
-                          : 'border-outline-strong',
-                      ),
-                )}
-              >
-                {feature.label}
-              </button>
-            );
-          })}
-        </div>
-        {hasTried && featureId === null && (
-          <p className="text-error text-[13px]">Pick the feature you’re rating</p>
+    <div className="grid items-start gap-5 @3xl:grid-cols-[minmax(0,1fr)_300px]">
+      <Card className="flex flex-col gap-[22px] p-[22px]">
+        {justSent && (
+          <SuccessNote>Thanks — your feedback was sent. It’s listed with your others.</SuccessNote>
         )}
-      </section>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="font-heading text-h3 text-on-surface">How would you rate it?</h2>
-        <div className="flex items-center gap-4">
-          <div
-            role="radiogroup"
-            aria-label="Rating"
-            className="flex gap-0.5"
-            onMouseLeave={() => {
-              setHover(0);
-            }}
-          >
-            {STARS.map((value) => {
-              const isLit = value <= shown;
+        <section className="flex flex-col gap-2.5">
+          <StepHeading step={1}>Which feature?</StepHeading>
+          <div role="radiogroup" aria-label="Feature" className="flex flex-wrap gap-2">
+            {FEEDBACK_FEATURES.map((feature) => {
+              const isSelected = feature.id === featureId;
               return (
                 <button
-                  key={value}
+                  key={feature.id}
                   type="button"
                   role="radio"
-                  aria-checked={value === rating}
-                  aria-label={`${String(value)} ${value === 1 ? 'star' : 'stars'}, ${RATING_LABELS[value] ?? ''}`}
+                  aria-checked={isSelected}
                   onClick={() => {
-                    setRating(value);
+                    setFeatureId(feature.id);
+                    setJustSent(false);
                   }}
-                  onMouseEnter={() => {
-                    setHover(value);
-                  }}
-                  onFocus={() => {
-                    setHover(value);
-                  }}
-                  onBlur={() => {
-                    setHover(0);
-                  }}
-                  className="rounded-lg p-1 transition-transform hover:scale-110"
+                  className={cn(
+                    'transition-tone h-[34px] rounded-full border px-3.5 text-[13px]',
+                    isSelected
+                      ? 'border-primary-container bg-primary-fixed text-on-surface'
+                      : cn(
+                          'text-on-surface-variant hover:text-on-surface hover:border-outline',
+                          hasTried && featureId === null
+                            ? 'border-error/60'
+                            : 'border-outline-strong',
+                        ),
+                  )}
                 >
-                  <Star
-                    aria-hidden
-                    strokeWidth={1.6}
-                    className={cn(
-                      'size-8',
-                      isLit
-                        ? 'fill-primary-container text-primary-container'
-                        : hasTried && rating === 0
-                          ? 'text-error'
-                          : 'text-outline/50',
-                    )}
-                  />
+                  {feature.label}
                 </button>
               );
             })}
           </div>
-          {shown > 0 ? (
-            <span className="text-on-primary-fixed min-w-28 text-[15px] font-semibold">
-              {RATING_LABELS[shown]}
+          {hasTried && featureId === null && (
+            <p className="text-error text-[13px]">Pick the feature you’re rating</p>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-2.5">
+          <StepHeading step={2}>How would you rate it?</StepHeading>
+          <div className="flex items-center gap-2.5">
+            <div
+              role="radiogroup"
+              aria-label="Rating"
+              className="flex gap-1"
+              onMouseLeave={() => {
+                setHover(0);
+              }}
+            >
+              {STARS.map((value) => {
+                const isLit = value <= shown;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={value === rating}
+                    aria-label={`${String(value)} ${value === 1 ? 'star' : 'stars'}, ${RATING_LABELS[value] ?? ''}`}
+                    onClick={() => {
+                      setRating(value);
+                      setJustSent(false);
+                    }}
+                    onMouseEnter={() => {
+                      setHover(value);
+                    }}
+                    onFocus={() => {
+                      setHover(value);
+                    }}
+                    onBlur={() => {
+                      setHover(0);
+                    }}
+                    className="flex size-10 items-center justify-center rounded-lg transition-transform hover:scale-110"
+                  >
+                    <Star
+                      aria-hidden
+                      strokeWidth={1.6}
+                      className={cn(
+                        'size-7',
+                        isLit
+                          ? 'fill-primary-container text-primary-container'
+                          : hasTried && rating === 0
+                            ? 'text-error'
+                            : 'text-outline/60',
+                      )}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            <span className={cn('text-[13px]', shown > 0 ? 'text-on-surface' : 'text-outline')}>
+              {shown > 0 ? RATING_LABELS[shown] : 'Pick a rating'}
             </span>
-          ) : (
-            <span className="text-outline text-[13px]">Hover to preview, click to rate</span>
+          </div>
+          {hasTried && rating === 0 && (
+            <p className="text-error text-[13px]">Pick a rating to continue</p>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <label htmlFor={noteId}>
+            <StepHeading step={3}>
+              {prompt.label} <span className="text-outline text-[13px] font-normal">Optional</span>
+            </StepHeading>
+          </label>
+          <textarea
+            id={noteId}
+            value={note}
+            maxLength={FEEDBACK_NOTE_MAX}
+            onChange={(event) => {
+              setNote(event.target.value);
+            }}
+            placeholder={prompt.placeholder}
+            className="bg-surface-container-low border-outline-strong text-on-surface focus:border-outline placeholder:text-outline h-[110px] resize-none rounded-[10px] border px-3.5 py-3 text-[14px] leading-normal outline-none"
+          />
+          <div className="text-outline flex justify-between gap-3 text-[12px]">
+            <span>Don’t include passwords or private messages.</span>
+            <span className="font-mono tabular-nums">
+              {note.length} / {FEEDBACK_NOTE_MAX}
+            </span>
+          </div>
+        </section>
+
+        <div className="bg-surface-container-low border-outline-variant flex items-center gap-3.5 rounded-[10px] border px-4 py-3.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-on-surface text-[14px] font-medium">Attach app details</span>
+            <span className="text-on-surface-variant text-[12px]">
+              Yello {appInfo?.appVersion ?? '—'} · {platform ?? '—'} · no messages or contacts
+            </span>
+          </div>
+          <Switch
+            size="sm"
+            label="Attach app details"
+            checked={attachDetails}
+            onChange={setAttachDetails}
+          />
+        </div>
+
+        {error !== null && (
+          <p role="alert" className="text-error text-[13px]">
+            {error.message}
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            isLoading={isSending}
+            aria-disabled={!isReady}
+            leadingIcon={<Send className="size-4" />}
+            onClick={send}
+            className={cn(
+              !isReady && 'bg-surface-container-high text-outline hover:brightness-100',
+            )}
+          >
+            {isSending ? 'Sending…' : 'Send feedback'}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={isSending}
+            onClick={() => {
+              clearForm();
+              setJustSent(false);
+            }}
+          >
+            Clear
+          </Button>
+          {!isReady && (
+            <span className="text-outline ml-auto text-[12px]">
+              Pick a feature and a rating to send.
+            </span>
           )}
         </div>
-        {hasTried && rating === 0 && (
-          <p className="text-error text-[13px]">Pick a rating to continue</p>
-        )}
-      </section>
+      </Card>
 
-      <section className="flex flex-col gap-2">
-        <label htmlFor={noteId} className="font-heading text-h3 text-on-surface">
-          {prompt.label}{' '}
-          <span className="font-body text-outline text-[13px] font-normal">Optional</span>
-        </label>
-        <textarea
-          id={noteId}
-          value={note}
-          maxLength={FEEDBACK_NOTE_MAX}
-          onChange={(event) => {
-            setNote(event.target.value);
-          }}
-          placeholder={prompt.placeholder}
-          className="bg-surface-container-lowest border-outline-strong text-on-surface focus:border-outline placeholder:text-outline h-28 resize-none rounded-xl border px-3.5 py-3 text-[14px] leading-normal outline-none"
-        />
-        <div className="text-outline flex justify-between text-[12px]">
-          <span>Don’t include passwords or private messages.</span>
-          <span className="tabular-nums">
-            {note.length} / {FEEDBACK_NOTE_MAX}
+      <aside aria-label="Your recent feedback" className="flex flex-col gap-2.5">
+        <div className="flex items-center gap-3">
+          <span className="flex-1">
+            <AsideLabel>Your recent feedback</AsideLabel>
           </span>
+          <span className="text-outline text-[12px]">Only you see this</span>
         </div>
-      </section>
-
-      <label className="flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
-          checked={attachDetails}
-          onChange={(event) => {
-            setAttachDetails(event.target.checked);
-          }}
-          className="accent-primary-container mt-0.5 size-[18px] cursor-pointer"
-        />
-        <span className="flex flex-col gap-0.5">
-          <span className="text-on-surface text-[14px] font-medium">Attach app details</span>
-          <span className="text-outline text-[13px]">
-            Yello {appInfo?.appVersion ?? '—'} · {platform ?? '—'} · no messages or contacts
-          </span>
-        </span>
-      </label>
-
-      {error !== null && (
-        <p role="alert" className="text-error text-[13px]">
-          {error.message}
-        </p>
-      )}
-
-      <div className="border-outline-variant flex items-center gap-3 border-t pt-4">
-        <Button
-          size="lg"
-          isLoading={isSending}
-          aria-disabled={!isReady}
-          onClick={send}
-          className={cn(!isReady && 'bg-surface-container-high text-outline hover:brightness-100')}
-        >
-          {isSending ? 'Sending…' : 'Send feedback'}
-        </Button>
-        <Button size="lg" variant="ghost" disabled={isSending} onClick={reset}>
-          Clear
-        </Button>
-      </div>
-
-      <SettingsSection title="Your recent feedback">
-        <Card className="divide-outline-variant flex flex-col divide-y">
-          <div className="px-lg py-md flex items-center justify-between gap-3">
-            <span className="text-on-surface-variant text-[13px]">Only you see this list.</span>
-          </div>
-          {history.length === 0 ? (
-            <p className="text-on-surface-variant px-lg py-md text-[14px]">
+        {history.length === 0 ? (
+          <Card className="px-4 py-3.5">
+            <p className="text-on-surface-variant text-[13px]">
               {historyStatus === 'loading' || historyStatus === 'idle'
                 ? 'Loading…'
                 : historyStatus === 'error'
                   ? 'Your feedback history couldn’t be loaded.'
                   : 'Nothing sent yet.'}
             </p>
-          ) : (
-            history.map((entry) => (
-              <div key={entry.id} className="px-lg py-md flex items-start gap-3">
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="text-on-surface text-[14px] font-medium">
-                    {featureLabel(entry.featureId)}
-                  </span>
-                  {entry.note !== '' && (
-                    <span className="text-on-surface-variant truncate text-[13px]">
-                      {entry.note}
+          </Card>
+        ) : (
+          <ul className="flex flex-col gap-2.5">
+            {history.map((entry) => (
+              <li key={entry.id}>
+                <Card className="flex flex-col gap-1.5 px-4 py-3.5">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-surface-container text-on-surface rounded-full px-2 py-0.5 text-[12px] font-medium">
+                      {featureLabel(entry.featureId)}
                     </span>
+                    <span className="flex-1" />
+                    <StarRow value={entry.rating} />
+                  </div>
+                  {entry.note !== '' && (
+                    <span className="text-on-surface text-[13px] leading-snug">{entry.note}</span>
                   )}
                   <span className="text-outline text-[12px]">{relativeTime(entry.createdAt)}</span>
-                </div>
-                <StarRow value={entry.rating} size="xs" />
-              </div>
-            ))
-          )}
-        </Card>
-      </SettingsSection>
-    </>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
+    </div>
   );
 }
 
-interface StarRowProps {
-  value: number;
-  size: 'xs' | 'sm';
+/** A step's heading, led by its number in the mono face. */
+function StepHeading({ step, children }: { step: number; children: ReactNode }) {
+  return (
+    <span className="text-on-surface text-[14px] font-semibold">
+      <span className="text-outline mr-2 font-mono font-medium">{step}</span>
+      {children}
+    </span>
+  );
 }
 
-/** A read-only rating, for the confirmation and the history rows. */
-function StarRow({ value, size }: StarRowProps) {
+/** A read-only rating, for the history rows. */
+function StarRow({ value }: { value: number }) {
   return (
     <span
       role="img"
@@ -345,7 +352,7 @@ function StarRow({ value, size }: StarRowProps) {
           aria-hidden
           strokeWidth={1.8}
           className={cn(
-            size === 'xs' ? 'size-3.5' : 'size-5',
+            'size-3.5',
             star <= value ? 'fill-primary-container text-primary-container' : 'text-outline/50',
           )}
         />

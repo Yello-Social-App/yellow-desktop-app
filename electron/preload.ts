@@ -41,6 +41,7 @@ import type {
   AccountIdRequest,
   AccountListResponse,
   AcknowledgedResponse,
+  AppInfoCopiedResponse,
   AppInfoResponse,
   ChatMessageResponse,
   ChatSocketState,
@@ -406,6 +407,7 @@ const bridge: YelloBridge = {
     exportPosts: (request: ExportPostsRequest) =>
       invoke<ExportPostsResponse>(IPC_CHANNELS.FS_EXPORT_POSTS, request),
     readAppInfo: () => invoke<AppInfoResponse>(IPC_CHANNELS.FS_READ_APP_INFO),
+    copyAppInfo: () => invoke<AppInfoCopiedResponse>(IPC_CHANNELS.FS_COPY_APP_INFO),
   },
   updates: {
     state: () => invoke<UpdateState>(IPC_CHANNELS.UPDATES_STATE),

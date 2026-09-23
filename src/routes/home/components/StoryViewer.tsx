@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Avatar } from '@/components/ui/Avatar';
 import { useStoriesStore, type Origin } from '@/features/stories/store';
 import { STORY_SLIDE_MS, type Story } from '@/features/stories/types';
+import { prefersReducedMotion } from '@/lib/appearance';
 import { cn } from '@/lib/cn';
 import { relativeTime } from '@/lib/relative-time';
 import { displayName, initialsOf } from '@/lib/user-display';
@@ -17,10 +18,6 @@ const EASE_IN = 'cubic-bezier(0.55, 0, 1, 0.45)';
 const OPEN_MS = 460;
 const CLOSE_MS = 320;
 const SWAP_MS = 380;
-
-function reducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 /**
  * The transform that puts the card exactly over its origin ring: translate
@@ -81,7 +78,7 @@ export function StoryViewer() {
     if (card === null || backdrop === null) {
       return;
     }
-    if (reducedMotion()) {
+    if (prefersReducedMotion()) {
       return;
     }
 
@@ -122,7 +119,7 @@ export function StoryViewer() {
     }
     const card = cardRef.current;
     const backdrop = backdropRef.current;
-    if (card === null || backdrop === null || reducedMotion()) {
+    if (card === null || backdrop === null || prefersReducedMotion()) {
       close();
       return;
     }
@@ -163,7 +160,7 @@ export function StoryViewer() {
       return;
     }
     previousStoryRef.current = storyIndex;
-    if (reducedMotion()) {
+    if (prefersReducedMotion()) {
       return;
     }
     const sign = direction;

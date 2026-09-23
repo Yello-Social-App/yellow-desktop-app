@@ -31,6 +31,7 @@ import {
   type RenameGroupRequest,
   accountListResponseSchema,
   acknowledgedResponseSchema,
+  appInfoCopiedResponseSchema,
   appInfoResponseSchema,
   chatMessageResponseSchema,
   chatSocketStateSchema,
@@ -525,6 +526,8 @@ export const ipc = {
     ),
   readAppInfo: () =>
     guarded('files.readAppInfo', appInfoResponseSchema, (api) => api.files.readAppInfo()),
+  copyAppInfo: () =>
+    guarded('files.copyAppInfo', appInfoCopiedResponseSchema, (api) => api.files.copyAppInfo()),
 
   updateState: () => guarded('updates.state', updateStateSchema, (api) => api.updates.state()),
   checkForUpdates: () => guarded('updates.check', updateStateSchema, (api) => api.updates.check()),

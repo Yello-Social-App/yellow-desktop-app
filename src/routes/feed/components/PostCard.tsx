@@ -355,7 +355,7 @@ export const PostCard = memo(function PostCard({
         ) : (
           post.content !== '' &&
           (isDetail ? (
-            <p className="text-on-surface text-[17px] leading-relaxed whitespace-pre-wrap">
+            <p className="text-on-surface text-content-lg leading-relaxed whitespace-pre-wrap">
               <RichText text={post.content} />
             </p>
           ) : (
@@ -370,7 +370,7 @@ export const PostCard = memo(function PostCard({
                   void navigate(permalink);
                 }
               }}
-              className="text-on-surface cursor-pointer text-[15px] leading-relaxed whitespace-pre-wrap"
+              className="text-on-surface text-content cursor-pointer leading-relaxed whitespace-pre-wrap"
             >
               <RichText text={post.content} />
             </p>
@@ -460,7 +460,7 @@ export const PostCard = memo(function PostCard({
               </span>
             </span>
             {post.originalPost.content !== '' && (
-              <span className="text-on-surface text-[14px] leading-relaxed whitespace-pre-wrap">
+              <span className="text-on-surface text-content-sm leading-relaxed whitespace-pre-wrap">
                 <RichText text={post.originalPost.content} />
               </span>
             )}

@@ -5,6 +5,7 @@ import { useFriendsSync } from '@/features/friends/hooks';
 import { useChatSubscription } from '@/features/messages/hooks';
 import { useSafetySync } from '@/features/moderation/hooks';
 import { useNotificationSubscription } from '@/features/notifications/hooks';
+import { useAppearance } from '@/lib/appearance';
 import { cn } from '@/lib/cn';
 
 import { RightRail } from './RightRail';
@@ -32,10 +33,11 @@ import { Topbar } from './Topbar';
  * (stores/layout-store.ts). Each rail draws its own shape; the shell only
  * places them.
  *
- * The messages screen needs two panes, so on it the column fills the space
- * between the rails and the right rail folds away. The nav never moves; the
- * rail's width is what animates, so the change reads as the page opening up
- * rather than the layout being swapped.
+ * The messages and settings screens need two panes, so on them the column
+ * fills the space between the rails and the right rail folds away — as it
+ * does everywhere when the activity sidebar is turned off in Settings →
+ * Appearance. The nav never moves; the rail's width is what animates, so the
+ * change reads as the page opening up rather than the layout being swapped.
  */
 export interface AppShellContext {
   searchQuery: string;
@@ -58,10 +60,10 @@ function pageKeyOf(pathname: string): string {
 export function AppShell() {
   const [searchQuery, setSearchQuery] = useState('');
   const { pathname } = useLocation();
-  // Messages is a two-pane chat: it fills the window and scrolls inside its panes.
-  const isWide = pathname.startsWith('/messages');
-  // Settings keeps Home's column and rail, but scrolls inside its own panes too.
-  const isPaned = isWide || pathname.startsWith('/settings');
+  // Messages and Settings are two-pane screens: they fill the window and
+  // scroll inside their panes.
+  const isWide = pathname.startsWith('/messages') || pathname.startsWith('/settings');
+  const [{ showActivityRail }] = useAppearance();
   // Home lays its composer and posts out as cards on the canvas, so its column
   // has no side hairlines; the other screens are lists that rely on them.
   const isCanvas = pathname === '/feed' || pathname === '/';
@@ -80,7 +82,7 @@ export function AppShell() {
           className={cn(
             'min-w-0 flex-1',
             // Messages scroll inside their own panes, so the composer stays put.
-            isPaned ? 'overflow-hidden' : 'overflow-y-auto',
+            isWide ? 'overflow-hidden' : 'overflow-y-auto',
           )}
         >
           <div
@@ -92,17 +94,13 @@ export function AppShell() {
                 : // Every other screen shares Home's column: it fills between the
                   // rails, capped so a very wide window does not stretch content
                   // into one long line, and keeps its width between screens.
-                  cn(
-                    'max-w-feed-max',
-                    isPaned ? 'h-full' : 'min-h-full',
-                    !isCanvas && 'border-outline-variant border-x',
-                  ),
+                  cn('max-w-feed-max min-h-full', !isCanvas && 'border-outline-variant border-x'),
             )}
           >
             <Outlet context={{ searchQuery } satisfies AppShellContext} />
           </div>
         </main>
-        <RightRail isCollapsed={isWide} />
+        <RightRail isCollapsed={isWide || !showActivityRail} />
       </div>
     </div>
   );

@@ -106,7 +106,7 @@ export const CommunityPostCard = memo(function CommunityPostCard({
         </div>
 
         <h3 className="text-on-surface text-[17px] leading-snug font-bold">{post.title}</h3>
-        <p className="text-on-surface-variant line-clamp-3 text-[14px] leading-relaxed whitespace-pre-wrap">
+        <p className="text-on-surface-variant text-content-sm line-clamp-3 leading-relaxed whitespace-pre-wrap">
           <RichText text={post.body} />
         </p>
 

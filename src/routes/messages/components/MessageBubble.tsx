@@ -143,7 +143,7 @@ export const MessageBubble = memo(function MessageBubble({
                 {hasBody && (
                   <div
                     className={cn(
-                      'px-3.5 py-2 text-[15px] leading-relaxed break-words whitespace-pre-wrap',
+                      'text-content px-3.5 py-2 leading-relaxed break-words whitespace-pre-wrap',
                       isMine
                         ? 'bg-primary-container text-on-primary-container rounded-2xl rounded-br-md'
                         : 'bg-surface-container-high text-on-surface rounded-2xl rounded-bl-md',
