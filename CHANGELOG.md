@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-24
+
+Voice messages in chat, comments and reactions on community posts, and a
+crop step for group photos.
+
+### Added
+
+- **Voice messages.** The mic button in a chat records a voice message of up
+  to five minutes. Pause and resume while
+  recording (pauses don't count toward the limit), listen back before
+  sending, or discard it. In the thread, voice messages play with a waveform,
+  seeking, and 1x, 1.5x or 2x speed, and only one plays at a time. The app
+  asks for microphone access the first time you record.
+- **Comment on community posts.** A community post's comment count opens its
+  thread in place, where you can comment, reply and react to comments, just
+  like on the feed.
+- **React to community posts.** Community posts have a reaction button and
+  a list of who reacted.
+- **Crop a group photo.** Choosing a group photo now lets you drag and zoom
+  it under a round frame before saving. Back or Esc cancels without
+  uploading.
+
+### Fixed
+
+- Yellow buttons, including Send in the message composer, showed grey text
+  and a grey hover instead of their yellow styling.
+
 ## [0.9.0] - 2026-09-24
 
 Stories are real now: post text or photos, reply from the viewer, and see a
