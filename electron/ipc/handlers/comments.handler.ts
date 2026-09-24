@@ -1,10 +1,14 @@
 /**
- * Comments on posts, and replies to comments.
+ * Comments on posts and on community posts, and replies to comments.
  *
  * The list endpoint pages top-level comments, newest first, with each one's
  * replies nested underneath (oldest first, one level deep). A page is therefore
  * a complete thread for the comments on it; this layer hands it back as sent
  * and lets the UI decide how to hold it.
+ *
+ * Both kinds of post share the comment shape and everything addressed by
+ * comment id (edit, delete, react); only listing and creating are routed by
+ * `parentType`.
  */
 
 import { createLogger } from '../../../shared/logger';
@@ -25,6 +29,7 @@ import {
   listCommentsRequestSchema,
   updateCommentRequestSchema,
   type CommentPage,
+  type CommentParentType,
   type CommentResponse,
   type DeletedResponse,
   type IpcResult,
@@ -32,14 +37,25 @@ import {
 
 const log = createLogger('ipc.comments');
 
+function threadUrl(parentType: CommentParentType, postId: string): string {
+  return parentType === 'COMMUNITY_POST'
+    ? ENDPOINTS.communityPosts.comments(postId)
+    : ENDPOINTS.posts.comments(postId);
+}
+
 export function registerCommentHandlers(): void {
   registerIpcHandler(
     IPC_CHANNELS.COMMENTS_CREATE,
     createCommentRequestSchema,
-    async ({ postId, content, parentCommentId }): Promise<IpcResult<CommentResponse>> => {
+    async ({
+      parentType,
+      postId,
+      content,
+      parentCommentId,
+    }): Promise<IpcResult<CommentResponse>> => {
       const result = await apiRequest({
         method: 'post',
-        url: ENDPOINTS.posts.comments(postId),
+        url: threadUrl(parentType, postId),
         body: {
           content,
           ...(parentCommentId === undefined ? {} : { parentCommentId }),
@@ -51,7 +67,7 @@ export function registerCommentHandlers(): void {
         return result;
       }
 
-      log.info('comment_created', { reply: parentCommentId !== undefined });
+      log.info('comment_created', { parentType, reply: parentCommentId !== undefined });
       return ipcOk(commentResponseSchema.parse({ comment: result.data }));
     },
   );
@@ -59,10 +75,10 @@ export function registerCommentHandlers(): void {
   registerIpcHandler(
     IPC_CHANNELS.COMMENTS_LIST,
     listCommentsRequestSchema,
-    async ({ postId, page, size }): Promise<IpcResult<CommentPage>> =>
+    async ({ parentType, postId, page, size }): Promise<IpcResult<CommentPage>> =>
       apiRequest({
         method: 'get',
-        url: ENDPOINTS.posts.comments(postId),
+        url: threadUrl(parentType, postId),
         schema: commentPageSchema,
         params: { page, size },
       }),
@@ -93,8 +109,9 @@ export function registerCommentHandlers(): void {
     IPC_CHANNELS.COMMENTS_DELETE,
     deleteCommentRequestSchema,
     async ({ commentId }): Promise<IpcResult<DeletedResponse>> => {
-      // The server allows both the comment's author and the post's author here;
-      // deciding which the caller is belongs there, not in the client (A01).
+      // The server allows the comment's author, the post's (or community
+      // post's) author and moderators; deciding which the caller is belongs
+      // there, not in the client (A01).
       const result = await apiRequest({
         method: 'delete',
         url: ENDPOINTS.comments.byId(commentId),

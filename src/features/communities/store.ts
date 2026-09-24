@@ -14,10 +14,17 @@
  * stale rather than editing them: the hooks refetch a stale list the next time
  * it is on screen, and keep drawing the old rows until the answer lands.
  */
-import type { Community, CommunityPost, CommunityPostSort, IpcError } from '@shared/ipc-types';
+import type {
+  Community,
+  CommunityPost,
+  CommunityPostSort,
+  IpcError,
+  ReactionType,
+} from '@shared/ipc-types';
 import { create } from 'zustand';
 
 import { useAuthStore } from '@/features/auth/store';
+import { PRIMARY_REACTION } from '@/features/feed/types';
 import { useUsersStore } from '@/features/users/store';
 import { createLogger } from '@/lib/logger';
 import { fail, ok, type Result } from '@/lib/result';
@@ -27,6 +34,7 @@ import {
   fetchCommunity,
   fetchPosts,
   publishCommunityPost,
+  reactToPost,
   setMembership as requestMembership,
   voteOnPost,
 } from './api';
@@ -35,6 +43,7 @@ import {
   communityFeed,
   isCommunitySlug,
   nextVote,
+  shiftReaction,
   type DirectoryQuery,
   type PostFeedSource,
 } from './types';
@@ -89,6 +98,8 @@ interface CommunitiesState {
   feeds: Record<string, FeedSlice>;
   /** Slugs with a join or leave in flight, and post ids with a vote in flight. */
   pendingIds: ReadonlySet<string>;
+  /** Post ids with a reaction in flight; apart from votes, so neither blocks the other. */
+  reactingIds: ReadonlySet<string>;
   /** The last failed join, leave or vote, for a banner. Reads report on their list. */
   error: string | null;
   loadDirectory: (query: DirectoryQuery) => Promise<void>;
@@ -98,6 +109,10 @@ interface CommunitiesState {
   loadMoreFeed: (source: PostFeedSource, sort: CommunityPostSort) => Promise<void>;
   setMembership: (slug: string, joined: boolean) => Promise<boolean>;
   vote: (postId: string, pressed: 1 | -1) => Promise<void>;
+  /** Without a type: the heart's tap, which likes or clears what is held. */
+  react: (postId: string, type?: ReactionType) => Promise<void>;
+  /** Applies a comment thread's +n/-n to the post's count. */
+  adjustCommentCount: (postId: string, delta: number) => void;
   publish: (draft: {
     slug: string;
     title: string;
@@ -152,6 +167,7 @@ const initialState = {
   directories: {},
   feeds: {},
   pendingIds: new Set<string>(),
+  reactingIds: new Set<string>(),
   error: null,
 };
 
@@ -457,6 +473,74 @@ export const useCommunitiesStore = create<CommunitiesState>((set, get) => ({
     });
   },
 
+  react: async (postId, type) => {
+    const before = get().posts[postId];
+    if (before === undefined || get().reactingIds.has(postId)) {
+      return;
+    }
+
+    const current = before.viewerReaction ?? null;
+    // The server removes when sent the type already held and sets it
+    // otherwise — so the heart clears a LOVE by sending LOVE, not LIKE.
+    const sent = type ?? current ?? PRIMARY_REACTION;
+    const next = sent === current ? null : sent;
+
+    set((state) => ({
+      reactingIds: withPending(state.reactingIds, postId, true),
+      error: null,
+      posts: {
+        ...state.posts,
+        [postId]: {
+          ...before,
+          viewerReaction: next,
+          reactionCounts: shiftReaction(before.reactionCounts, current, next),
+        },
+      },
+    }));
+
+    const result = await reactToPost(postId, sent);
+
+    set((state) => {
+      const latest = state.posts[postId];
+      const settled =
+        latest === undefined
+          ? state.posts
+          : {
+              ...state.posts,
+              [postId]: result.ok
+                ? {
+                    ...latest,
+                    reactionCounts: { ...result.data.counts, total: result.data.total },
+                    viewerReaction: result.data.viewerReaction ?? null,
+                  }
+                : {
+                    ...latest,
+                    reactionCounts: before.reactionCounts,
+                    viewerReaction: before.viewerReaction,
+                  },
+            };
+      return {
+        posts: settled,
+        reactingIds: withPending(state.reactingIds, postId, false),
+        error: result.ok ? null : result.error.message,
+      };
+    });
+  },
+
+  adjustCommentCount: (postId, delta) => {
+    set((state) => {
+      const post = state.posts[postId];
+      return post === undefined
+        ? {}
+        : {
+            posts: {
+              ...state.posts,
+              [postId]: { ...post, commentCount: Math.max(0, post.commentCount + delta) },
+            },
+          };
+    });
+  },
+
   publish: async (draft) => {
     const result = await publishCommunityPost(draft);
     if (!result.ok) {
@@ -488,11 +572,11 @@ export const useCommunitiesStore = create<CommunitiesState>((set, get) => ({
   },
 
   reset: () => {
-    set({ ...initialState, pendingIds: new Set() });
+    set({ ...initialState, pendingIds: new Set(), reactingIds: new Set() });
   },
 }));
 
-// Membership and votes are the viewer's own: nothing of one session may be
+// Membership, votes and reactions are the viewer's own: nothing of one session may be
 // drawn for the next account to sign in on this window.
 useAuthStore.subscribe((state, previous) => {
   if (state.user?.id !== previous.user?.id) {

@@ -1,16 +1,23 @@
 import { useState } from 'react';
 
-import { REACTION_LABELS, reactionTotal, type Post } from '@/features/feed/types';
+import {
+  REACTION_LABELS,
+  reactionTotal,
+  type PostTargetType,
+  type Reactable,
+} from '@/features/feed/types';
 import { cn } from '@/lib/cn';
 
 import { ReactorsDialog } from './ReactorsDialog';
 
 interface ReactionBreakdownProps {
-  post: Post;
+  post: Reactable;
+  /** Which kind of post `post` is; community posts are their own target. */
+  targetType?: PostTargetType;
 }
 
 /** The reaction types on a post, most used first, zero entries dropped. */
-function topReactions(post: Post): string[] {
+function topReactions(post: Reactable): string[] {
   return Object.entries(post.reactionCounts)
     .filter(([key, count]) => key !== 'total' && count > 0 && key in REACTION_LABELS)
     .sort(([, a], [, b]) => b - a)
@@ -26,7 +33,7 @@ function topReactions(post: Post): string[] {
  * the reactor list fresh, so the stack here is only the invitation. Renders
  * nothing when nobody has reacted.
  */
-export function ReactionBreakdown({ post }: ReactionBreakdownProps) {
+export function ReactionBreakdown({ post, targetType = 'POST' }: ReactionBreakdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const total = reactionTotal(post);
   const emoji = topReactions(post);
@@ -58,7 +65,8 @@ export function ReactionBreakdown({ post }: ReactionBreakdownProps) {
 
       {isOpen && (
         <ReactorsDialog
-          post={post}
+          targetType={targetType}
+          postId={post.id}
           isOpen
           onClose={() => {
             setIsOpen(false);

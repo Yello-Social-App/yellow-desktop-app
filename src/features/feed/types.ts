@@ -8,6 +8,7 @@ import {
   postVisibilitySchema,
   type Post,
   type PostVisibility,
+  type ReactionTargetType,
   type ReactionType,
 } from '@shared/ipc-types';
 import { z } from 'zod';
@@ -32,6 +33,12 @@ export const REACTION_LABELS: Record<ReactionType, { emoji: string; label: strin
 
 /** `reactionCounts` also carries a `total` key, which is not a reaction type. */
 const TOTAL_KEY = 'total';
+
+/** The reaction targets that are posts: a feed post, or a community post. */
+export type PostTargetType = Extract<ReactionTargetType, 'POST' | 'COMMUNITY_POST'>;
+
+/** What reading reactions off a post needs; a community post has it too. */
+export type Reactable = Pick<Post, 'id' | 'reactionCounts'>;
 
 /**
  * Content may be empty only when images are attached, which is the rule the API
@@ -74,7 +81,7 @@ export function visibilityOf(post: Post): PostVisibility {
   return parsed.success ? parsed.data : 'PUBLIC';
 }
 
-export function reactionTotal(post: Post): number {
+export function reactionTotal(post: Pick<Post, 'reactionCounts'>): number {
   const explicitTotal = post.reactionCounts[TOTAL_KEY];
   if (typeof explicitTotal === 'number') {
     return explicitTotal;

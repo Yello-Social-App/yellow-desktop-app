@@ -112,6 +112,7 @@ export const ENDPOINTS = {
   communityPosts: {
     frontPage: `${base}/community-posts`,
     vote: (postId: string) => `${base}/community-posts/${seg(postId)}/vote`,
+    comments: (postId: string) => `${base}/community-posts/${seg(postId)}/comments`,
   },
   projects: {
     list: `${base}/projects`,
