@@ -295,7 +295,22 @@ export interface Composer {
   addLocalFiles: (source: LocalFileSource, files: LocalFile[]) => void;
   dropAttachment: (attachmentId: string) => void;
   isAttaching: boolean;
+  /** The open conversation, which a voice recording belongs to. */
+  conversationId: string | null;
+  /**
+   * Whether the mic is offered: this runtime can record, and the server has
+   * not answered 503 to a voice upload this session.
+   */
+  canRecordVoice: boolean;
 }
+
+/** MediaRecorder and getUserMedia both exist; the permission is asked for on use. */
+const RUNTIME_CAN_RECORD =
+  typeof MediaRecorder !== 'undefined' &&
+  typeof navigator !== 'undefined' &&
+  // Typed as always present, but absent outside a secure context.
+  'mediaDevices' in navigator &&
+  typeof navigator.mediaDevices.getUserMedia === 'function';
 
 export function useComposer(): Composer {
   const send = useMessagesStore((state) => state.send);
@@ -314,6 +329,8 @@ export function useComposer(): Composer {
   const addLocalFiles = useMessagesStore((state) => state.addLocalFiles);
   const dropAttachment = useMessagesStore((state) => state.dropAttachment);
   const isAttaching = useMessagesStore((state) => state.isAttaching);
+  const conversationId = useMessagesStore((state) => state.activeConversationId);
+  const voiceUnavailable = useMessagesStore((state) => state.voiceUnavailable);
   const attachments = useMessagesStore((state) =>
     state.activeConversationId === null
       ? NO_ATTACHMENTS
@@ -401,6 +418,8 @@ export function useComposer(): Composer {
     },
     dropAttachment,
     isAttaching,
+    conversationId,
+    canRecordVoice: RUNTIME_CAN_RECORD && !voiceUnavailable,
   };
 }
 

@@ -86,6 +86,12 @@ export function conversationTitle(
   return names.join(', ');
 }
 
+const ATTACHMENT_WORDING = {
+  IMAGE: 'Sent a photo',
+  VOICE: 'Sent a voice message',
+  FILE: 'Sent a file',
+} as const;
+
 /** What a line says when it has no text of its own, in the service's wording. */
 export function describeMessage(
   message: Pick<ChatMessage, 'body'> &
@@ -102,7 +108,7 @@ export function describeMessage(
   }
   const [first] = message.attachments ?? [];
   if (first !== undefined) {
-    return first.kind === 'IMAGE' ? 'Sent a photo' : 'Sent a file';
+    return ATTACHMENT_WORDING[first.kind];
   }
   // The list's preview carries no more than this; a tombstone, a file and an
   // invite all look alike from here.

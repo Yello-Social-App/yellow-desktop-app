@@ -743,6 +743,10 @@ export const CHAT_PAGE_MAX_SIZE = 100;
 export const CHAT_MESSAGE_MAX_ATTACHMENTS = 10;
 /** Each upload and each group photo (`CHAT_ATTACHMENT_MAX_BYTES`, 10 MiB). */
 export const CHAT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+/** The longest voice message the service takes (`VOICE_MAX_DURATION_MS`). */
+export const VOICE_MAX_DURATION_MS = 5 * 60 * 1000;
+/** Bars in a voice message's waveform (`VOICE_WAVEFORM_BARS`), each 0–100. */
+export const VOICE_WAVEFORM_BARS = 64;
 
 export const CONVERSATION_TYPES = ['DIRECT', 'GROUP'] as const;
 export const conversationTypeSchema = z.enum(CONVERSATION_TYPES);
@@ -805,19 +809,51 @@ export const participantSchema = z.object({
   lastReadAt: optionalText(64),
 });
 
+export type ChatAttachmentKind = 'IMAGE' | 'VOICE' | 'FILE';
+
+/**
+ * What the service measured from a voice message's audio. Bars are clamped
+ * and trimmed rather than refused: a waveform slightly out of spec is still
+ * worth drawing, and must never void the message it rides on (A10).
+ */
+export const voiceMetaSchema = z.object({
+  durationMs: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(VOICE_MAX_DURATION_MS * 2),
+  waveform: z
+    .array(z.number())
+    .max(VOICE_WAVEFORM_BARS * 4)
+    .nullish()
+    .transform((bars) =>
+      (bars ?? [])
+        .slice(0, VOICE_WAVEFORM_BARS)
+        .map((bar) => (Number.isFinite(bar) ? Math.min(100, Math.max(0, Math.round(bar))) : 0)),
+    ),
+});
+
 /**
  * A file on a message. The kind is sniffed from the bytes server-side; an
  * unknown kind reads as FILE, which downloads rather than renders inline.
+ * VOICE only ever comes from the voice upload route, and plays in an `<audio>`.
  */
 export const chatAttachmentSchema = z.object({
   id: z.string().min(1).max(64),
   kind: z
     .string()
     .max(16)
-    .transform((value): 'IMAGE' | 'FILE' => (value === 'IMAGE' ? 'IMAGE' : 'FILE')),
+    .transform((value): ChatAttachmentKind =>
+      value === 'IMAGE' || value === 'VOICE' ? value : 'FILE',
+    ),
   fileName: z.string().max(512),
   mimeType: z.string().max(255),
   sizeBytes: z.number().int().nonnegative(),
+  /** Set only on VOICE; a malformed one reads as absent rather than failing the row. */
+  voice: voiceMetaSchema
+    .nullish()
+    .transform((value) => value ?? null)
+    .catch(null),
   url: mediaUrl,
   urlExpiresAt: nullableTimestamp,
 });
@@ -1162,6 +1198,22 @@ export const uploadLocalFilesRequestSchema = z.object({
     .max(CHAT_MESSAGE_MAX_ATTACHMENTS),
 });
 
+/**
+ * A voice message the renderer recorded. The bytes come from the page — the
+ * microphone is only readable there — so, as with a paste, the main process
+ * treats them as untrusted: bounded here, and uploaded only if their leading
+ * bytes are WebM, Ogg or MP4 (A05/A06). The service decodes them again.
+ */
+export const uploadVoiceRequestSchema = z.object({
+  conversationId: chatId,
+  bytes: z
+    .instanceof(Uint8Array)
+    .refine(
+      (bytes) => bytes.byteLength > 0 && bytes.byteLength <= CHAT_ATTACHMENT_MAX_BYTES,
+      'A voice message must be 10 MB or smaller.',
+    ),
+});
+
 export const attachmentIdRequestSchema = z.object({ attachmentId: chatId });
 
 export const attachmentResponseSchema = z.object({ attachment: chatAttachmentSchema });
@@ -1393,6 +1445,8 @@ export type AttachChatFilesRequest = z.infer<typeof attachChatFilesRequestSchema
 export type AttachChatFilesResponse = z.infer<typeof attachChatFilesResponseSchema>;
 export type LocalFileSource = (typeof LOCAL_FILE_SOURCES)[number];
 export type UploadLocalFilesRequest = z.infer<typeof uploadLocalFilesRequestSchema>;
+export type VoiceMeta = z.infer<typeof voiceMetaSchema>;
+export type UploadVoiceRequest = z.infer<typeof uploadVoiceRequestSchema>;
 export type AttachmentIdRequest = z.infer<typeof attachmentIdRequestSchema>;
 export type AttachmentResponse = z.infer<typeof attachmentResponseSchema>;
 export type SavedFileResponse = z.infer<typeof savedFileResponseSchema>;
@@ -2638,6 +2692,8 @@ export interface YelloBridge {
     socketState(): Promise<IpcResult<ChatSocketState>>;
     attachFiles(request: AttachChatFilesRequest): Promise<IpcResult<AttachChatFilesResponse>>;
     uploadLocalFiles(request: UploadLocalFilesRequest): Promise<IpcResult<AttachChatFilesResponse>>;
+    /** Uploads a recording; answers the pending VOICE attachment to send. */
+    uploadVoice(request: UploadVoiceRequest): Promise<IpcResult<AttachmentResponse>>;
     getAttachment(request: AttachmentIdRequest): Promise<IpcResult<AttachmentResponse>>;
     saveAttachment(request: AttachmentIdRequest): Promise<IpcResult<SavedFileResponse>>;
     renameGroup(request: RenameGroupRequest): Promise<IpcResult<GroupRecordResponse>>;

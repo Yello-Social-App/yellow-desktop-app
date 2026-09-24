@@ -2,12 +2,17 @@
  * Default-deny policy for everything Chromium can be asked to hand out
  * (OWASP A01 / A02).
  *
- * Camera, microphone, geolocation, notifications, MIDI, USB, serial, HID and
- * clipboard reads are all denied. The allowlist below is deliberately empty:
- * a feature that needs a permission has to add itself here explicitly, and the
- * reviewer sees that in the diff.
+ * Camera, geolocation, notifications, MIDI, USB, serial, HID and clipboard
+ * reads are all denied. The allowlist below is deliberately empty: a feature
+ * that needs a permission has to add itself here explicitly, and the reviewer
+ * sees that in the diff.
+ *
+ * The one exception is the microphone, for voice messages — and only the
+ * microphone: a `media` request is granted when it asks for audio alone, from
+ * the app's own renderer, in its main frame. A request that also wants the
+ * camera, or comes from anywhere else, is denied like everything else.
  */
-import { app, session, shell, type WebContents } from 'electron';
+import { app, session, shell, systemPreferences, type WebContents } from 'electron';
 
 import { createLogger } from '../../shared/logger';
 
@@ -30,10 +35,58 @@ function isGranted(permission: string): boolean {
   return GRANTED_PERMISSIONS.includes(permission);
 }
 
+function isTrustedOrigin(url: string | undefined): boolean {
+  return url !== undefined && originOf(url) === trustedRendererOrigin();
+}
+
+/** A `getUserMedia({ audio: true })` from our own page, and nothing broader. */
+function isMicrophoneRequest(
+  permission: string,
+  details: { requestingUrl?: string; isMainFrame?: boolean; mediaTypes?: string[] },
+): boolean {
+  const { mediaTypes = [] } = details;
+  return (
+    permission === 'media' &&
+    details.isMainFrame === true &&
+    isTrustedOrigin(details.requestingUrl) &&
+    mediaTypes.length > 0 &&
+    mediaTypes.every((type) => type === 'audio')
+  );
+}
+
+/**
+ * On macOS the OS asks the user too, once, and remembers the answer. Elsewhere
+ * the OS setting is outside the app's reach, and a refusal there surfaces as
+ * the recorder failing to start, which the renderer explains.
+ */
+async function osAllowsMicrophone(): Promise<boolean> {
+  if (process.platform !== 'darwin') {
+    return true;
+  }
+  if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') {
+    return true;
+  }
+  return systemPreferences.askForMediaAccess('microphone');
+}
+
 export function applyPermissionPolicy(): void {
   const { defaultSession } = session;
 
-  defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+  defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    if (isMicrophoneRequest(permission, details)) {
+      void osAllowsMicrophone().then(
+        (allowed) => {
+          if (!allowed) {
+            log.info('microphone_denied_by_os', {});
+          }
+          callback(allowed);
+        },
+        () => {
+          callback(false);
+        },
+      );
+      return;
+    }
     const granted = isGranted(permission);
     if (!granted) {
       log.warn('permission_request_denied', { permission });
@@ -41,7 +94,19 @@ export function applyPermissionPolicy(): void {
     callback(granted);
   });
 
-  defaultSession.setPermissionCheckHandler((_webContents, permission) => isGranted(permission));
+  defaultSession.setPermissionCheckHandler(
+    (_webContents, permission, requestingOrigin, details) => {
+      if (
+        permission === 'media' &&
+        details.mediaType === 'audio' &&
+        details.isMainFrame &&
+        originOf(requestingOrigin) === trustedRendererOrigin()
+      ) {
+        return true;
+      }
+      return isGranted(permission);
+    },
+  );
 
   defaultSession.setDevicePermissionHandler(() => false);
 

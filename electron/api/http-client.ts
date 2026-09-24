@@ -288,6 +288,8 @@ interface RequestOptions<TSchema extends z.ZodType> {
   allowRefresh?: boolean;
   /** Which service the path belongs to; decides the origin and the unwrapping. */
   service?: ApiService;
+  /** Overrides the default timeout, for a call the server is slow to answer by design. */
+  timeoutMs?: number;
 }
 
 /**
@@ -297,7 +299,16 @@ interface RequestOptions<TSchema extends z.ZodType> {
 export async function apiRequest<TSchema extends z.ZodType>(
   options: RequestOptions<TSchema>,
 ): Promise<IpcResult<z.infer<TSchema>>> {
-  const { method, url, schema, body, params, allowRefresh = true, service = 'api' } = options;
+  const {
+    method,
+    url,
+    schema,
+    body,
+    params,
+    allowRefresh = true,
+    service = 'api',
+    timeoutMs,
+  } = options;
 
   const config: AxiosRequestConfig = {
     method,
@@ -305,6 +316,7 @@ export async function apiRequest<TSchema extends z.ZodType>(
     baseURL: service === 'chat' ? chatBase : baseUrl,
     ...(body === undefined ? {} : { data: body }),
     ...(params === undefined ? {} : { params }),
+    ...(timeoutMs === undefined ? {} : { timeout: timeoutMs }),
   };
 
   let response;

@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 
 import { cn } from '@/lib/cn';
 
-type IconButtonTone = 'default' | 'danger' | 'brand';
+type IconButtonTone = 'default' | 'danger' | 'brand' | 'filled';
 type IconButtonSize = 'sm' | 'md';
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -19,6 +19,13 @@ const TONE_CLASSES: Record<IconButtonTone, string> = {
   default: 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface',
   danger: 'text-on-surface-variant hover:bg-error-container hover:text-on-error-container',
   brand: 'text-on-surface-variant hover:bg-primary-fixed hover:text-on-primary-fixed',
+  /**
+   * The primary action (send, record): a solid yellow disc with a dark glyph.
+   * A tone of its own, because `cn` joins rather than merges classes — layered
+   * over `default`, its grey text and hover fill would win the cascade.
+   */
+  filled:
+    'bg-primary-container text-on-primary-container hover:brightness-110 disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:hover:brightness-100',
 };
 
 const SIZE_CLASSES: Record<IconButtonSize, string> = {

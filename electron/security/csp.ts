@@ -44,6 +44,15 @@ function imageHosts(): string {
   return [...origins, chatMediaSources()].filter((value) => value !== '').join(' ');
 }
 
+/**
+ * Voice messages stream from presigned links on the chat-media host, so only
+ * that allowlist may feed an `<audio>`; with no hosts configured, nothing may.
+ */
+function mediaSources(): string {
+  const sources = chatMediaSources();
+  return sources === '' ? "'none'" : sources;
+}
+
 function productionPolicy(): string {
   return [
     "default-src 'none'",
@@ -52,7 +61,7 @@ function productionPolicy(): string {
     `img-src 'self' data: ${imageHosts()}`.trim(),
     "font-src 'self'",
     "connect-src 'self'",
-    "media-src 'none'",
+    `media-src ${mediaSources()}`,
     "object-src 'none'",
     "frame-src 'none'",
     "worker-src 'none'",
@@ -73,6 +82,7 @@ function developmentPolicy(devUrl: string): string {
     `img-src 'self' data: ${devUrl} ${imageHosts()}`.trim(),
     `font-src 'self' data: ${devUrl}`,
     `connect-src 'self' ${devUrl} ${wsUrl}`,
+    `media-src ${mediaSources()}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
@@ -95,9 +105,10 @@ export function applyContentSecurityPolicy(): void {
         'Content-Security-Policy': [policy],
         'X-Content-Type-Options': ['nosniff'],
         // Opt every document out of the powerful features we also deny at the
-        // permission-handler level.
+        // permission-handler level. The microphone is our own page's only, for
+        // voice messages; no frame or other origin may ask for it.
         'Permissions-Policy': [
-          'camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), serial=(), hid=()',
+          'camera=(), microphone=(self), geolocation=(), payment=(), usb=(), midi=(), serial=(), hid=()',
         ],
       },
     });

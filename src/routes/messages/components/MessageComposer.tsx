@@ -1,8 +1,18 @@
-import { CornerUpLeft, FileText, LoaderCircle, Paperclip, Pencil, Send, X } from 'lucide-react';
+import {
+  CornerUpLeft,
+  FileText,
+  LoaderCircle,
+  Mic,
+  Paperclip,
+  Pencil,
+  Send,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 
 import { IconButton } from '@/components/ui/IconButton';
-import { useComposer } from '@/features/messages/hooks';
+import { useActiveConversation, useComposer } from '@/features/messages/hooks';
 import {
   composeMessageSchema,
   describeMessage,
@@ -10,14 +20,23 @@ import {
 } from '@/features/messages/types';
 import { CHAT_MESSAGE_MAX_ATTACHMENTS } from '@shared/ipc-types';
 import { readLocalFiles } from '@/features/messages/local-files';
+import { useVoiceRecorder } from '@/features/messages/voice-recorder';
 import { formatBytes } from '@/lib/format';
 import { displayName } from '@/lib/user-display';
+
+import { VoiceRecorderDialog } from './VoiceRecorderDialog';
 
 /**
  * The composer pinned to the bottom of the thread. Enter sends; Shift+Enter
  * breaks; Escape leaves a reply or an edit; Up in an empty box edits your
  * newest line; pasting an image attaches it (dropping a file anywhere on the
  * thread does too — see useFileDrop).
+ *
+ * With nothing typed or attached, Send becomes a mic: a voice message goes as
+ * its own line (a reply, if one is open), never alongside text or files, which
+ * is how the service wants it. While one is in hand the recording screen opens
+ * in the middle of the window, and the draft text waits underneath, untouched.
+ * Its problems (no mic, too short) land under the box once it closes.
  *
  * It has three modes that share one box — new line, reply, edit — and the
  * store owns which one is active, because the thread's hover bar is what
@@ -33,6 +52,9 @@ export function MessageComposer() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draftBeforeEdit = useRef('');
   const editingId = editing?.id ?? null;
+  const recorder = useVoiceRecorder(composer.conversationId);
+  const recipient = useActiveConversation()?.title ?? '';
+  const isVoiceActive = recorder.state.kind !== 'idle';
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -128,6 +150,14 @@ export function MessageComposer() {
     !isSending &&
     !composer.isAttaching &&
     (body.trim() !== '' || (editing === null && attachments.length > 0));
+  const offersMic =
+    composer.canRecordVoice &&
+    hasConversation &&
+    editing === null &&
+    body.trim() === '' &&
+    attachments.length === 0 &&
+    !composer.isAttaching;
+  const shownError = error ?? recorder.problem;
 
   return (
     <form
@@ -135,7 +165,7 @@ export function MessageComposer() {
         event.preventDefault();
         submit();
       }}
-      className="border-outline-variant px-lg shrink-0 border-t py-3"
+      className="border-outline-variant px-lg relative shrink-0 border-t py-3"
     >
       {(editing !== null || replyingTo !== null) && (
         <div className="bg-surface-container-low border-outline-variant mb-2 flex items-center gap-2 rounded-2xl border py-1.5 pr-1.5 pl-3">
@@ -222,6 +252,17 @@ export function MessageComposer() {
         </ul>
       )}
 
+      {isVoiceActive && <VoiceRecorderDialog recorder={recorder} recipient={recipient} />}
+      {recorder.toast !== null && (
+        <p
+          role="status"
+          className="bg-surface-container-highest border-outline-strong animate-voice-toast text-on-surface pointer-events-none absolute bottom-full left-1/2 mb-3 flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2.5 text-[13px] whitespace-nowrap"
+        >
+          <Trash2 aria-hidden className="text-on-surface-variant size-3.5" />
+          {recorder.toast}
+        </p>
+      )}
+
       <div className="bg-surface-container-low border-outline-variant focus-within:border-primary-container focus-within:ring-primary-container/20 transition-tone flex items-end gap-1 rounded-3xl border py-1.5 pr-1.5 pl-1.5 focus-within:ring-2">
         <IconButton
           label="Attach files"
@@ -276,17 +317,32 @@ export function MessageComposer() {
           }}
           className="text-on-surface placeholder:text-outline max-h-40 min-h-8 w-full flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] leading-relaxed focus:outline-none"
         />
-        <IconButton
-          label={editing !== null ? 'Save edit' : 'Send message'}
-          type="submit"
-          icon={<Send className="size-4" />}
-          disabled={!canSubmit}
-          className="bg-primary-container text-on-primary-container disabled:bg-surface-container-high disabled:text-on-surface-variant hover:brightness-110 disabled:opacity-100"
-        />
+        {offersMic ? (
+          <button
+            type="button"
+            aria-label="Record a voice message"
+            title="Record a voice message"
+            onClick={() => {
+              setError(null);
+              recorder.start();
+            }}
+            className="bg-primary-container text-on-primary-container flex size-10 shrink-0 items-center justify-center rounded-full transition-[transform,filter] duration-150 hover:-translate-y-px hover:brightness-110 active:scale-[0.94]"
+          >
+            <Mic aria-hidden className="size-[18px]" strokeWidth={2.2} />
+          </button>
+        ) : (
+          <IconButton
+            label={editing !== null ? 'Save edit' : 'Send message'}
+            type="submit"
+            icon={<Send className="size-4" />}
+            disabled={!canSubmit}
+            tone="filled"
+          />
+        )}
       </div>
-      {error !== null && (
+      {shownError !== null && (
         <p role="alert" className="text-error mt-xs ml-md text-[13px]">
-          {error}
+          {shownError}
         </p>
       )}
     </form>
