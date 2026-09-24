@@ -128,6 +128,51 @@ export function pastedImagePart(
 }
 
 /**
+ * The recording containers the voice route decodes, by their leading bytes:
+ * WebM (Chromium's MediaRecorder, which is what this app records), Ogg
+ * (Firefox) and MP4/M4A (the mobile apps). WebM is Matroska's EBML header.
+ */
+const VOICE_SIGNATURES: readonly {
+  type: string;
+  extension: string;
+  test: (b: Uint8Array) => boolean;
+}[] = [
+  {
+    type: 'audio/webm',
+    extension: 'webm',
+    test: (b) => [0x1a, 0x45, 0xdf, 0xa3].every((v, i) => b[i] === v),
+  },
+  {
+    type: 'audio/ogg',
+    extension: 'ogg',
+    test: (b) => String.fromCharCode(...b.subarray(0, 4)) === 'OggS',
+  },
+  {
+    type: 'audio/mp4',
+    extension: 'm4a',
+    test: (b) => String.fromCharCode(...b.subarray(4, 8)) === 'ftyp',
+  },
+];
+
+/**
+ * Turns recorded bytes into a form part — only if they really are a WebM,
+ * Ogg or MP4 container. The bytes came from the renderer, so the format is
+ * read from them, never from what the page claimed (A05); the service decodes
+ * the audio itself and refuses anything it cannot play.
+ */
+export function voiceRecordingPart(bytes: Uint8Array): IpcResult<FilePart> {
+  const format = VOICE_SIGNATURES.find((signature) => signature.test(bytes));
+  if (format === undefined) {
+    return ipcFail('INVALID_PAYLOAD', 'That recording is not in a format chat can play.');
+  }
+  const body = new Uint8Array(bytes).buffer;
+  return ipcOk({
+    blob: new Blob([body], { type: format.type }),
+    fileName: `voice.${format.extension}`,
+  });
+}
+
+/**
  * Turns dropped bytes into a form part. Any type is allowed, as the picker
  * allows — the service sniffs the bytes, renders only real images inline and
  * forces everything else to download — so only the name is cleaned here.

@@ -67,6 +67,7 @@ export const IPC_CHANNELS = {
   CHAT_SOCKET_STATE: 'chat:socket-state',
   CHAT_ATTACH_FILES: 'chat:attach-files',
   CHAT_UPLOAD_LOCAL_FILES: 'chat:upload-local-files',
+  CHAT_UPLOAD_VOICE: 'chat:upload-voice',
   CHAT_GET_ATTACHMENT: 'chat:get-attachment',
   CHAT_SAVE_ATTACHMENT: 'chat:save-attachment',
   CHAT_RENAME_GROUP: 'chat:rename-group',

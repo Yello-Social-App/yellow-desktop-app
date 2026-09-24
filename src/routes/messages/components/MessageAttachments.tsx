@@ -6,6 +6,8 @@ import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { cn } from '@/lib/cn';
 import { formatBytes } from '@/lib/format';
 
+import { VoiceNote } from './VoiceNote';
+
 interface MessageAttachmentsProps {
   attachments: readonly ChatAttachment[];
   isMine: boolean;
@@ -15,7 +17,7 @@ interface MessageAttachmentsProps {
 }
 
 /**
- * Images inline, files as a chip with a save button.
+ * Voice messages as a player, images inline, files as a chip with a save button.
  *
  * The split follows the service, not the file name: it sniffs the bytes and
  * marks JPEG/PNG/GIF/WebP as IMAGE, everything else (an SVG, a PDF, an HTML
@@ -31,10 +33,15 @@ export function MessageAttachments({
 }: MessageAttachmentsProps) {
   const [viewing, setViewing] = useState<number | null>(null);
   const images = attachments.filter((a) => a.kind === 'IMAGE');
+  const voices = attachments.filter((a) => a.kind === 'VOICE');
   const files = attachments.filter((a) => a.kind === 'FILE');
 
   return (
     <div className={cn('flex flex-col gap-1', isMine ? 'items-end' : 'items-start')}>
+      {voices.map((voice) => (
+        <VoiceNote key={voice.id} voice={voice} isMine={isMine} onExpired={onExpired} />
+      ))}
+
       {images.length > 0 && (
         <div
           className={cn(

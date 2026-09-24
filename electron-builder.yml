@@ -26,6 +26,9 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   icon: build/icons/icon.png
+  # Shown by macOS the first time a voice message is recorded.
+  extendInfo:
+    NSMicrophoneUsageDescription: Yello uses the microphone to record voice messages you send in chat.
 
 win:
   target:
@@ -59,6 +62,10 @@ appx:
   applicationId: Yello
   displayName: Yello
   backgroundColor: '#F4C542'
+  # runFullTrust is what every Electron package needs; microphone is for voice messages.
+  capabilities:
+    - runFullTrust
+    - microphone
   languages:
     - en-US
 

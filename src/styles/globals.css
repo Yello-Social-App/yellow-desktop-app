@@ -256,6 +256,140 @@
       transform: none;
     }
   }
+
+  /* ---- Voice recorder ---------------------------------------------------
+   * The recording screen's own motion, from its design. The one place the
+   * app allows a little overshoot: the screen's rows rise in one after
+   * another and the orb and the sent check land with a small pop, because
+   * arriving on a live mic should feel like a moment.
+   */
+  --animate-voice-up: voice-up 400ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+  --animate-voice-zoom-in: voice-zoom-in 550ms 60ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  --animate-voice-spin-grow: voice-spin-grow 700ms 100ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  --animate-voice-out: voice-out 250ms ease-in both;
+  --animate-voice-burst: voice-burst 500ms ease-out both;
+  --animate-voice-orbit: voice-orbit 14s linear infinite;
+  --animate-voice-ripple: voice-ripple 2s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  --animate-voice-blink: voice-blink 1.1s ease-in-out infinite;
+  --animate-voice-check: voice-check 450ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  --animate-voice-draw: voice-draw 300ms 200ms ease-out forwards;
+  --animate-voice-toast: voice-toast 250ms ease-out both;
+
+  @keyframes voice-up {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes voice-zoom-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+    65% {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes voice-spin-grow {
+    from {
+      opacity: 0;
+      transform: rotate(-120deg) scale(0.6);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes voice-out {
+    from {
+      opacity: 1;
+      transform: none;
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.9) translateY(10px);
+    }
+  }
+
+  @keyframes voice-burst {
+    from {
+      transform: scale(1);
+      opacity: 1;
+    }
+    to {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+  }
+
+  @keyframes voice-orbit {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes voice-ripple {
+    from {
+      transform: scale(1);
+      opacity: 0.45;
+    }
+    to {
+      transform: scale(2.3);
+      opacity: 0;
+    }
+  }
+
+  @keyframes voice-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.2;
+    }
+  }
+
+  @keyframes voice-check {
+    0% {
+      transform: scale(0.3);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.15);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  @keyframes voice-draw {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes voice-toast {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }
 
 @layer base {

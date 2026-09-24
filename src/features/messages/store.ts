@@ -70,6 +70,7 @@ import {
   setReaction,
   unsendMessage,
   uploadLocalFiles,
+  uploadVoice,
   type MessagesError,
   type OutgoingMessage,
   type LocalFile,
@@ -79,6 +80,14 @@ import type { GroupNotice, ThreadMessage } from './types';
 const log = createLogger('messages.store');
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+/**
+ * How a voice send ended. A failure keeps the recording on the recorder's
+ * side so it can be sent again; `unavailable` means this server cannot take
+ * voice at all (no bucket or no ffmpeg), so the mic goes away.
+ */
+export type VoiceSendOutcome =
+  { status: 'sent' } | { status: 'failed' | 'unavailable'; message: string };
 
 export interface Thread {
   messages: ThreadMessage[];
@@ -123,6 +132,10 @@ interface MessagesState {
   /** Uploaded, not yet sent: conversation id → the files in its draft. */
   drafts: Record<string, ChatAttachment[]>;
   isAttaching: boolean;
+  /** The server answered 503 to a voice upload: hide the mic for this session. */
+  voiceUnavailable: boolean;
+  /** The one voice message playing; starting another pauses this one. */
+  playingVoiceId: string | null;
   /** Group changes seen live this session, per conversation. */
   notices: Record<string, GroupNotice[]>;
   /** The open conversation the viewer just lost access to, so the page can leave it. */
@@ -142,6 +155,8 @@ interface MessagesState {
   open: (conversationId: string | null) => Promise<void>;
   loadOlder: (conversationId: string) => Promise<void>;
   send: (body: string) => Promise<boolean>;
+  /** Uploads a recording, then sends it as its own line (a reply, if one is open). */
+  sendVoice: (recording: Uint8Array<ArrayBuffer>) => Promise<VoiceSendOutcome>;
   retry: (clientId: string) => Promise<boolean>;
   markActiveRead: () => void;
   setTyping: (typing: boolean) => void;
@@ -161,6 +176,7 @@ interface MessagesState {
   dropAttachment: (attachmentId: string) => void;
   refreshAttachment: (attachment: ChatAttachment) => Promise<void>;
   saveAttachment: (attachmentId: string) => Promise<void>;
+  setPlayingVoice: (attachmentId: string | null) => void;
 
   refreshConversation: (conversationId: string) => Promise<void>;
   renameGroup: (conversationId: string, title: string) => Promise<boolean>;
@@ -472,6 +488,58 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
   }
 
   /**
+   * Draws a new line optimistically and sends it. Shared by the composer's
+   * text-and-files send and a voice message, which differ only in where the
+   * attachments came from. The caller clears the composer's reply and draft.
+   */
+  async function post(
+    conversationId: string,
+    viewerId: string,
+    body: string,
+    attachments: ChatAttachment[],
+    quoted: ThreadMessage | undefined,
+  ): Promise<boolean> {
+    const clientId = crypto.randomUUID();
+    const optimistic: ThreadMessage = {
+      id: localId(clientId),
+      conversationId,
+      senderId: viewerId,
+      clientId,
+      body,
+      replyTo:
+        quoted === undefined
+          ? null
+          : {
+              id: quoted.id,
+              senderId: quoted.senderId,
+              body: quoted.body.slice(0, REPLY_PREVIEW_LENGTH),
+              hasAttachments: quoted.attachments.length > 0,
+              deleted: quoted.deletedAt !== null,
+            },
+      attachments,
+      reactions: [],
+      groupInvite: null,
+      storyReply: null,
+      createdAt: new Date().toISOString(),
+      editedAt: null,
+      deletedAt: null,
+      delivery: 'sending',
+    };
+    withThread(conversationId, (thread) => ({
+      ...thread,
+      messages: [...thread.messages, optimistic],
+    }));
+
+    return deliver({
+      conversationId,
+      clientId,
+      body,
+      replyToMessageId: quoted?.id,
+      attachmentIds: attachments.map((attachment) => attachment.id),
+    });
+  }
+
+  /**
    * Runs one upload (picked or pasted) into the active conversation's draft:
    * checks there is room, holds `isAttaching` while it runs, and appends what
    * the service accepted. The draft is keyed by the conversation the upload
@@ -538,6 +606,8 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     editingId: null,
     drafts: {},
     isAttaching: false,
+    voiceUnavailable: false,
+    playingVoiceId: null,
     notices: {},
     removedConversationId: null,
     refusedConversationIds: [],
@@ -567,6 +637,8 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
           replyingToId: null,
           editingId: null,
           drafts: {},
+          voiceUnavailable: false,
+          playingVoiceId: null,
           notices: {},
           removedConversationId: null,
           refusedConversationIds: [],
@@ -686,50 +758,45 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       const quoted =
         replyingToId === null ? undefined : findMessage(activeConversationId, replyingToId);
 
-      const clientId = crypto.randomUUID();
-      const optimistic: ThreadMessage = {
-        id: localId(clientId),
-        conversationId: activeConversationId,
-        senderId: viewerId,
-        clientId,
-        body,
-        replyTo:
-          quoted === undefined
-            ? null
-            : {
-                id: quoted.id,
-                senderId: quoted.senderId,
-                body: quoted.body.slice(0, REPLY_PREVIEW_LENGTH),
-                hasAttachments: quoted.attachments.length > 0,
-                deleted: quoted.deletedAt !== null,
-              },
-        attachments,
-        reactions: [],
-        groupInvite: null,
-        storyReply: null,
-        createdAt: new Date().toISOString(),
-        editedAt: null,
-        deletedAt: null,
-        delivery: 'sending',
-      };
-      withThread(activeConversationId, (thread) => ({
-        ...thread,
-        messages: [...thread.messages, optimistic],
-      }));
       // The draft is spent the moment it is drawn as a line; a failure keeps
       // its files on that line, which is what Retry resends.
       set((state) => ({
         replyingToId: null,
         drafts: { ...state.drafts, [activeConversationId]: [] },
       }));
+      return post(activeConversationId, viewerId, body, attachments, quoted);
+    },
 
-      return deliver({
-        conversationId: activeConversationId,
-        clientId,
-        body,
-        replyToMessageId: quoted?.id,
-        attachmentIds: attachments.map((attachment) => attachment.id),
-      });
+    sendVoice: async (recording) => {
+      const { activeConversationId: conversationId, viewerId } = get();
+      if (conversationId === null || viewerId === null) {
+        return { status: 'failed', message: 'Open a conversation first.' };
+      }
+      const uploaded = await uploadVoice(conversationId, recording);
+      if (!uploaded.ok) {
+        if (uploaded.error.apiCode === 'UNAVAILABLE') {
+          set({ voiceUnavailable: true });
+          return {
+            status: 'unavailable',
+            message: 'Voice messages are not available on this server yet.',
+          };
+        }
+        return { status: 'failed', message: uploaded.error.message };
+      }
+
+      // The reply open *now* is the one meant, and only if the viewer is still
+      // in the conversation the recording was made for.
+      const { activeConversationId, replyingToId } = get();
+      const isStillOpen = activeConversationId === conversationId;
+      const quoted =
+        isStillOpen && replyingToId !== null
+          ? findMessage(conversationId, replyingToId)
+          : undefined;
+      if (isStillOpen) {
+        set({ replyingToId: null });
+      }
+      void post(conversationId, viewerId, '', [uploaded.data], quoted);
+      return { status: 'sent' };
     },
 
     retry: async (clientId) => {
@@ -1026,6 +1093,10 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       if (!result.ok) {
         set({ error: result.error.message });
       }
+    },
+
+    setPlayingVoice: (attachmentId) => {
+      set({ playingVoiceId: attachmentId });
     },
 
     refreshConversation: async (conversationId) => {

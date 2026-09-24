@@ -34,6 +34,7 @@ import {
   pickChatFiles,
   readChatFile,
   saveChatFile,
+  voiceRecordingPart,
   type FilePart,
 } from '../../chat/files';
 import { chatSocket, SocketFailure } from '../../chat/socket';
@@ -91,6 +92,7 @@ import {
   sendChatMessageRequestSchema,
   typingRequestSchema,
   uploadLocalFilesRequestSchema,
+  uploadVoiceRequestSchema,
   type AcknowledgedResponse,
   type AttachChatFilesResponse,
   type AttachmentResponse,
@@ -127,6 +129,9 @@ const conversationDetailSchema = conversationSchema.extend({
 const messageSentSchema = z.object({ message: chatMessageSchema });
 
 const ACKNOWLEDGED_TRUE: AcknowledgedResponse = { acknowledged: true };
+
+/** Upload plus the service's ffmpeg transcode of up to five minutes of audio. */
+const VOICE_UPLOAD_TIMEOUT_MS = 60_000;
 
 /** A conversation detail as a list row: what accepting an invite answers with. */
 function summaryOf(detail: z.infer<typeof conversationDetailSchema>): ConversationResponse {
@@ -446,6 +451,42 @@ function registerAttachmentHandlers(): void {
         0,
         files.length,
       ),
+  );
+
+  /**
+   * A voice message is its own upload route — the service transcodes it to
+   * AAC and measures its duration and waveform — but the same two steps: the
+   * pending attachment answered here is sent like any other file. The
+   * transcode takes the service a moment, hence the longer timeout.
+   */
+  registerIpcHandler(
+    IPC_CHANNELS.CHAT_UPLOAD_VOICE,
+    uploadVoiceRequestSchema,
+    async ({ conversationId, bytes }): Promise<IpcResult<AttachmentResponse>> => {
+      const part = voiceRecordingPart(bytes);
+      if (!part.ok) {
+        log.warn('voice_recording_refused', {});
+        return part;
+      }
+      const form = new FormData();
+      form.append('file', part.data.blob, part.data.fileName);
+      const uploaded = await apiRequest({
+        method: 'post',
+        url: ENDPOINTS.chat.voiceAttachment(conversationId),
+        body: form,
+        schema: chatAttachmentSchema,
+        service: 'chat',
+        timeoutMs: VOICE_UPLOAD_TIMEOUT_MS,
+      });
+      if (!uploaded.ok) {
+        return uploaded;
+      }
+      log.info('voice_uploaded', {
+        bytes: uploaded.data.sizeBytes,
+        durationMs: uploaded.data.voice?.durationMs ?? 0,
+      });
+      return ipcOk(attachmentResponseSchema.parse({ attachment: uploaded.data }));
+    },
   );
 
   registerIpcHandler(

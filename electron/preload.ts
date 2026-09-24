@@ -26,6 +26,7 @@ import type {
   AttachmentIdRequest,
   AttachmentResponse,
   UploadLocalFilesRequest,
+  UploadVoiceRequest,
   ChangeMemberRoleRequest,
   ChatMessageRef,
   EditChatMessageRequest,
@@ -292,6 +293,8 @@ const bridge: YelloBridge = {
       invoke<AttachChatFilesResponse>(IPC_CHANNELS.CHAT_ATTACH_FILES, request),
     uploadLocalFiles: (request: UploadLocalFilesRequest) =>
       invoke<AttachChatFilesResponse>(IPC_CHANNELS.CHAT_UPLOAD_LOCAL_FILES, request),
+    uploadVoice: (request: UploadVoiceRequest) =>
+      invoke<AttachmentResponse>(IPC_CHANNELS.CHAT_UPLOAD_VOICE, request),
     getAttachment: (request: AttachmentIdRequest) =>
       invoke<AttachmentResponse>(IPC_CHANNELS.CHAT_GET_ATTACHMENT, request),
     saveAttachment: (request: AttachmentIdRequest) =>

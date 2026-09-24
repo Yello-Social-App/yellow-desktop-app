@@ -150,6 +150,9 @@ export const ENDPOINTS = {
     /** Multipart upload, one `file` per request; the result is pending until sent. */
     attachments: (conversationId: string) =>
       `${chat}/conversations/${seg(conversationId)}/attachments`,
+    /** Multipart, one `file`: a recording the service transcodes to AAC and measures. */
+    voiceAttachment: (conversationId: string) =>
+      `${chat}/conversations/${seg(conversationId)}/attachments/voice`,
     /** A fresh presigned link for an attachment whose URL has expired. */
     attachment: (attachmentId: string) => `${chat}/attachments/${seg(attachmentId)}`,
     /** PUT (multipart) sets a group's photo, DELETE removes it. */

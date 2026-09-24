@@ -22,6 +22,7 @@ import {
   type AddGroupMembersRequest,
   type AttachChatFilesRequest,
   type UploadLocalFilesRequest,
+  type UploadVoiceRequest,
   type AttachmentIdRequest,
   type ChangeMemberRoleRequest,
   type ChatMessageRef,
@@ -388,6 +389,8 @@ export const ipc = {
     guarded('chat.uploadLocalFiles', attachChatFilesResponseSchema, (api) =>
       api.chat.uploadLocalFiles(request),
     ),
+  uploadChatVoice: (request: UploadVoiceRequest) =>
+    guarded('chat.uploadVoice', attachmentResponseSchema, (api) => api.chat.uploadVoice(request)),
   getChatAttachment: (request: AttachmentIdRequest) =>
     guarded('chat.getAttachment', attachmentResponseSchema, (api) =>
       api.chat.getAttachment(request),

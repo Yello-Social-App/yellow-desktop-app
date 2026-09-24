@@ -146,6 +146,18 @@ export async function uploadLocalFiles(
   return result.ok ? ok(result.data) : fail(result.error);
 }
 
+/**
+ * Uploads a recording as a pending VOICE attachment. The main process checks
+ * the container from its bytes; the service transcodes and measures it.
+ */
+export async function uploadVoice(
+  conversationId: string,
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<Result<ChatAttachment, MessagesError>> {
+  const result = await ipc.uploadChatVoice({ conversationId, bytes });
+  return result.ok ? ok(result.data.attachment) : fail(result.error);
+}
+
 export async function fetchAttachment(
   attachmentId: string,
 ): Promise<Result<ChatAttachment, MessagesError>> {

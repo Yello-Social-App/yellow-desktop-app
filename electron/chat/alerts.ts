@@ -78,6 +78,12 @@ function remember<V>(map: Map<string, V>, key: string, value: V, max: number): v
   }
 }
 
+const ATTACHMENT_WORDING = {
+  IMAGE: 'Sent a photo',
+  VOICE: 'Sent a voice message',
+  FILE: 'Sent a file',
+} as const;
+
 /** What an alert says for a line, following the service's own wording. */
 function describe(message: ChatMessage): string {
   if (message.body !== '') {
@@ -88,7 +94,7 @@ function describe(message: ChatMessage): string {
   }
   const [first] = message.attachments;
   if (first !== undefined) {
-    return first.kind === 'IMAGE' ? 'Sent a photo' : 'Sent a file';
+    return ATTACHMENT_WORDING[first.kind];
   }
   return 'Sent a message';
 }
