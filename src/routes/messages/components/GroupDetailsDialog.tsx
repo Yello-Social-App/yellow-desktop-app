@@ -1,9 +1,15 @@
-import { CHAT_GROUP_SIZE_LIMIT, CHAT_GROUP_TITLE_MAX, type Participant } from '@shared/ipc-types';
+import {
+  CHAT_GROUP_SIZE_LIMIT,
+  CHAT_GROUP_TITLE_MAX,
+  GROUP_PHOTO_EDGE,
+  type Participant,
+} from '@shared/ipc-types';
 import { Camera, Crown, LogOut, Search, ShieldCheck, UserPlus } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 
 import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
+import { ImageCropper } from '@/components/ui/ImageCropper';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useFriendList, useFriendsLoader } from '@/features/friends/hooks';
@@ -12,6 +18,7 @@ import { useMessagesStore } from '@/features/messages/store';
 import { groupRights } from '@/features/messages/types';
 import { useUsers } from '@/features/users/hooks';
 import { cn } from '@/lib/cn';
+import { cropToPng, type CropArea } from '@/lib/crop';
 import { displayName, handleOf } from '@/lib/user-display';
 
 import { GroupAvatar } from './GroupAvatar';
@@ -35,12 +42,16 @@ const ROLE_ORDER = { OWNER: 0, ADMIN: 1, MEMBER: 2 } as const;
  * Adding and inviting are both offered, because they are different social
  * acts: adding puts a friend straight in; an invite sends them a card in your
  * DM that they can decline.
+ *
+ * A new photo is cropped before it is saved: picking one swaps the dialog to a
+ * crop step, and only the square chosen there is uploaded.
  */
 export function GroupDetailsDialog({ row, onClose }: GroupDetailsDialogProps) {
   const { conversation } = row;
   const role = useActiveRole();
   const viewerId = useMessagesStore((state) => state.viewerId);
   const renameGroup = useMessagesStore((state) => state.renameGroup);
+  const pickGroupPhoto = useMessagesStore((state) => state.pickGroupPhoto);
   const setGroupPhoto = useMessagesStore((state) => state.setGroupPhoto);
   const removeGroupPhoto = useMessagesStore((state) => state.removeGroupPhoto);
   const removeMember = useMessagesStore((state) => state.removeMember);
@@ -52,6 +63,10 @@ export function GroupDetailsDialog({ row, onClose }: GroupDetailsDialogProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isConfirmingLeave, setIsConfirmingLeave] = useState(false);
+  /** The picked photo while it is being cropped; null outside the crop step. */
+  const [cropSource, setCropSource] = useState<string | null>(null);
+  const [cropArea, setCropArea] = useState<CropArea | null>(null);
+  const [cropError, setCropError] = useState<string | null>(null);
   const titleId = useId();
 
   const members = useMemo(
@@ -73,6 +88,80 @@ export function GroupDetailsDialog({ row, onClose }: GroupDetailsDialogProps) {
     setBusy(null);
     return done;
   };
+
+  const choosePhoto = (): void => {
+    void run('pick', async () => {
+      const source = await pickGroupPhoto();
+      if (source === null) {
+        return false;
+      }
+      setCropArea(null);
+      setCropError(null);
+      setCropSource(source);
+      return true;
+    });
+  };
+
+  const leaveCrop = (): void => {
+    setCropSource(null);
+    setCropArea(null);
+    setCropError(null);
+  };
+
+  const savePhoto = (): void => {
+    if (cropSource === null || cropArea === null) {
+      return;
+    }
+    void run('photo', async () => {
+      const cropped = await cropToPng(cropSource, cropArea, GROUP_PHOTO_EDGE);
+      if (!cropped.ok) {
+        setCropError(cropped.error);
+        return false;
+      }
+      setCropError(null);
+      const saved = await setGroupPhoto(conversation.id, cropped.data);
+      if (saved) {
+        leaveCrop();
+      }
+      return saved;
+    });
+  };
+
+  if (cropSource !== null) {
+    const isSaving = busy === 'photo';
+    const problem = cropError ?? error;
+    return (
+      <Modal
+        isOpen
+        // Esc steps back to the details rather than closing everything.
+        onClose={() => {
+          if (!isSaving) {
+            leaveCrop();
+          }
+        }}
+        title="Crop group photo"
+        description="Drag to position it, and zoom to frame the part you want."
+        size="md"
+        footer={
+          <>
+            <Button variant="ghost" disabled={isSaving} onClick={leaveCrop}>
+              Back
+            </Button>
+            <Button isLoading={isSaving} disabled={cropArea === null} onClick={savePhoto}>
+              Save photo
+            </Button>
+          </>
+        }
+      >
+        <ImageCropper key={cropSource} src={cropSource} shape="circle" onAreaChange={setCropArea} />
+        {problem !== null && (
+          <p role="alert" className="text-error text-[13px]">
+            {problem}
+          </p>
+        )}
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -172,10 +261,8 @@ export function GroupDetailsDialog({ row, onClose }: GroupDetailsDialogProps) {
                   size="sm"
                   variant="secondary"
                   leadingIcon={<Camera className="size-4" />}
-                  isLoading={busy === 'photo'}
-                  onClick={() => {
-                    void run('photo', () => setGroupPhoto(conversation.id));
-                  }}
+                  isLoading={busy === 'pick'}
+                  onClick={choosePhoto}
                 >
                   {conversation.photoUrl === null ? 'Add photo' : 'Change photo'}
                 </Button>

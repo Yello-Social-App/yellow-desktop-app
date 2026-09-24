@@ -169,11 +169,21 @@ export async function renameGroup(
   return result.ok ? ok(result.data.conversation) : fail(result.error);
 }
 
-/** Opens the picker in the main process; a cancel is a CANCELLED failure. */
+/**
+ * Opens the picker in the main process and answers with the chosen photo as a
+ * `data:` URL to crop; a cancel is a CANCELLED failure.
+ */
+export async function pickGroupPhoto(): Promise<Result<string, MessagesError>> {
+  const result = await ipc.pickGroupPhoto();
+  return result.ok ? ok(result.data.dataUrl) : fail(result.error);
+}
+
+/** Uploads the cropped square (PNG bytes from `cropToPng`). */
 export async function setGroupPhoto(
   conversationId: string,
+  image: Uint8Array<ArrayBuffer>,
 ): Promise<Result<Conversation, MessagesError>> {
-  const result = await ipc.setGroupPhoto({ conversationId });
+  const result = await ipc.setGroupPhoto({ conversationId, image });
   return result.ok ? ok(result.data.conversation) : fail(result.error);
 }
 

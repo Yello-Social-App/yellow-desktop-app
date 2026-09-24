@@ -70,6 +70,7 @@ export const IPC_CHANNELS = {
   CHAT_GET_ATTACHMENT: 'chat:get-attachment',
   CHAT_SAVE_ATTACHMENT: 'chat:save-attachment',
   CHAT_RENAME_GROUP: 'chat:rename-group',
+  CHAT_PICK_GROUP_PHOTO: 'chat:pick-group-photo',
   CHAT_SET_GROUP_PHOTO: 'chat:set-group-photo',
   CHAT_REMOVE_GROUP_PHOTO: 'chat:remove-group-photo',
   CHAT_ADD_MEMBERS: 'chat:add-members',

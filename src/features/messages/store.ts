@@ -60,6 +60,7 @@ import {
   leaveGroup,
   markRead,
   removeGroupMember,
+  pickGroupPhoto,
   removeGroupPhoto,
   renameGroup,
   saveAttachment,
@@ -163,7 +164,9 @@ interface MessagesState {
 
   refreshConversation: (conversationId: string) => Promise<void>;
   renameGroup: (conversationId: string, title: string) => Promise<boolean>;
-  setGroupPhoto: (conversationId: string) => Promise<boolean>;
+  /** The chosen photo as a `data:` URL to crop, or null on a cancel or a refusal. */
+  pickGroupPhoto: () => Promise<string | null>;
+  setGroupPhoto: (conversationId: string, image: Uint8Array<ArrayBuffer>) => Promise<boolean>;
   removeGroupPhoto: (conversationId: string) => Promise<boolean>;
   addMembers: (conversationId: string, userIds: string[]) => Promise<boolean>;
   removeMember: (conversationId: string, userId: string) => Promise<boolean>;
@@ -1051,11 +1054,16 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       return settle(result);
     },
 
-    setGroupPhoto: async (conversationId) => {
-      const result = await setGroupPhoto(conversationId);
+    pickGroupPhoto: async () => {
+      const result = await pickGroupPhoto();
       if (!result.ok && result.error.code === 'CANCELLED') {
-        return false;
+        return null;
       }
+      return settle(result) && result.ok ? result.data : null;
+    },
+
+    setGroupPhoto: async (conversationId, image) => {
+      const result = await setGroupPhoto(conversationId, image);
       if (result.ok) {
         withConversation(conversationId, (item) => mergeRecord(item, result.data));
       }

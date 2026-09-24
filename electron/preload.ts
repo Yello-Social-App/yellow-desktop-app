@@ -32,12 +32,14 @@ import type {
   GroupInviteResult,
   GroupMemberRequest,
   GroupParticipants,
+  GroupPhotoSource,
   GroupRecordResponse,
   InviteIdRequest,
   MessageReactions,
   ReactChatMessageRequest,
   RenameGroupRequest,
   SavedFileResponse,
+  SetGroupPhotoRequest,
   AccountIdRequest,
   AccountListResponse,
   AcknowledgedResponse,
@@ -296,7 +298,8 @@ const bridge: YelloBridge = {
       invoke<SavedFileResponse>(IPC_CHANNELS.CHAT_SAVE_ATTACHMENT, request),
     renameGroup: (request: RenameGroupRequest) =>
       invoke<GroupRecordResponse>(IPC_CHANNELS.CHAT_RENAME_GROUP, request),
-    setGroupPhoto: (request: ConversationIdRequest) =>
+    pickGroupPhoto: () => invoke<GroupPhotoSource>(IPC_CHANNELS.CHAT_PICK_GROUP_PHOTO),
+    setGroupPhoto: (request: SetGroupPhotoRequest) =>
       invoke<GroupRecordResponse>(IPC_CHANNELS.CHAT_SET_GROUP_PHOTO, request),
     removeGroupPhoto: (request: ConversationIdRequest) =>
       invoke<GroupRecordResponse>(IPC_CHANNELS.CHAT_REMOVE_GROUP_PHOTO, request),

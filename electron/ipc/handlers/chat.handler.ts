@@ -38,7 +38,13 @@ import {
 } from '../../chat/files';
 import { chatSocket, SocketFailure } from '../../chat/socket';
 import { IPC_CHANNELS } from '../channels';
-import { pickImageFiles, readImagePart } from '../image-picker';
+import {
+  CROP_SOURCE_MAX_EDGE,
+  pickImageFiles,
+  readImagePart,
+  reencodeAsPng,
+  toPreviewDataUrl,
+} from '../image-picker';
 import { registerIpcHandler } from '../register';
 
 import {
@@ -64,6 +70,7 @@ import {
   deletedResponseSchema,
   editChatMessageRequestSchema,
   emptyRequestSchema,
+  GROUP_PHOTO_EDGE,
   groupInviteResultSchema,
   groupMemberRequestSchema,
   groupParticipantsSchema,
@@ -80,6 +87,7 @@ import {
   reactChatMessageRequestSchema,
   renameGroupRequestSchema,
   savedFileResponseSchema,
+  setGroupPhotoRequestSchema,
   sendChatMessageRequestSchema,
   typingRequestSchema,
   uploadLocalFilesRequestSchema,
@@ -94,6 +102,7 @@ import {
   type DeletedResponse,
   type GroupInviteResult,
   type GroupParticipants,
+  type GroupPhotoSource,
   type GroupRecordResponse,
   type IpcResult,
   type MessagePage,
@@ -562,17 +571,35 @@ function registerGroupHandlers(): void {
       ),
   );
 
+  // Two steps so the photo can be cropped between them: the pick reads the
+  // chosen file and hands the renderer something to crop; the set takes the
+  // cropped square back. The renderer still never names a path (A01).
   registerIpcHandler(
-    IPC_CHANNELS.CHAT_SET_GROUP_PHOTO,
-    conversationIdRequestSchema,
-    async ({ conversationId }, event): Promise<IpcResult<GroupRecordResponse>> => {
+    IPC_CHANNELS.CHAT_PICK_GROUP_PHOTO,
+    emptyRequestSchema,
+    async (_request, event): Promise<IpcResult<GroupPhotoSource>> => {
       const [filePath] = await pickImageFiles(event, { title: 'Choose a group photo' });
       if (filePath === undefined) {
         return CANCELLED;
       }
-      // JPEG, PNG, GIF or WebP by extension here; by content at the service,
-      // which refuses an SVG or HTML "photo" whatever it is called.
+      // JPEG, PNG, GIF or WebP by extension here; the crop is decoded again
+      // below before anything is uploaded.
       const part = await readImagePart(filePath, CHAT_ATTACHMENT_MAX_BYTES);
+      if (!part.ok) {
+        return part;
+      }
+      const bytes = Buffer.from(await part.data.blob.arrayBuffer());
+      return ipcOk({
+        dataUrl: toPreviewDataUrl(bytes, part.data.blob.type, CROP_SOURCE_MAX_EDGE),
+      });
+    },
+  );
+
+  registerIpcHandler(
+    IPC_CHANNELS.CHAT_SET_GROUP_PHOTO,
+    setGroupPhotoRequestSchema,
+    async ({ conversationId, image }): Promise<IpcResult<GroupRecordResponse>> => {
+      const part = reencodeAsPng(image, GROUP_PHOTO_EDGE, 'group-photo.png');
       if (!part.ok) {
         return part;
       }
