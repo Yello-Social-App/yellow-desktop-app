@@ -10,6 +10,8 @@ import type {
   CommunityPostVote,
   CommunityPage,
   IpcError,
+  ReactionSummary,
+  ReactionType,
   Vote,
 } from '@shared/ipc-types';
 
@@ -77,6 +79,18 @@ export async function publishCommunityPost(draft: {
 }): Promise<Result<CommunityPost, CommunitiesError>> {
   const result = await ipc.createCommunityPost(draft);
   return result.ok ? ok(result.data.post) : fail(result.error);
+}
+
+/**
+ * Adds, changes or removes in one call, as on a feed post: sending the type
+ * already held removes it. Answers with the post's summary after the change.
+ */
+export async function reactToPost(
+  postId: string,
+  type: ReactionType,
+): Promise<Result<ReactionSummary, CommunitiesError>> {
+  const result = await ipc.toggleReaction({ targetType: 'COMMUNITY_POST', targetId: postId, type });
+  return result.ok ? ok(result.data) : fail(result.error);
 }
 
 export async function voteOnPost(

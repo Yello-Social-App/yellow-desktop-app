@@ -92,7 +92,8 @@ export function canDelete(
   if (viewerId === undefined) {
     return false;
   }
-  // The server permits the comment's author and the post's author; mirroring
+  // The server permits the comment's author and the post's author (a
+  // community post's too), plus moderators the client cannot see; mirroring
   // that here only decides whether to *show* the control — the check that
   // matters is the server's (A01).
   return comment.author.id === viewerId || postAuthorId === viewerId;

@@ -3,8 +3,9 @@
  * each.
  *
  * Reactions are addressed by `{targetType, targetId}` because the API attaches
- * them to comments as well as posts; the helpers here fix the target type so
- * feed callers keep passing a post id and nothing more.
+ * them to comments as well as posts; the write helper here fixes the target
+ * type so feed callers keep passing a post id and nothing more. The read
+ * helpers take it, since the who-reacted sheet also opens on community posts.
  */
 import type {
   FeedResponse,
@@ -27,6 +28,7 @@ import {
   PRIMARY_REACTION,
   REACTORS_PAGE_SIZE,
   type ComposePostInput,
+  type PostTargetType,
 } from './types';
 
 export type FeedError = IpcError;
@@ -142,20 +144,22 @@ export async function toggleReaction(
 }
 
 export async function fetchReactionSummary(
+  targetType: PostTargetType,
   postId: string,
 ): Promise<Result<ReactionSummary, FeedError>> {
-  const result = await ipc.reactionSummary({ targetType: 'POST', targetId: postId });
+  const result = await ipc.reactionSummary({ targetType, targetId: postId });
   return result.ok ? ok(result.data) : fail(result.error);
 }
 
 /** Who reacted, newest first; `type` narrows to one reaction. */
 export async function fetchReactors(
+  targetType: PostTargetType,
   postId: string,
   page: number,
   type?: ReactionType,
 ): Promise<Result<ReactorPage, FeedError>> {
   const result = await ipc.listReactors({
-    targetType: 'POST',
+    targetType,
     targetId: postId,
     page,
     size: REACTORS_PAGE_SIZE,

@@ -9,11 +9,16 @@
  * use. Rejected: keeping threads in the feed store, which would tie comments to
  * a list the profile pages do not use.
  *
+ * A thread remembers what it hangs off (`parentType`), set when it is opened,
+ * so paging and replying reach the same route without every caller repeating
+ * it. Post and community-post ids are both server UUIDs, so one keyspace holds
+ * both kinds.
+ *
  * The post's own `commentCount` is *not* updated here — that record belongs to
  * whichever list holds the post, so `submit` and `remove` report what changed
  * and the caller applies it.
  */
-import type { Comment, ReactionType } from '@shared/ipc-types';
+import type { Comment, CommentParentType, ReactionType } from '@shared/ipc-types';
 import { create } from 'zustand';
 
 import { createLogger } from '@/lib/logger';
@@ -33,6 +38,7 @@ const log = createLogger('comments.store');
 export type ThreadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface ThreadState {
+  parentType: CommentParentType;
   items: Comment[];
   status: ThreadStatus;
   error: string | null;
@@ -51,6 +57,7 @@ export interface ThreadState {
 }
 
 const EMPTY_THREAD: ThreadState = {
+  parentType: 'POST',
   items: [],
   status: 'idle',
   error: null,
@@ -65,8 +72,8 @@ const EMPTY_THREAD: ThreadState = {
 interface CommentsState {
   threads: Readonly<Record<string, ThreadState>>;
   /** Loads page 0 unless the thread is already loaded. */
-  open: (postId: string) => Promise<void>;
-  reload: (postId: string) => Promise<void>;
+  open: (postId: string, parentType: CommentParentType) => Promise<void>;
+  reload: (postId: string, parentType: CommentParentType) => Promise<void>;
   loadMore: (postId: string) => Promise<void>;
   setReplyTo: (postId: string, comment: Comment | null) => void;
   /** Resolves to the new comment, or null when the post rejected it. */
@@ -105,7 +112,7 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
   }
 
   async function loadPage(postId: string, page: number): Promise<void> {
-    const result = await fetchComments(postId, page);
+    const result = await fetchComments(threadOf(postId).parentType, postId, page);
 
     if (!result.ok) {
       patch(postId, {
@@ -131,17 +138,17 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
   return {
     threads: {},
 
-    open: async (postId) => {
+    open: async (postId, parentType) => {
       const thread = threadOf(postId);
       if (thread.status === 'ready' || thread.status === 'loading') {
         return;
       }
-      patch(postId, { status: 'loading', error: null, page: 0 });
+      patch(postId, { parentType, status: 'loading', error: null, page: 0 });
       await loadPage(postId, 0);
     },
 
-    reload: async (postId) => {
-      patch(postId, { status: 'loading', error: null, page: 0 });
+    reload: async (postId, parentType) => {
+      patch(postId, { parentType, status: 'loading', error: null, page: 0 });
       await loadPage(postId, 0);
     },
 
@@ -166,7 +173,7 @@ export const useCommentsStore = create<CommentsState>((set, get) => {
 
       patch(postId, { isSubmitting: true, error: null });
       const parentId = replyRootOf(thread.replyTo);
-      const result = await addComment(postId, content, parentId);
+      const result = await addComment(thread.parentType, postId, content, parentId);
 
       if (!result.ok) {
         patch(postId, { isSubmitting: false, error: result.error.message });

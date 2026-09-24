@@ -2,7 +2,7 @@
  * Comment hooks: one thread's state and the actions that change it, so the
  * components stay presentational.
  */
-import type { ReactionType } from '@shared/ipc-types';
+import type { CommentParentType, ReactionType } from '@shared/ipc-types';
 import { useCallback, useEffect, useMemo } from 'react';
 
 import { useCommentsStore, EMPTY_THREAD, type ThreadState } from './store';
@@ -15,17 +15,22 @@ export interface CommentThread extends ThreadState {
 
 /**
  * Loads the thread for `postId` on mount and returns its state. `enabled` is
- * how a collapsed card avoids fetching a thread nobody has opened.
+ * how a collapsed card avoids fetching a thread nobody has opened;
+ * `parentType` says whether the id is a post's or a community post's.
  */
-export function useCommentThread(postId: string, enabled: boolean): CommentThread {
+export function useCommentThread(
+  postId: string,
+  parentType: CommentParentType,
+  enabled: boolean,
+): CommentThread {
   const thread = useCommentsStore((state) => state.threads[postId]) ?? EMPTY_THREAD;
   const open = useCommentsStore((state) => state.open);
 
   useEffect(() => {
     if (enabled) {
-      void open(postId);
+      void open(postId, parentType);
     }
-  }, [enabled, open, postId]);
+  }, [enabled, open, postId, parentType]);
 
   const nodes = useMemo(() => toThread(thread.items), [thread.items]);
 

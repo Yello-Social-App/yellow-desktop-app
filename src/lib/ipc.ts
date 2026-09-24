@@ -15,6 +15,7 @@ import {
   attachmentResponseSchema,
   groupInviteResultSchema,
   groupParticipantsSchema,
+  groupPhotoSourceSchema,
   groupRecordResponseSchema,
   messageReactionsSchema,
   savedFileResponseSchema,
@@ -29,6 +30,7 @@ import {
   type InviteIdRequest,
   type ReactChatMessageRequest,
   type RenameGroupRequest,
+  type SetGroupPhotoRequest,
   accountListResponseSchema,
   acknowledgedResponseSchema,
   appInfoCopiedResponseSchema,
@@ -396,7 +398,9 @@ export const ipc = {
     ),
   renameGroup: (request: RenameGroupRequest) =>
     guarded('chat.renameGroup', groupRecordResponseSchema, (api) => api.chat.renameGroup(request)),
-  setGroupPhoto: (request: ConversationIdRequest) =>
+  pickGroupPhoto: () =>
+    guarded('chat.pickGroupPhoto', groupPhotoSourceSchema, (api) => api.chat.pickGroupPhoto()),
+  setGroupPhoto: (request: SetGroupPhotoRequest) =>
     guarded('chat.setGroupPhoto', groupRecordResponseSchema, (api) =>
       api.chat.setGroupPhoto(request),
     ),

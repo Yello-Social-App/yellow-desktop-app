@@ -1,3 +1,4 @@
+import type { Author, CommentParentType } from '@shared/ipc-types';
 import { SendHorizonal, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -14,14 +15,15 @@ import {
 } from '@/features/comments/types';
 import { useCommentsStore } from '@/features/comments/store';
 import { cn } from '@/lib/cn';
-import { handleOf } from '@/lib/user-display';
-import type { Post } from '@/features/feed/types';
-import { displayName } from '@/lib/user-display';
+import { displayName, handleOf } from '@/lib/user-display';
 
 import { CommentRow } from './CommentRow';
 
 interface CommentThreadProps {
-  post: Post;
+  /** A post or a community post: the thread needs only who wrote it. */
+  post: { id: string; author: Author };
+  /** Which kind `post` is; decides where the thread is read and written. */
+  parentType?: CommentParentType;
   /** Carries the +1/-1 back to whichever list holds this post. */
   onCommentCountChange: (postId: string, delta: number) => void;
   /** Keep paging until the whole thread is in — for the post's own page. */
@@ -43,9 +45,14 @@ interface CommentThreadProps {
  * avatar column, each reply's `li` draws its own branch, and every reply but
  * the last carries the trunk on down to the next.
  */
-export function CommentThread({ post, onCommentCountChange, loadAll = false }: CommentThreadProps) {
+export function CommentThread({
+  post,
+  parentType = 'POST',
+  onCommentCountChange,
+  loadAll = false,
+}: CommentThreadProps) {
   const viewer = useCurrentUser();
-  const thread = useCommentThread(post.id, true);
+  const thread = useCommentThread(post.id, parentType, true);
   const [draft, setDraft] = useState('');
   const [draftError, setDraftError] = useState<string | null>(null);
 

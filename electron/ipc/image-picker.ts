@@ -126,7 +126,11 @@ export function imagePixelCount(bytes: Buffer): number | null {
  * original bytes when the image cannot be decoded, so a valid-but-exotic file
  * still shows something rather than an empty box (A10).
  */
-export function toPreviewDataUrl(bytes: Buffer, contentType: string): string {
+export function toPreviewDataUrl(
+  bytes: Buffer,
+  contentType: string,
+  maxEdge: number = PREVIEW_MAX_EDGE,
+): string {
   const image = nativeImage.createFromBuffer(bytes);
   const { width, height } = image.getSize();
 
@@ -135,11 +139,11 @@ export function toPreviewDataUrl(bytes: Buffer, contentType: string): string {
   }
 
   const longestEdge = Math.max(width, height);
-  if (longestEdge <= PREVIEW_MAX_EDGE) {
+  if (longestEdge <= maxEdge) {
     return `data:${contentType};base64,${bytes.toString('base64')}`;
   }
 
-  const scale = PREVIEW_MAX_EDGE / longestEdge;
+  const scale = maxEdge / longestEdge;
   const resized = image.resize({
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
@@ -147,4 +151,42 @@ export function toPreviewDataUrl(bytes: Buffer, contentType: string): string {
   });
 
   return `data:image/png;base64,${resized.toPNG().toString('base64')}`;
+}
+
+/**
+ * The longest edge of the image handed to a cropper. Enough to crop a 512px
+ * square out of a quarter of the frame; a 10 MB original is not sent whole.
+ */
+export const CROP_SOURCE_MAX_EDGE = 2048;
+
+/**
+ * Decodes image bytes the renderer produced and encodes them again as PNG.
+ *
+ * The bytes are the renderer's, not a file the user pointed at, so they are
+ * never forwarded as they came (A08): anything the platform decoder cannot
+ * read, or larger than `maxEdge` either way, is refused, and what goes up is
+ * an image this process encoded.
+ */
+export function reencodeAsPng(
+  bytes: Uint8Array,
+  maxEdge: number,
+  fileName: string,
+): IpcResult<ImagePart> {
+  const image = nativeImage.createFromBuffer(Buffer.from(bytes));
+  const { width, height } = image.getSize();
+
+  if (width === 0 || height === 0) {
+    log.warn('image_undecodable', {});
+    return ipcFail('INVALID_PAYLOAD', 'That photo could not be read.');
+  }
+  if (width > maxEdge || height > maxEdge) {
+    return ipcFail('INVALID_PAYLOAD', 'That photo is larger than expected.');
+  }
+
+  const png = image.toPNG();
+  return ipcOk({
+    blob: new Blob([new Uint8Array(png).buffer], { type: 'image/png' }),
+    fileName,
+    byteLength: png.byteLength,
+  });
 }

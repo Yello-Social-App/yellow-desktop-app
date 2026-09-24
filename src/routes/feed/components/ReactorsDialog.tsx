@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
 import { fetchReactionSummary, fetchReactors } from '@/features/feed/api';
-import { REACTION_LABELS, type Post } from '@/features/feed/types';
+import { REACTION_LABELS, type PostTargetType } from '@/features/feed/types';
 import { useRelationship } from '@/features/friends/hooks';
 import { REACTION_TYPES, type ReactionType, type Reactor } from '@shared/ipc-types';
 import { cn } from '@/lib/cn';
@@ -16,7 +16,8 @@ import { displayName, handleOf } from '@/lib/user-display';
 import { FriendshipControls } from '@/routes/profile/components/FriendshipControls';
 
 interface ReactorsDialogProps {
-  post: Post;
+  targetType: PostTargetType;
+  postId: string;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -43,7 +44,7 @@ const ALL_TAB = 'all';
  *
  * Mounted only while open, so every opening starts from the server's state.
  */
-export function ReactorsDialog({ post, isOpen, onClose }: ReactorsDialogProps) {
+export function ReactorsDialog({ targetType, postId, isOpen, onClose }: ReactorsDialogProps) {
   const [counts, setCounts] = useState<Record<string, number> | null>(null);
   const [selected, setSelected] = useState<ReactionType | undefined>(undefined);
   // Keyed by tab, the way useSinglePost keys by id: switching tabs reads as
@@ -59,7 +60,7 @@ export function ReactorsDialog({ post, isOpen, onClose }: ReactorsDialogProps) {
 
   useEffect(() => {
     let cancelled = false;
-    void fetchReactionSummary(post.id).then((result) => {
+    void fetchReactionSummary(targetType, postId).then((result) => {
       if (!cancelled && result.ok) {
         setCounts({ ...result.data.counts, total: result.data.total });
       }
@@ -67,13 +68,13 @@ export function ReactorsDialog({ post, isOpen, onClose }: ReactorsDialogProps) {
     return () => {
       cancelled = true;
     };
-  }, [post.id]);
+  }, [targetType, postId]);
 
   // Page 0 of whichever tab is selected; a tab change starts the list over.
   useEffect(() => {
     let cancelled = false;
 
-    void fetchReactors(post.id, 0, selected).then((result) => {
+    void fetchReactors(targetType, postId, 0, selected).then((result) => {
       if (cancelled) {
         return;
       }
@@ -87,14 +88,14 @@ export function ReactorsDialog({ post, isOpen, onClose }: ReactorsDialogProps) {
     return () => {
       cancelled = true;
     };
-  }, [post.id, selected, tab]);
+  }, [targetType, postId, selected, tab]);
 
   const loadMore = (): void => {
     if (page === null || isLoadingMore || !page.hasMore) {
       return;
     }
     setIsLoadingMore(true);
-    void fetchReactors(post.id, page.page + 1, selected).then((result) => {
+    void fetchReactors(targetType, postId, page.page + 1, selected).then((result) => {
       setIsLoadingMore(false);
       if (result.ok) {
         setLoaded((current) =>

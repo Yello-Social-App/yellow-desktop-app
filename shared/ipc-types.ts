@@ -138,9 +138,14 @@ const timestamp = z
   .nullish()
   .transform((value) => value ?? '');
 
+/**
+ * A comment belongs to exactly one of a post or a community post — the server
+ * enforces that — so each id is optional and the other one is set.
+ */
 export const commentSchema = z.object({
   id: z.string().min(1).max(64),
-  postId: z.string().min(1).max(64),
+  postId: optionalText(64),
+  communityPostId: optionalText(64),
   author: authorSchema,
   /** Set when this comment is a reply; replies nest one level deep. */
   parentCommentId: optionalText(64),
@@ -539,7 +544,8 @@ export const deletedResponseSchema = z.object({ deleted: z.boolean() });
 
 /* -- reactions -- */
 
-export const REACTION_TARGET_TYPES = ['POST', 'COMMENT'] as const;
+/** Comments on community posts are still reacted to as `COMMENT`. */
+export const REACTION_TARGET_TYPES = ['POST', 'COMMENT', 'COMMUNITY_POST'] as const;
 export const reactionTargetTypeSchema = z.enum(REACTION_TARGET_TYPES);
 
 const reactionTargetShape = {
@@ -591,7 +597,15 @@ export const reactorPageSchema = pageOf(reactorSchema);
 
 export const COMMENT_MAX_LENGTH = 2000;
 
+/**
+ * What a thread hangs off. A closed enum for the same reason as the reaction
+ * target: it picks the route, and the renderer does not get to pick a route.
+ */
+export const COMMENT_PARENT_TYPES = ['POST', 'COMMUNITY_POST'] as const;
+export const commentParentTypeSchema = z.enum(COMMENT_PARENT_TYPES);
+
 export const createCommentRequestSchema = z.object({
+  parentType: commentParentTypeSchema,
   postId: z.string().min(1).max(64),
   content: z.string().trim().min(1).max(COMMENT_MAX_LENGTH),
   /** Supply to reply to an existing comment rather than to the post. */
@@ -601,6 +615,7 @@ export const createCommentRequestSchema = z.object({
 export const commentResponseSchema = z.object({ comment: commentSchema });
 
 export const listCommentsRequestSchema = z.object({
+  parentType: commentParentTypeSchema,
   postId: z.string().min(1).max(64),
   page: z.number().int().min(0).max(1000),
   size: z.number().int().min(1).max(50),
@@ -1186,6 +1201,35 @@ export const groupParticipantsSchema = z.object({
 /** A rename or a photo change answers with the record, without participants. */
 export const groupRecordResponseSchema = z.object({ conversation: conversationSchema });
 
+/** The edge a cropped group photo is sent at; the largest avatar draws at 80px. */
+export const GROUP_PHOTO_EDGE = 512;
+/** A 512px-square PNG is about 1 MiB at worst; more is not what the cropper makes. */
+export const GROUP_PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * The picked photo, for the cropper: a `data:` URL the main process built from
+ * the file the user chose. Bounded at twice the file cap, base64's worst case
+ * with room to spare.
+ */
+export const groupPhotoSourceSchema = z.object({
+  dataUrl: z
+    .string()
+    .startsWith('data:image/')
+    .max(CHAT_ATTACHMENT_MAX_BYTES * 2),
+});
+
+/**
+ * The cropped square as PNG bytes. These come from the renderer, so the main
+ * process decodes and re-encodes them before upload rather than forwarding
+ * them (A08) — what the service receives is always an image it made.
+ */
+export const setGroupPhotoRequestSchema = z.object({
+  conversationId: chatId,
+  image: z
+    .instanceof(Uint8Array)
+    .refine((bytes) => bytes.byteLength > 0 && bytes.byteLength <= GROUP_PHOTO_MAX_BYTES),
+});
+
 export const groupInviteSchema = z.object({
   id: chatId,
   conversationId: chatId,
@@ -1358,6 +1402,8 @@ export type GroupMemberRequest = z.infer<typeof groupMemberRequestSchema>;
 export type ChangeMemberRoleRequest = z.infer<typeof changeMemberRoleRequestSchema>;
 export type GroupParticipants = z.infer<typeof groupParticipantsSchema>;
 export type GroupRecordResponse = z.infer<typeof groupRecordResponseSchema>;
+export type GroupPhotoSource = z.infer<typeof groupPhotoSourceSchema>;
+export type SetGroupPhotoRequest = z.infer<typeof setGroupPhotoRequestSchema>;
 export type GroupInvite = z.infer<typeof groupInviteSchema>;
 export type GroupInviteResult = z.infer<typeof groupInviteResultSchema>;
 export type InviteIdRequest = z.infer<typeof inviteIdRequestSchema>;
@@ -1837,7 +1883,11 @@ export const communityPostSchema = z.object({
     .int()
     .nullish()
     .transform((value) => value ?? 0),
+  /** Replies included, as on a regular post. */
   commentCount: nonNegativeCount,
+  /** The same flat per-type map as a post's, `total` key and all. */
+  reactionCounts: reactionCountsSchema,
+  viewerReaction: reactionTypeSchema.nullish(),
   createdAt: timestamp,
   viewerVote: viewerVoteSchema,
   isOwner: flag,
@@ -2461,6 +2511,7 @@ export type RepostRequest = z.infer<typeof repostRequestSchema>;
 export type ShareLinkCopiedResponse = z.infer<typeof shareLinkCopiedResponseSchema>;
 export type DeletedResponse = z.infer<typeof deletedResponseSchema>;
 export type ReactionTargetType = z.infer<typeof reactionTargetTypeSchema>;
+export type CommentParentType = z.infer<typeof commentParentTypeSchema>;
 export type ReactionTargetRequest = z.infer<typeof reactionTargetRequestSchema>;
 export type CreateCommentRequest = z.infer<typeof createCommentRequestSchema>;
 export type CommentResponse = z.infer<typeof commentResponseSchema>;
@@ -2590,7 +2641,9 @@ export interface YelloBridge {
     getAttachment(request: AttachmentIdRequest): Promise<IpcResult<AttachmentResponse>>;
     saveAttachment(request: AttachmentIdRequest): Promise<IpcResult<SavedFileResponse>>;
     renameGroup(request: RenameGroupRequest): Promise<IpcResult<GroupRecordResponse>>;
-    setGroupPhoto(request: ConversationIdRequest): Promise<IpcResult<GroupRecordResponse>>;
+    /** Opens the OS picker; a cancel is a CANCELLED failure. */
+    pickGroupPhoto(): Promise<IpcResult<GroupPhotoSource>>;
+    setGroupPhoto(request: SetGroupPhotoRequest): Promise<IpcResult<GroupRecordResponse>>;
     removeGroupPhoto(request: ConversationIdRequest): Promise<IpcResult<GroupRecordResponse>>;
     addMembers(request: AddGroupMembersRequest): Promise<IpcResult<GroupParticipants>>;
     removeMember(request: GroupMemberRequest): Promise<IpcResult<AcknowledgedResponse>>;

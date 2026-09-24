@@ -1,5 +1,5 @@
 import { ArrowBigDown, ArrowBigUp, MessageCircle, Share2 } from 'lucide-react';
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
@@ -7,10 +7,14 @@ import { RichText } from '@/components/content/RichText';
 import { UserAvatar } from '@/components/people/UserAvatar';
 import { useCommunitiesStore } from '@/features/communities/store';
 import type { CommunityPost } from '@/features/communities/types';
+import { reactionTotal } from '@/features/feed/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
 import { relativeTime } from '@/lib/relative-time';
 import { displayName } from '@/lib/user-display';
+import { CommentThread } from '@/routes/feed/components/CommentThread';
+import { ReactionBreakdown } from '@/routes/feed/components/ReactionBreakdown';
+import { ReactionButton } from '@/routes/feed/components/ReactionButton';
 
 interface CommunityPostCardProps {
   post: CommunityPost;
@@ -21,6 +25,10 @@ interface CommunityPostCardProps {
 /**
  * A Reddit-shaped post: vote column on the left, community chip and author
  * line, a bold title, the body clamped, and a quiet action row.
+ *
+ * The action row reuses the feed's reaction control and comment thread as
+ * they are — only the target they address differs. The thread opens in place
+ * and is fetched on first open, never for a collapsed card.
  */
 export const CommunityPostCard = memo(function CommunityPostCard({
   post,
@@ -28,6 +36,10 @@ export const CommunityPostCard = memo(function CommunityPostCard({
 }: CommunityPostCardProps) {
   const vote = useCommunitiesStore((state) => state.vote);
   const isVoting = useCommunitiesStore((state) => state.pendingIds.has(post.id));
+  const react = useCommunitiesStore((state) => state.react);
+  const isReacting = useCommunitiesStore((state) => state.reactingIds.has(post.id));
+  const adjustCommentCount = useCommunitiesStore((state) => state.adjustCommentCount);
+  const [isThreadOpen, setIsThreadOpen] = useState(false);
   const { community } = post;
   const [firstLink] = extractLinks(post.body);
 
@@ -108,15 +120,42 @@ export const CommunityPostCard = memo(function CommunityPostCard({
         {firstLink !== undefined && <LinkPreviewCard url={firstLink} size="md" />}
 
         <div className="text-on-surface-variant -ml-2 flex items-center gap-1 pt-1 text-[13px] font-medium">
-          <span className="hover:bg-surface-container-high transition-tone flex items-center gap-1.5 rounded-full px-2.5 py-1.5">
+          <button
+            type="button"
+            aria-expanded={isThreadOpen}
+            onClick={() => {
+              setIsThreadOpen((open) => !open);
+            }}
+            className={cn(
+              'transition-tone flex items-center gap-1.5 rounded-full px-2.5 py-1.5',
+              isThreadOpen ? 'text-primary' : 'hover:bg-surface-container-high',
+            )}
+          >
             <MessageCircle aria-hidden className="size-4" />
-            {post.commentCount} comments
-          </span>
+            {post.commentCount} {post.commentCount === 1 ? 'comment' : 'comments'}
+          </button>
+          <ReactionButton
+            current={post.viewerReaction}
+            count={reactionTotal(post)}
+            disabled={isReacting}
+            onReact={(type) => {
+              void react(post.id, type);
+            }}
+          />
+          <ReactionBreakdown post={post} targetType="COMMUNITY_POST" />
           <span className="hover:bg-surface-container-high transition-tone flex items-center gap-1.5 rounded-full px-2.5 py-1.5">
             <Share2 aria-hidden className="size-4" />
             Share
           </span>
         </div>
+
+        {isThreadOpen && (
+          <CommentThread
+            post={post}
+            parentType="COMMUNITY_POST"
+            onCommentCountChange={adjustCommentCount}
+          />
+        )}
       </div>
     </article>
   );
