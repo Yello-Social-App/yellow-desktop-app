@@ -9,6 +9,7 @@ import type {
   ChatAttachment,
   ConversationSummary,
   ParticipantRole,
+  Sticker,
 } from '@shared/ipc-types';
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCurrentUser } from '@/features/auth/hooks';
 import { useFriendsStore } from '@/features/friends/store';
 import { LOCAL_BLOCKED_STATUS } from '@/features/friends/types';
+import { useStickersStore } from '@/features/stickers/store';
 import { useUsers } from '@/features/users/hooks';
 import { TYPING_IDLE_MS } from '@/lib/constants';
 import { onChatEvent } from '@/lib/ipc';
@@ -66,6 +68,21 @@ export function useChatSubscription(): void {
       void load();
     }
   }, [userId, status, load]);
+
+  // The viewer's stickers follow them across devices; a new session starts
+  // with none, so one account's library never shows in another's picker.
+  useEffect(() => {
+    if (userId === undefined) {
+      return;
+    }
+    const detach = onChatEvent((event) => {
+      useStickersStore.getState().handleEvent(event);
+    });
+    return () => {
+      detach();
+      useStickersStore.getState().reset();
+    };
+  }, [userId]);
 
   // A clicked desktop chat alert opens its conversation, from any screen. The
   // id has already passed the event schema; it is encoded into the segment
@@ -302,6 +319,8 @@ export interface Composer {
    * not answered 503 to a voice upload this session.
    */
   canRecordVoice: boolean;
+  /** Sends a sticker as its own line, quoting the open reply; typed text stays put. */
+  sendSticker: (sticker: Sticker) => void;
 }
 
 /** MediaRecorder and getUserMedia both exist; the permission is asked for on use. */
@@ -331,6 +350,7 @@ export function useComposer(): Composer {
   const isAttaching = useMessagesStore((state) => state.isAttaching);
   const conversationId = useMessagesStore((state) => state.activeConversationId);
   const voiceUnavailable = useMessagesStore((state) => state.voiceUnavailable);
+  const sendSticker = useMessagesStore((state) => state.sendSticker);
   const attachments = useMessagesStore((state) =>
     state.activeConversationId === null
       ? NO_ATTACHMENTS
@@ -420,6 +440,9 @@ export function useComposer(): Composer {
     isAttaching,
     conversationId,
     canRecordVoice: RUNTIME_CAN_RECORD && !voiceUnavailable,
+    sendSticker: (sticker) => {
+      void sendSticker(sticker);
+    },
   };
 }
 
@@ -433,10 +456,33 @@ export function useMessageActions() {
   const saveAttachment = useMessagesStore((state) => state.saveAttachment);
   const respondToInvite = useMessagesStore((state) => state.respondToInvite);
   const retry = useMessagesStore((state) => state.retry);
+  const refreshStickerImage = useMessagesStore((state) => state.refreshStickerImage);
+  const keepFromMessage = useStickersStore((state) => state.keepFromMessage);
+  const activeId = useMessagesStore((state) => state.activeConversationId);
   const navigate = useNavigate();
 
   return useMemo(
     () => ({
+      /** A sticker's picture failed to load on this line: re-sign it. */
+      refreshSticker: (messageId: string) => {
+        if (activeId !== null) {
+          void refreshStickerImage(activeId, messageId);
+        }
+      },
+      /** Adds the sticker this line carries to My stickers; the result is the line to say. */
+      keepSticker: async (messageId: string): Promise<{ ok: boolean; message: string }> => {
+        if (activeId === null) {
+          return { ok: false, message: 'Open a conversation first.' };
+        }
+        const result = await keepFromMessage(activeId, messageId);
+        if (!result.ok) {
+          return { ok: false, message: result.error };
+        }
+        return {
+          ok: true,
+          message: result.data === 'already' ? 'Already in My stickers' : 'Added to My stickers',
+        };
+      },
       retry: (message: ThreadMessage) => {
         void retry(message.clientId);
       },
@@ -475,6 +521,9 @@ export function useMessageActions() {
       saveAttachment,
       respondToInvite,
       retry,
+      refreshStickerImage,
+      keepFromMessage,
+      activeId,
       navigate,
     ],
   );
@@ -586,6 +635,11 @@ export interface FileDrop {
  * the browser's own handling, so dropping text into the box still types it.
  * The enter/leave pair fires for every child the pointer crosses, so a depth
  * count, not the last event, decides whether the drag is still over the thread.
+ *
+ * Only drags over the thread's own DOM count. A dialog opened from inside the
+ * thread (the sticker maker) is portalled to the body, but React still
+ * bubbles its events up the component tree to here — and a picture dropped
+ * on that dialog is for the dialog, not an attachment.
  */
 export function useFileDrop(): FileDrop {
   const addLocalFiles = useMessagesStore((state) => state.addLocalFiles);
@@ -603,7 +657,7 @@ export function useFileDrop(): FileDrop {
   const handlers = useMemo<FileDrop['handlers']>(
     () => ({
       onDragEnter: (event) => {
-        if (!isFileDrag(event.dataTransfer)) {
+        if (!isFileDrag(event.dataTransfer) || !isOwnDrag(event)) {
           return;
         }
         event.preventDefault();
@@ -611,7 +665,7 @@ export function useFileDrop(): FileDrop {
         setIsDragging(true);
       },
       onDragOver: (event) => {
-        if (!isFileDrag(event.dataTransfer)) {
+        if (!isFileDrag(event.dataTransfer) || !isOwnDrag(event)) {
           return;
         }
         // Without this the drop never fires and Chromium opens the file.
@@ -619,7 +673,7 @@ export function useFileDrop(): FileDrop {
         event.dataTransfer.dropEffect = refusal === null ? 'copy' : 'none';
       },
       onDragLeave: (event) => {
-        if (!isFileDrag(event.dataTransfer)) {
+        if (!isFileDrag(event.dataTransfer) || !isOwnDrag(event)) {
           return;
         }
         depth.current = Math.max(0, depth.current - 1);
@@ -628,7 +682,7 @@ export function useFileDrop(): FileDrop {
         }
       },
       onDrop: (event) => {
-        if (!isFileDrag(event.dataTransfer)) {
+        if (!isFileDrag(event.dataTransfer) || !isOwnDrag(event)) {
           return;
         }
         event.preventDefault();
@@ -653,6 +707,11 @@ export function useFileDrop(): FileDrop {
   );
 
   return { isDragging, refusal, handlers };
+}
+
+/** Whether a drag event happened inside the element handling it, not in a portal below it. */
+function isOwnDrag(event: DragEvent): boolean {
+  return event.target instanceof Node && event.currentTarget.contains(event.target);
 }
 
 /**

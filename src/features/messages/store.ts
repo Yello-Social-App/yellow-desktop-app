@@ -34,11 +34,14 @@ import type {
   ConversationSummary,
   GroupInviteStatus,
   LocalFileSource,
+  MessageSticker,
   Participant,
+  Sticker,
 } from '@shared/ipc-types';
 import { CHAT_MESSAGE_MAX_ATTACHMENTS } from '@shared/ipc-types';
 import { create } from 'zustand';
 
+import { useStickersStore } from '@/features/stickers/store';
 import { useUsersStore } from '@/features/users/store';
 import { onChatEvent, ipc } from '@/lib/ipc';
 import { createLogger } from '@/lib/logger';
@@ -157,6 +160,10 @@ interface MessagesState {
   send: (body: string) => Promise<boolean>;
   /** Uploads a recording, then sends it as its own line (a reply, if one is open). */
   sendVoice: (recording: Uint8Array<ArrayBuffer>) => Promise<VoiceSendOutcome>;
+  /** A sticker goes at once, as its own line, quoting the open reply; the draft text stays. */
+  sendSticker: (sticker: Sticker) => Promise<boolean>;
+  /** Re-signs an expired sticker picture on one line. */
+  refreshStickerImage: (conversationId: string, messageId: string) => Promise<void>;
   retry: (clientId: string) => Promise<boolean>;
   markActiveRead: () => void;
   setTyping: (typing: boolean) => void;
@@ -224,6 +231,7 @@ function asLastMessage(message: ChatMessage): NonNullable<ConversationSummary['l
     attachments: message.attachments,
     groupInvite: message.groupInvite,
     deletedAt: message.deletedAt,
+    hasSticker: message.sticker !== null,
   };
 }
 
@@ -250,7 +258,15 @@ function reconcile(thread: Thread, message: ChatMessage): Thread {
 
 /** An unsent line: the text, files, reactions and story reference go; the line stays in history. */
 function tombstone(message: ThreadMessage, deletedAt: string): ThreadMessage {
-  return { ...message, body: '', attachments: [], reactions: [], storyReply: null, deletedAt };
+  return {
+    ...message,
+    body: '',
+    attachments: [],
+    reactions: [],
+    storyReply: null,
+    sticker: null,
+    deletedAt,
+  };
 }
 
 /** Marks every reply quoting `messageId` as quoting a deleted line. */
@@ -489,8 +505,8 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
 
   /**
    * Draws a new line optimistically and sends it. Shared by the composer's
-   * text-and-files send and a voice message, which differ only in where the
-   * attachments came from. The caller clears the composer's reply and draft.
+   * text-and-files send, a voice message and a sticker, which differ only in
+   * what the line carries. The caller clears the composer's reply and draft.
    */
   async function post(
     conversationId: string,
@@ -498,6 +514,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
     body: string,
     attachments: ChatAttachment[],
     quoted: ThreadMessage | undefined,
+    sticker: MessageSticker | null = null,
   ): Promise<boolean> {
     const clientId = crypto.randomUUID();
     const optimistic: ThreadMessage = {
@@ -514,12 +531,14 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
               senderId: quoted.senderId,
               body: quoted.body.slice(0, REPLY_PREVIEW_LENGTH),
               hasAttachments: quoted.attachments.length > 0,
+              hasSticker: quoted.sticker !== null,
               deleted: quoted.deletedAt !== null,
             },
       attachments,
       reactions: [],
       groupInvite: null,
       storyReply: null,
+      sticker,
       createdAt: new Date().toISOString(),
       editedAt: null,
       deletedAt: null,
@@ -536,6 +555,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       body,
       replyToMessageId: quoted?.id,
       attachmentIds: attachments.map((attachment) => attachment.id),
+      stickerId: sticker?.id,
     });
   }
 
@@ -799,6 +819,60 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
       return { status: 'sent' };
     },
 
+    sendSticker: async (sticker) => {
+      const { activeConversationId, viewerId, replyingToId } = get();
+      if (activeConversationId === null || viewerId === null) {
+        return false;
+      }
+      const quoted =
+        replyingToId === null ? undefined : findMessage(activeConversationId, replyingToId);
+      set({ replyingToId: null });
+      useStickersStore.getState().noteSent(sticker);
+      return post(activeConversationId, viewerId, '', [], quoted, {
+        id: sticker.id,
+        packId: sticker.packId,
+        background: sticker.background,
+        image: sticker.image,
+      });
+    },
+
+    /**
+     * There is no route that re-signs one sticker on one message, so a fresh
+     * picture is found where one is at hand: the sticker store, when the
+     * sticker is in the viewer's library, a pack or Recent; otherwise the
+     * newest page of the thread, which is where a long-open conversation's
+     * expired pictures almost always are.
+     */
+    refreshStickerImage: async (conversationId, messageId) => {
+      const line = findMessage(conversationId, messageId);
+      if (line?.sticker === null || line === undefined) {
+        return;
+      }
+      const fromLibrary = useStickersStore.getState().freshImage(line.sticker.id);
+      if (fromLibrary !== null) {
+        withMessage(conversationId, messageId, (m) =>
+          m.sticker === null ? m : { ...m, sticker: { ...m.sticker, image: fromLibrary } },
+        );
+        return;
+      }
+      const page = await fetchMessages(conversationId);
+      if (!page.ok) {
+        return;
+      }
+      const fresh = new Map(
+        page.data.items
+          .filter((item) => item.sticker !== null)
+          .map((item) => [item.id, item.sticker] as const),
+      );
+      withThread(conversationId, (thread) => ({
+        ...thread,
+        messages: thread.messages.map((m) => {
+          const sticker = fresh.get(m.id);
+          return sticker === undefined || sticker === null ? m : { ...m, sticker };
+        }),
+      }));
+    },
+
     retry: async (clientId) => {
       const { activeConversationId } = get();
       if (activeConversationId === null) {
@@ -822,6 +896,7 @@ export const useMessagesStore = create<MessagesState>((set, get) => {
         body: line.body,
         replyToMessageId: line.replyTo?.id,
         attachmentIds: line.attachments.map((attachment) => attachment.id),
+        stickerId: line.sticker?.id,
       });
     },
 

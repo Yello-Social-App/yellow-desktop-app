@@ -95,7 +95,10 @@ const ATTACHMENT_WORDING = {
 /** What a line says when it has no text of its own, in the service's wording. */
 export function describeMessage(
   message: Pick<ChatMessage, 'body'> &
-    Partial<Pick<ChatMessage, 'attachments' | 'groupInvite' | 'deletedAt'>>,
+    Partial<Pick<ChatMessage, 'attachments' | 'groupInvite' | 'deletedAt' | 'sticker'>> & {
+      /** The list preview's word for a sticker, which carries no sticker record. */
+      hasSticker?: boolean | null | undefined;
+    },
 ): string {
   if (message.deletedAt !== undefined && message.deletedAt !== null) {
     return 'Message deleted';
@@ -105,6 +108,9 @@ export function describeMessage(
   }
   if (message.groupInvite !== undefined && message.groupInvite !== null) {
     return `Invite to ${message.groupInvite.title ?? 'a group'}`;
+  }
+  if (message.hasSticker === true || (message.sticker !== undefined && message.sticker !== null)) {
+    return 'Sent a sticker';
   }
   const [first] = message.attachments ?? [];
   if (first !== undefined) {

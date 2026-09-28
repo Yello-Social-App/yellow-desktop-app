@@ -35,6 +35,8 @@ export interface PickOptions {
   /** Allow more than one file, capped at `limit`. */
   multiple?: boolean;
   limit?: number;
+  /** Narrows the picker's filter, for an upload that takes fewer formats. */
+  extensions?: readonly string[];
 }
 
 /** Returns the chosen paths, or an empty array when the user cancelled. */
@@ -50,7 +52,7 @@ export async function pickImageFiles(
   const { canceled, filePaths } = await dialog.showOpenDialog(parentWindow, {
     title: options.title,
     properties: options.multiple === true ? ['openFile', 'multiSelections'] : ['openFile'],
-    filters: [{ name: 'Images', extensions: PICKER_EXTENSIONS }],
+    filters: [{ name: 'Images', extensions: [...(options.extensions ?? PICKER_EXTENSIONS)] }],
   });
 
   if (canceled) {

@@ -7,6 +7,8 @@ export interface SegmentOption<T extends string> {
   label: string;
   /** A small count after the label, such as how many are in a list. */
   count?: number;
+  /** Shown but not choosable; the arrow keys pass over it. */
+  disabled?: boolean;
 }
 
 interface SegmentedControlProps<T extends string> {
@@ -45,11 +47,15 @@ export function SegmentedControl<T extends string>({
     }
     event.preventDefault();
     const index = options.findIndex((option) => option.value === value);
-    const next = (index + step + options.length) % options.length;
-    const option = options[next];
-    if (option !== undefined) {
-      onChange(option.value);
-      refs.current[next]?.focus();
+    // The next enabled segment in that direction; with none, nothing moves.
+    for (let offset = 1; offset < options.length; offset += 1) {
+      const next = (index + step * offset + options.length * offset) % options.length;
+      const option = options[next];
+      if (option !== undefined && option.disabled !== true) {
+        onChange(option.value);
+        refs.current[next]?.focus();
+        return;
+      }
     }
   };
 
@@ -72,11 +78,12 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={isSelected}
             tabIndex={isSelected ? 0 : -1}
+            disabled={option.disabled}
             onClick={() => {
               onChange(option.value);
             }}
             className={cn(
-              'transition-tone flex items-center gap-1.5 rounded-[7px] font-medium',
+              'transition-tone flex items-center gap-1.5 rounded-[7px] font-medium disabled:cursor-not-allowed disabled:opacity-50',
               size === 'sm' ? 'h-7 px-3 text-[12px]' : 'h-[30px] px-3.5 text-[13px]',
               isSelected
                 ? 'bg-surface-container-highest text-on-surface'

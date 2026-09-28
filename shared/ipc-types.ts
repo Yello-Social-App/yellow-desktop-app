@@ -300,6 +300,13 @@ export const ipcErrorSchema = z.object({
   message: z.string().max(500),
   /** The API's own error code (e.g. INVALID_CREDENTIALS), when it supplied one. */
   apiCode: z.string().max(64).optional(),
+  /**
+   * The chat service's finer case under one code (`details.reason`, such as
+   * STICKER_LIMIT_REACHED), or PAYLOAD_TOO_LARGE for a 413 that named none.
+   */
+  apiReason: z.string().max(64).optional(),
+  /** How long a 429 asked the caller to wait, when it said. */
+  retryAfterSeconds: z.number().int().nonnegative().max(86_400).optional(),
   /** Per-field validation messages the API returned, for form display. */
   fieldErrors: z.record(z.string(), z.array(z.string().max(300)).max(10)).optional(),
 });
@@ -322,7 +329,12 @@ export function ipcOk<TData>(data: TData): IpcResult<TData> {
 export function ipcFail<TData = never>(
   code: IpcErrorCode,
   message: string,
-  extra?: { apiCode?: string; fieldErrors?: Record<string, string[]> },
+  extra?: {
+    apiCode?: string;
+    apiReason?: string;
+    retryAfterSeconds?: number;
+    fieldErrors?: Record<string, string[]>;
+  },
 ): IpcResult<TData> {
   return { ok: false, error: { code, message, ...extra } };
 }
@@ -879,6 +891,11 @@ export const replyPreviewSchema = z.object({
     .boolean()
     .nullish()
     .transform((value) => value ?? false),
+  /** The quoted line is a sticker, whose body is empty. */
+  hasSticker: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
   deleted: z
     .boolean()
     .nullish()
@@ -939,6 +956,84 @@ export const storyReplySchema = z.object({
   storyExpiresAt: timestamp,
 });
 
+/* -- stickers (yello-chat: /ws/stickers, /ws/sticker-packs) -- */
+
+/** Stickers one library may hold, saved-from-message ones included. */
+export const STICKER_LIBRARY_MAX = 200;
+/** A sticker's name, private to its owner; it may be empty. */
+export const STICKER_NAME_MAX = 40;
+/** The picture a sticker is made from (`POST /ws/stickers/drafts`). */
+export const STICKER_SOURCE_MAX_BYTES = 5 * 1024 * 1024;
+/**
+ * The picture chosen to crop from. Larger than the upload cap: what is
+ * uploaded is the cropped square, at `STICKER_EDGE`, never the picture itself.
+ */
+export const STICKER_PICTURE_MAX_BYTES = CHAT_ATTACHMENT_MAX_BYTES;
+/** The edge the service stores every sticker at; the crop is exported at it. */
+export const STICKER_EDGE = 512;
+/** The longest edge of the picture handed to the cropper. */
+export const STICKER_CROP_SOURCE_MAX_EDGE = 1536;
+/** The longest side of that picture, and its pixel budget. */
+export const STICKER_SOURCE_MAX_EDGE = 4096;
+export const STICKER_SOURCE_MAX_PIXELS = 16_000_000;
+export const STICKER_RECENT_MAX = 50;
+
+export const STICKER_BACKGROUNDS = ['REMOVED', 'KEPT'] as const;
+export type StickerBackground = (typeof STICKER_BACKGROUNDS)[number];
+
+/**
+ * REMOVED is a cut-out with transparency and its white outline in the pixels;
+ * KEPT is the whole square, which the app frames. An unknown value reads as
+ * KEPT, the one drawn with a frame, so nothing is ever drawn as a cut-out that
+ * is not one (A10).
+ */
+const stickerBackground = z
+  .string()
+  .max(16)
+  .transform((value): StickerBackground => (value === 'REMOVED' ? 'REMOVED' : 'KEPT'));
+
+/** Always 512 × 512 WebP, presigned like every other chat picture. */
+export const stickerImageSchema = z.object({
+  url: mediaUrl,
+  width: z.number().int().positive().max(4096),
+  height: z.number().int().positive().max(4096),
+  urlExpiresAt: nullableTimestamp,
+});
+
+export const stickerSchema = z.object({
+  id: z.string().min(1).max(64),
+  packId: z
+    .string()
+    .max(64)
+    .nullish()
+    .transform((value) => value ?? null),
+  name: z
+    .string()
+    .max(STICKER_NAME_MAX * 2)
+    .nullish()
+    .transform((value) => value ?? ''),
+  background: stickerBackground,
+  image: stickerImageSchema,
+  /** In the caller's library: "Add to My stickers" is not offered for it. */
+  isMine: z
+    .boolean()
+    .nullish()
+    .transform((value) => value ?? false),
+  createdAt: nullableTimestamp,
+});
+
+/** A sticker as a message carries it: no name, which is private to its owner. */
+export const messageStickerSchema = z.object({
+  id: z.string().min(1).max(64),
+  packId: z
+    .string()
+    .max(64)
+    .nullish()
+    .transform((value) => value ?? null),
+  background: stickerBackground,
+  image: stickerImageSchema,
+});
+
 export const chatMessageSchema = z.object({
   id: z.string().min(1).max(64),
   conversationId: z.string().min(1).max(64),
@@ -961,6 +1056,14 @@ export const chatMessageSchema = z.object({
   groupInvite: groupInviteCardSchema.nullish().transform((value) => value ?? null),
   /** Set when this line replied to a story; null for every other message and a tombstone. */
   storyReply: storyReplySchema.nullish().transform((value) => value ?? null),
+  /**
+   * Set on a sticker message, which has no text or files of its own. A
+   * malformed one reads as absent rather than failing the whole page (A10).
+   */
+  sticker: messageStickerSchema
+    .nullish()
+    .transform((value) => value ?? null)
+    .catch(null),
   createdAt: timestamp,
   editedAt: nullableTimestamp,
   /** Set on a tombstone: the line stays in history as "Message deleted". */
@@ -980,6 +1083,8 @@ const lastMessageSchema = z.object({
   attachments: z.array(chatAttachmentSchema).max(20).optional(),
   groupInvite: groupInviteCardSchema.nullish(),
   deletedAt: nullableTimestamp.optional(),
+  /** Sent by the server, so the list can say "Sent a sticker". */
+  hasSticker: z.boolean().nullish(),
 });
 
 /** The bare conversation record, as `POST /ws/conversations` and `conversation.new` carry it. */
@@ -1083,9 +1188,10 @@ export const listMessagesRequestSchema = z.object({
 });
 
 /**
- * A send: text, files, or both, optionally quoting a line. The body may be
- * empty only when files ride along — the service's own rule, checked here so a
- * blank send never costs a round trip.
+ * A send: text, files, or both, optionally quoting a line — or a sticker, which
+ * goes alone. The body may be empty only when files or a sticker ride along,
+ * and a sticker never shares its line with either: the service's own rules,
+ * checked here so a send it would refuse never costs a round trip.
  */
 export const sendChatMessageRequestSchema = z
   .object({
@@ -1095,11 +1201,19 @@ export const sendChatMessageRequestSchema = z
     body: z.string().trim().max(CHAT_COMPOSE_MAX_LENGTH),
     replyToMessageId: chatId.optional(),
     attachmentIds: z.array(chatId).max(CHAT_MESSAGE_MAX_ATTACHMENTS).optional(),
+    stickerId: chatId.optional(),
   })
-  .refine((value) => value.body !== '' || (value.attachmentIds?.length ?? 0) > 0, {
-    message: 'A message needs text or a file.',
-    path: ['body'],
-  });
+  .refine(
+    (value) =>
+      value.body !== '' || (value.attachmentIds?.length ?? 0) > 0 || value.stickerId !== undefined,
+    { message: 'A message needs text, a file or a sticker.', path: ['body'] },
+  )
+  .refine(
+    (value) =>
+      value.stickerId === undefined ||
+      (value.body === '' && (value.attachmentIds?.length ?? 0) === 0),
+    { message: 'A sticker is sent on its own.', path: ['stickerId'] },
+  );
 
 export const chatMessageResponseSchema = z.object({ message: chatMessageSchema });
 
@@ -1221,6 +1335,123 @@ export const attachmentResponseSchema = z.object({ attachment: chatAttachmentSch
 export const savedFileResponseSchema = z.object({
   /** False when the user cancelled the save dialog. */
   saved: z.boolean(),
+});
+
+/* -- chat stickers -- */
+
+export const STICKER_CUTOUT_STATUSES = ['READY', 'NO_SUBJECT'] as const;
+export type StickerCutoutStatus = (typeof STICKER_CUTOUT_STATUSES)[number];
+
+/**
+ * A picture uploaded to become a sticker, in both versions. `cutout` is the
+ * background-removed one; while the service has removal switched off it is
+ * always null and the status NO_SUBJECT. A READY without a cutout, or a status
+ * the app does not know, reads as NO_SUBJECT — the draft can still be saved
+ * as KEPT, so the answer is never a dead end (A10).
+ */
+export const stickerDraftSchema = z
+  .object({
+    draftId: chatId,
+    original: stickerImageSchema,
+    cutout: stickerImageSchema.nullish().transform((value) => value ?? null),
+    cutoutStatus: z.string().max(32),
+    expiresAt: nullableTimestamp,
+  })
+  .transform(({ cutoutStatus, cutout, ...rest }) => {
+    const status: StickerCutoutStatus =
+      cutoutStatus === 'READY' && cutout !== null ? 'READY' : 'NO_SUBJECT';
+    return { ...rest, cutout: status === 'READY' ? cutout : null, cutoutStatus: status };
+  });
+
+/**
+ * A picture the user pasted or dropped onto the sticker maker. The bytes come
+ * from the page, so the main process treats them as untrusted: bounded here,
+ * and uploaded only if their leading bytes are a PNG, JPEG or WebP (A05/A06).
+ * The service decodes and re-encodes them again on its side.
+ */
+export const stickerDraftFromBytesRequestSchema = z.object({
+  bytes: z
+    .instanceof(Uint8Array)
+    .refine(
+      (bytes) => bytes.byteLength > 0 && bytes.byteLength <= STICKER_SOURCE_MAX_BYTES,
+      'The picture must be 5 MB or smaller.',
+    ),
+});
+
+export const stickerDraftResponseSchema = z.object({
+  draft: stickerDraftSchema,
+});
+
+/**
+ * A picture to crop, as a `data:` URL the main process built from the file
+ * the user picked or the clipboard's picture; null with `cancelled` when the
+ * picker was closed. Bounded at twice the picture cap, base64's worst case
+ * with room to spare.
+ */
+export const stickerSourceResponseSchema = z.object({
+  dataUrl: z
+    .string()
+    .startsWith('data:image/')
+    .max(STICKER_PICTURE_MAX_BYTES * 2)
+    .nullable(),
+  cancelled: z.boolean(),
+});
+
+export const saveStickerRequestSchema = z.object({
+  draftId: chatId,
+  background: z.enum(STICKER_BACKGROUNDS),
+  name: z.string().trim().max(STICKER_NAME_MAX),
+});
+
+export const stickerIdRequestSchema = z.object({ stickerId: chatId });
+
+export const renameStickerRequestSchema = z.object({
+  stickerId: chatId,
+  name: z.string().trim().max(STICKER_NAME_MAX),
+});
+
+export const listMyStickersRequestSchema = z.object({
+  cursor: z.string().max(512).optional(),
+});
+
+export const stickerPageSchema = z.object({
+  items: z
+    .array(stickerSchema)
+    .max(STICKER_LIBRARY_MAX)
+    .nullish()
+    .transform((value) => value ?? []),
+  nextCursor: z
+    .string()
+    .max(512)
+    .nullish()
+    .transform((value) => value ?? null),
+});
+
+export const stickerPackSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().max(100),
+  thumbnailUrl: mediaUrl,
+  stickers: z
+    .array(stickerSchema)
+    .max(500)
+    .nullish()
+    .transform((value) => value ?? []),
+});
+
+export const stickerResponseSchema = z.object({ sticker: stickerSchema });
+
+export const stickerListResponseSchema = z.object({
+  stickers: z.array(stickerSchema).max(STICKER_RECENT_MAX),
+});
+
+export const stickerPacksResponseSchema = z.object({
+  packs: z.array(stickerPackSchema).max(100),
+});
+
+/** Saving someone else's sticker: `alreadyMine` when the library had it (200). */
+export const savedStickerResponseSchema = z.object({
+  sticker: stickerSchema,
+  alreadyMine: z.boolean(),
 });
 
 /* -- chat groups -- */
@@ -1414,6 +1645,19 @@ export const chatEventSchema = z.discriminatedUnion('event', [
       online: z.boolean(),
     }),
   }),
+  /** To every one of the owner's sockets, this device's included: dedupe on the id. */
+  z.object({
+    event: z.literal('sticker.added'),
+    data: z.object({ sticker: stickerSchema }),
+  }),
+  z.object({
+    event: z.literal('sticker.updated'),
+    data: z.object({ sticker: stickerSchema }),
+  }),
+  z.object({
+    event: z.literal('sticker.removed'),
+    data: z.object({ stickerId: chatId }),
+  }),
 ]);
 
 export type ConversationType = z.infer<typeof conversationTypeSchema>;
@@ -1458,6 +1702,23 @@ export type GroupParticipants = z.infer<typeof groupParticipantsSchema>;
 export type GroupRecordResponse = z.infer<typeof groupRecordResponseSchema>;
 export type GroupPhotoSource = z.infer<typeof groupPhotoSourceSchema>;
 export type SetGroupPhotoRequest = z.infer<typeof setGroupPhotoRequestSchema>;
+export type StickerImage = z.infer<typeof stickerImageSchema>;
+export type Sticker = z.infer<typeof stickerSchema>;
+export type MessageSticker = z.infer<typeof messageStickerSchema>;
+export type StickerDraft = z.infer<typeof stickerDraftSchema>;
+export type StickerDraftFromBytesRequest = z.infer<typeof stickerDraftFromBytesRequestSchema>;
+export type StickerDraftResponse = z.infer<typeof stickerDraftResponseSchema>;
+export type StickerSourceResponse = z.infer<typeof stickerSourceResponseSchema>;
+export type SaveStickerRequest = z.infer<typeof saveStickerRequestSchema>;
+export type StickerIdRequest = z.infer<typeof stickerIdRequestSchema>;
+export type RenameStickerRequest = z.infer<typeof renameStickerRequestSchema>;
+export type ListMyStickersRequest = z.infer<typeof listMyStickersRequestSchema>;
+export type StickerPage = z.infer<typeof stickerPageSchema>;
+export type StickerPack = z.infer<typeof stickerPackSchema>;
+export type StickerResponse = z.infer<typeof stickerResponseSchema>;
+export type StickerListResponse = z.infer<typeof stickerListResponseSchema>;
+export type StickerPacksResponse = z.infer<typeof stickerPacksResponseSchema>;
+export type SavedStickerResponse = z.infer<typeof savedStickerResponseSchema>;
 export type GroupInvite = z.infer<typeof groupInviteSchema>;
 export type GroupInviteResult = z.infer<typeof groupInviteResultSchema>;
 export type InviteIdRequest = z.infer<typeof inviteIdRequestSchema>;
@@ -2714,6 +2975,20 @@ export interface YelloBridge {
      * parses against `chatEventSchema` before use.
      */
     onEvent(listener: (event: unknown) => void): () => void;
+  };
+  readonly stickers: {
+    /** Opens the OS picker in the main process; a cancel answers `cancelled`. */
+    pickSource(): Promise<IpcResult<StickerSourceResponse>>;
+    /** Reads the clipboard's picture in the main process. */
+    pasteSource(): Promise<IpcResult<StickerSourceResponse>>;
+    draftFromBytes(request: StickerDraftFromBytesRequest): Promise<IpcResult<StickerDraftResponse>>;
+    save(request: SaveStickerRequest): Promise<IpcResult<StickerResponse>>;
+    listMine(request: ListMyStickersRequest): Promise<IpcResult<StickerPage>>;
+    listRecent(): Promise<IpcResult<StickerListResponse>>;
+    listPacks(): Promise<IpcResult<StickerPacksResponse>>;
+    rename(request: RenameStickerRequest): Promise<IpcResult<StickerResponse>>;
+    remove(request: StickerIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    saveFromMessage(request: ChatMessageRef): Promise<IpcResult<SavedStickerResponse>>;
   };
   readonly notifications: {
     list(request: ListNotificationsRequest): Promise<IpcResult<NotificationPage>>;

@@ -127,6 +127,28 @@ export function pastedImagePart(
   return ipcOk({ blob: new Blob([body], { type: format.type }), fileName: named });
 }
 
+/** The formats the sticker maker takes: the inline images, less GIF. */
+const STICKER_SOURCE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+/**
+ * Turns the bytes of a picture meant for a sticker into a form part — only if
+ * they really are a PNG, JPEG or WebP, read from the bytes themselves (A05).
+ * Size is the caller's to bound; the service checks everything again.
+ */
+export function stickerSourcePart(bytes: Uint8Array): IpcResult<FilePart> {
+  const format = IMAGE_SIGNATURES.find((signature) => signature.test(bytes));
+  if (format === undefined || !STICKER_SOURCE_TYPES.has(format.type)) {
+    return ipcFail('INVALID_PAYLOAD', 'That file isn’t a picture. Try a PNG, JPG or WebP.', {
+      apiReason: 'UNSUPPORTED_MEDIA',
+    });
+  }
+  const body = new Uint8Array(bytes).buffer;
+  return ipcOk({
+    blob: new Blob([body], { type: format.type }),
+    fileName: `sticker.${format.extension}`,
+  });
+}
+
 /**
  * The recording containers the voice route decodes, by their leading bytes:
  * WebM (Chromium's MediaRecorder, which is what this app records), Ogg

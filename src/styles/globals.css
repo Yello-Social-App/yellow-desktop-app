@@ -856,6 +856,19 @@
     -webkit-backdrop-filter: blur(16px) saturate(1.3);
   }
 
+  /* The checkerboard a transparent picture is previewed on, so the
+     sticker maker shows what is cut out and what is not. Tonal, both themes. */
+  .transparency-grid {
+    background-color: var(--color-surface-container);
+    background-image: conic-gradient(
+      var(--color-surface-container-high) 25%,
+      transparent 0 50%,
+      var(--color-surface-container-high) 0 75%,
+      transparent 0
+    );
+    background-size: 20px 20px;
+  }
+
   /* Hairline divider that lists use between rows, X-style. */
   .divide-hairline > * + * {
     border-top: 1px solid var(--color-outline-variant);
@@ -900,14 +913,30 @@
   }
 
   /* Cover art without images: a named gradient per item, picked by hash. */
-  .cover-0 { background: linear-gradient(135deg, #ffd60a 0%, #ff7a59 100%); }
-  .cover-1 { background: linear-gradient(135deg, #6ea8ff 0%, #b58cff 100%); }
-  .cover-2 { background: linear-gradient(135deg, #3ddc84 0%, #6ea8ff 100%); }
-  .cover-3 { background: linear-gradient(135deg, #ff7a59 0%, #b58cff 100%); }
-  .cover-4 { background: linear-gradient(135deg, #1f2a44 0%, #6ea8ff 100%); }
-  .cover-5 { background: linear-gradient(135deg, #2b1a3d 0%, #ff7a59 100%); }
-  .cover-6 { background: linear-gradient(135deg, #0f3d2e 0%, #3ddc84 100%); }
-  .cover-7 { background: linear-gradient(135deg, #3a2f00 0%, #ffd60a 100%); }
+  .cover-0 {
+    background: linear-gradient(135deg, #ffd60a 0%, #ff7a59 100%);
+  }
+  .cover-1 {
+    background: linear-gradient(135deg, #6ea8ff 0%, #b58cff 100%);
+  }
+  .cover-2 {
+    background: linear-gradient(135deg, #3ddc84 0%, #6ea8ff 100%);
+  }
+  .cover-3 {
+    background: linear-gradient(135deg, #ff7a59 0%, #b58cff 100%);
+  }
+  .cover-4 {
+    background: linear-gradient(135deg, #1f2a44 0%, #6ea8ff 100%);
+  }
+  .cover-5 {
+    background: linear-gradient(135deg, #2b1a3d 0%, #ff7a59 100%);
+  }
+  .cover-6 {
+    background: linear-gradient(135deg, #0f3d2e 0%, #3ddc84 100%);
+  }
+  .cover-7 {
+    background: linear-gradient(135deg, #3a2f00 0%, #ffd60a 100%);
+  }
 
   /* Long lists render off-screen rows lazily. This keeps the timeline cheap
      before real virtualization is wired in. Applied past a row threshold only

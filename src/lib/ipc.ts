@@ -32,6 +32,18 @@ import {
   type ReactChatMessageRequest,
   type RenameGroupRequest,
   type SetGroupPhotoRequest,
+  savedStickerResponseSchema,
+  stickerDraftResponseSchema,
+  stickerListResponseSchema,
+  stickerPacksResponseSchema,
+  stickerPageSchema,
+  stickerResponseSchema,
+  stickerSourceResponseSchema,
+  type ListMyStickersRequest,
+  type RenameStickerRequest,
+  type SaveStickerRequest,
+  type StickerDraftFromBytesRequest,
+  type StickerIdRequest,
   accountListResponseSchema,
   acknowledgedResponseSchema,
   appInfoCopiedResponseSchema,
@@ -437,6 +449,33 @@ export const ipc = {
     guarded('chat.typing', acknowledgedResponseSchema, (api) => api.chat.typing(request)),
   chatSocketState: () =>
     guarded('chat.socketState', chatSocketStateSchema, (api) => api.chat.socketState()),
+
+  pickStickerSource: () =>
+    guarded('stickers.pickSource', stickerSourceResponseSchema, (api) => api.stickers.pickSource()),
+  pasteStickerSource: () =>
+    guarded('stickers.pasteSource', stickerSourceResponseSchema, (api) =>
+      api.stickers.pasteSource(),
+    ),
+  stickerDraftFromBytes: (request: StickerDraftFromBytesRequest) =>
+    guarded('stickers.draftFromBytes', stickerDraftResponseSchema, (api) =>
+      api.stickers.draftFromBytes(request),
+    ),
+  saveSticker: (request: SaveStickerRequest) =>
+    guarded('stickers.save', stickerResponseSchema, (api) => api.stickers.save(request)),
+  listMyStickers: (request: ListMyStickersRequest) =>
+    guarded('stickers.listMine', stickerPageSchema, (api) => api.stickers.listMine(request)),
+  listRecentStickers: () =>
+    guarded('stickers.listRecent', stickerListResponseSchema, (api) => api.stickers.listRecent()),
+  listStickerPacks: () =>
+    guarded('stickers.listPacks', stickerPacksResponseSchema, (api) => api.stickers.listPacks()),
+  renameSticker: (request: RenameStickerRequest) =>
+    guarded('stickers.rename', stickerResponseSchema, (api) => api.stickers.rename(request)),
+  deleteSticker: (request: StickerIdRequest) =>
+    guarded('stickers.remove', acknowledgedResponseSchema, (api) => api.stickers.remove(request)),
+  saveMessageSticker: (request: ChatMessageRef) =>
+    guarded('stickers.saveFromMessage', savedStickerResponseSchema, (api) =>
+      api.stickers.saveFromMessage(request),
+    ),
 
   listNotifications: (request: ListNotificationsRequest) =>
     guarded('notifications.list', notificationPageSchema, (api) => api.notifications.list(request)),

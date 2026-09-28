@@ -24,6 +24,7 @@ import { useVoiceRecorder } from '@/features/messages/voice-recorder';
 import { formatBytes } from '@/lib/format';
 import { displayName } from '@/lib/user-display';
 
+import { StickerButton } from './StickerPicker';
 import { VoiceRecorderDialog } from './VoiceRecorderDialog';
 
 /**
@@ -37,6 +38,10 @@ import { VoiceRecorderDialog } from './VoiceRecorderDialog';
  * is how the service wants it. While one is in hand the recording screen opens
  * in the middle of the window, and the draft text waits underneath, untouched.
  * Its problems (no mic, too short) land under the box once it closes.
+ *
+ * A sticker follows the same rule: picked from the button beside the mic, it
+ * goes at once as its own line, quoting the open reply, and whatever was typed
+ * stays in the box.
  *
  * It has three modes that share one box — new line, reply, edit — and the
  * store owns which one is active, because the thread's hover bar is what
@@ -316,6 +321,15 @@ export function MessageComposer() {
             }
           }}
           className="text-on-surface placeholder:text-outline max-h-40 min-h-8 w-full flex-1 resize-none bg-transparent px-1 py-1.5 text-[15px] leading-relaxed focus:outline-none"
+        />
+        <StickerButton
+          disabled={!hasConversation || editing !== null}
+          canSend={hasConversation && editing === null}
+          onSend={(sticker) => {
+            setError(null);
+            composer.sendSticker(sticker);
+            textareaRef.current?.focus();
+          }}
         />
         {offersMic ? (
           <button

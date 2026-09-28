@@ -41,6 +41,18 @@ import type {
   RenameGroupRequest,
   SavedFileResponse,
   SetGroupPhotoRequest,
+  ListMyStickersRequest,
+  RenameStickerRequest,
+  SaveStickerRequest,
+  SavedStickerResponse,
+  StickerDraftFromBytesRequest,
+  StickerDraftResponse,
+  StickerIdRequest,
+  StickerSourceResponse,
+  StickerListResponse,
+  StickerPacksResponse,
+  StickerPage,
+  StickerResponse,
   AccountIdRequest,
   AccountListResponse,
   AcknowledgedResponse,
@@ -336,6 +348,24 @@ const bridge: YelloBridge = {
         ipcRenderer.removeListener(IPC_CHANNELS.CHAT_EVENT, handler);
       };
     },
+  },
+  stickers: {
+    pickSource: () => invoke<StickerSourceResponse>(IPC_CHANNELS.STICKERS_PICK_SOURCE),
+    pasteSource: () => invoke<StickerSourceResponse>(IPC_CHANNELS.STICKERS_PASTE_SOURCE),
+    draftFromBytes: (request: StickerDraftFromBytesRequest) =>
+      invoke<StickerDraftResponse>(IPC_CHANNELS.STICKERS_DRAFT_FROM_BYTES, request),
+    save: (request: SaveStickerRequest) =>
+      invoke<StickerResponse>(IPC_CHANNELS.STICKERS_SAVE, request),
+    listMine: (request: ListMyStickersRequest) =>
+      invoke<StickerPage>(IPC_CHANNELS.STICKERS_LIST_MINE, request),
+    listRecent: () => invoke<StickerListResponse>(IPC_CHANNELS.STICKERS_LIST_RECENT),
+    listPacks: () => invoke<StickerPacksResponse>(IPC_CHANNELS.STICKERS_LIST_PACKS),
+    rename: (request: RenameStickerRequest) =>
+      invoke<StickerResponse>(IPC_CHANNELS.STICKERS_RENAME, request),
+    remove: (request: StickerIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.STICKERS_DELETE, request),
+    saveFromMessage: (request: ChatMessageRef) =>
+      invoke<SavedStickerResponse>(IPC_CHANNELS.STICKERS_SAVE_FROM_MESSAGE, request),
   },
   notifications: {
     list: (request: ListNotificationsRequest) =>
