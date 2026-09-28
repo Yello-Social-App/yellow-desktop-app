@@ -67,18 +67,21 @@ export interface OutgoingMessage {
   body: string;
   replyToMessageId?: string | undefined;
   attachmentIds?: readonly string[] | undefined;
+  /** A sticker goes on its own line: no text, no files. */
+  stickerId?: string | undefined;
 }
 
 export async function sendMessage(
   outgoing: OutgoingMessage,
 ): Promise<Result<ChatMessage, MessagesError>> {
-  const { replyToMessageId, attachmentIds, ...rest } = outgoing;
+  const { replyToMessageId, attachmentIds, stickerId, ...rest } = outgoing;
   const result = await ipc.sendChatMessage({
     ...rest,
     ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
     ...(attachmentIds === undefined || attachmentIds.length === 0
       ? {}
       : { attachmentIds: [...attachmentIds] }),
+    ...(stickerId === undefined ? {} : { stickerId }),
   });
   return result.ok ? ok(result.data.message) : fail(result.error);
 }

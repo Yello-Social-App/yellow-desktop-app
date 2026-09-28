@@ -244,6 +244,7 @@ export function registerChatHandlers(): void {
       body,
       replyToMessageId,
       attachmentIds,
+      stickerId,
     }): Promise<IpcResult<ChatMessageResponse>> => {
       // Absent keys stay absent: the service reads `[]` and a missing list alike,
       // but a stray `replyToMessageId: undefined` would be noise on the wire.
@@ -252,6 +253,7 @@ export function registerChatHandlers(): void {
         body,
         ...(replyToMessageId === undefined ? {} : { replyToMessageId }),
         ...(attachmentIds === undefined || attachmentIds.length === 0 ? {} : { attachmentIds }),
+        ...(stickerId === undefined ? {} : { stickerId }),
       };
 
       if (chatSocket.isConnected()) {

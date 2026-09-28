@@ -55,6 +55,7 @@ const REQUEST_TIMEOUT_MS = 20_000;
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_NO_CONTENT = 204;
+const HTTP_PAYLOAD_TOO_LARGE = 413;
 
 const tokenPairSchema = z.object({
   accessToken: z.string().min(1),
@@ -268,12 +269,20 @@ function describeFailure(status: number, body: unknown): IpcResult<never> {
   const apiCode = parsed.success ? parsed.data.code : undefined;
   const message = parsed.success ? parsed.data.message : undefined;
   const fieldErrors = parsed.success ? (parsed.data.fieldErrors ?? undefined) : undefined;
+  const details = parsed.success ? parsed.data.details : undefined;
+  // A 413 may come from a proxy in front of the service, with no body of its
+  // own: the status is the reason then.
+  const apiReason =
+    details?.reason ?? (status === HTTP_PAYLOAD_TOO_LARGE ? 'PAYLOAD_TOO_LARGE' : undefined);
+  const retryAfterSeconds = details?.retryAfterSeconds;
 
-  log.warn('api_request_failed', { status, apiCode });
+  log.warn('api_request_failed', { status, apiCode, apiReason });
 
   const code = status === HTTP_UNAUTHORIZED ? 'UNAUTHENTICATED' : 'API';
   return ipcFail(code, message ?? 'The server rejected that request.', {
     ...(apiCode === undefined ? {} : { apiCode }),
+    ...(apiReason === undefined ? {} : { apiReason }),
+    ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
     ...(fieldErrors === undefined ? {} : { fieldErrors }),
   });
 }
@@ -299,6 +308,18 @@ interface RequestOptions<TSchema extends z.ZodType> {
 export async function apiRequest<TSchema extends z.ZodType>(
   options: RequestOptions<TSchema>,
 ): Promise<IpcResult<z.infer<TSchema>>> {
+  const result = await apiRequestWithStatus(options);
+  return result.ok ? ipcOk(result.data.data) : result;
+}
+
+/**
+ * `apiRequest`, keeping the success status: for the few routes whose 200 and
+ * 201 mean different things (an idempotent create that found what it would
+ * have made).
+ */
+export async function apiRequestWithStatus<TSchema extends z.ZodType>(
+  options: RequestOptions<TSchema>,
+): Promise<IpcResult<{ data: z.infer<TSchema>; status: number }>> {
   const {
     method,
     url,
@@ -331,7 +352,7 @@ export async function apiRequest<TSchema extends z.ZodType>(
   if (response.status === HTTP_UNAUTHORIZED && allowRefresh) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
-      return apiRequest({ ...options, allowRefresh: false });
+      return apiRequestWithStatus({ ...options, allowRefresh: false });
     }
   }
 
@@ -346,7 +367,7 @@ export async function apiRequest<TSchema extends z.ZodType>(
       log.error('api_no_content_unexpected', { url });
       return ipcFail('API', 'The server returned an unexpected response.');
     }
-    return ipcOk(empty.data);
+    return ipcOk({ data: empty.data, status: response.status });
   }
 
   // The chat service answers its payload bare; the API wraps it.
@@ -373,5 +394,5 @@ export async function apiRequest<TSchema extends z.ZodType>(
     return ipcFail('API', 'The server returned an unexpected response.');
   }
 
-  return ipcOk(payload.data);
+  return ipcOk({ data: payload.data, status: response.status });
 }

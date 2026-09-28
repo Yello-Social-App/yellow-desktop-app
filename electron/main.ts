@@ -23,6 +23,8 @@ import { configureHttpClient } from './api/http-client';
 import { apiBaseUrlFromEnvironment, chatBaseUrlFromEnvironment } from './config';
 import { registerAuthHandlers } from './ipc/handlers/auth.handler';
 import { registerChatHandlers } from './ipc/handlers/chat.handler';
+import { registerMediaHandlers } from './ipc/handlers/media.handler';
+import { registerStickerHandlers } from './ipc/handlers/stickers.handler';
 import { registerCommentHandlers } from './ipc/handlers/comments.handler';
 import { registerCommunityHandlers } from './ipc/handlers/communities.handler';
 import { registerFeedHandlers } from './ipc/handlers/feed.handler';
@@ -305,6 +307,8 @@ function bootstrap(): void {
       registerReactionHandlers();
       registerFriendHandlers();
       registerChatHandlers();
+      registerStickerHandlers();
+      registerMediaHandlers();
       registerNotificationHandlers();
       registerUpdateHandlers();
       registerCommunityHandlers();

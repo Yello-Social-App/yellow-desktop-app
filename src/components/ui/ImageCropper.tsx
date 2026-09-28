@@ -14,6 +14,7 @@ import {
   areaOf,
   centredView,
   clampView,
+  fitZoomOf,
   MAX_ZOOM,
   MIN_ZOOM,
   scaleOf,
@@ -27,6 +28,11 @@ interface ImageCropperProps {
   src: string;
   /** Round for avatars; the crop itself is always square. */
   shape?: 'circle' | 'square';
+  /**
+   * Lets the image zoom out until all of it fits, the rest of the square left
+   * transparent (shown as a checkerboard). For stickers; an avatar must cover.
+   */
+  allowFit?: boolean;
   /** The area in view, whenever it changes; null until the image has loaded. */
   onAreaChange: (area: CropArea | null) => void;
 }
@@ -44,7 +50,12 @@ const KEY_ZOOM_STEP = 0.1;
  * write, which the strict CSP allows where an inline `style` attribute would
  * not be. Remount it (a `key`) to start over on a new `src`.
  */
-export function ImageCropper({ src, shape = 'circle', onAreaChange }: ImageCropperProps) {
+export function ImageCropper({
+  src,
+  shape = 'circle',
+  allowFit = false,
+  onAreaChange,
+}: ImageCropperProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const drag = useRef<{ pointerId: number; startX: number; startY: number; from: CropView } | null>(
@@ -183,7 +194,8 @@ export function ImageCropper({ src, shape = 'circle', onAreaChange }: ImageCropp
         onPointerCancel={endDrag}
         onKeyDown={onKeyDown}
         className={cn(
-          'bg-surface-container-high relative size-72 shrink-0 touch-none overflow-hidden rounded-2xl select-none',
+          'relative size-72 shrink-0 touch-none overflow-hidden rounded-2xl select-none',
+          allowFit ? 'transparency-grid' : 'bg-surface-container-high',
           'focus-visible:ring-primary cursor-grab outline-none focus-visible:ring-2 active:cursor-grabbing',
         )}
       >
@@ -203,6 +215,7 @@ export function ImageCropper({ src, shape = 'circle', onAreaChange }: ImageCropp
               imageWidth: image.naturalWidth,
               imageHeight: image.naturalHeight,
               viewport,
+              ...(allowFit ? { minZoom: fitZoomOf(image.naturalWidth, image.naturalHeight) } : {}),
             };
             setFrame(loaded);
             setView(centredView(loaded));
@@ -226,7 +239,7 @@ export function ImageCropper({ src, shape = 'circle', onAreaChange }: ImageCropp
 
       <p id={hintId} className="sr-only">
         Drag, or use the arrow keys, to move the photo. Use the slider, the scroll wheel, or plus
-        and minus to zoom.
+        and minus to zoom.{allowFit ? ' Zoom all the way out to fit the whole picture.' : ''}
       </p>
 
       <div className="text-on-surface-variant flex w-72 items-center gap-2">
@@ -234,10 +247,10 @@ export function ImageCropper({ src, shape = 'circle', onAreaChange }: ImageCropp
         <input
           type="range"
           aria-label="Zoom"
-          min={MIN_ZOOM}
+          min={frame?.minZoom ?? MIN_ZOOM}
           max={MAX_ZOOM}
           step={0.01}
-          value={view?.zoom ?? MIN_ZOOM}
+          value={view?.zoom ?? frame?.minZoom ?? MIN_ZOOM}
           disabled={view === null}
           onChange={(event) => {
             zoomFromCentre(Number(event.target.value));

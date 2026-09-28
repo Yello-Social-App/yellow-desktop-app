@@ -127,6 +127,34 @@ export function pastedImagePart(
   return ipcOk({ blob: new Blob([body], { type: format.type }), fileName: named });
 }
 
+/** An image's format, read from its leading bytes; undefined when it is not one of the four. */
+export function imageFormatOf(bytes: Uint8Array): { type: string; extension: string } | undefined {
+  const format = IMAGE_SIGNATURES.find((signature) => signature.test(bytes));
+  return format === undefined ? undefined : { type: format.type, extension: format.extension };
+}
+
+/** The formats the sticker maker takes: the inline images, less GIF. */
+const STICKER_SOURCE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+/**
+ * Turns the bytes of a picture meant for a sticker into a form part — only if
+ * they really are a PNG, JPEG or WebP, read from the bytes themselves (A05).
+ * Size is the caller's to bound; the service checks everything again.
+ */
+export function stickerSourcePart(bytes: Uint8Array): IpcResult<FilePart> {
+  const format = IMAGE_SIGNATURES.find((signature) => signature.test(bytes));
+  if (format === undefined || !STICKER_SOURCE_TYPES.has(format.type)) {
+    return ipcFail('INVALID_PAYLOAD', 'That file isn’t a picture. Try a PNG, JPG or WebP.', {
+      apiReason: 'UNSUPPORTED_MEDIA',
+    });
+  }
+  const body = new Uint8Array(bytes).buffer;
+  return ipcOk({
+    blob: new Blob([body], { type: format.type }),
+    fileName: `sticker.${format.extension}`,
+  });
+}
+
 /**
  * The recording containers the voice route decodes, by their leading bytes:
  * WebM (Chromium's MediaRecorder, which is what this app records), Ogg
@@ -192,7 +220,7 @@ export function droppedFilePart(
  * reserved characters, never empty. The dialog is still the user's to change;
  * this only keeps the suggestion from pointing anywhere but the folder shown.
  */
-function safeFileName(name: string): string {
+export function safeFileName(name: string): string {
   const cleaned = path
     .basename(name)
     .replace(/[\p{Cc}\p{Cf}<>:"/\\|?*]+/gu, '_')

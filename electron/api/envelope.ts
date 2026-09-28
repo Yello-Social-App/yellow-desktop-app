@@ -4,7 +4,9 @@
  * Success is `{ success, data, timestamp }`; failure is
  * `{ success, code, message, fieldErrors, path, timestamp }`. The chat
  * service's failure body — `{ code, message, details }` — is a subset, so the
- * one error schema reads both; `details` is deliberately not surfaced.
+ * one error schema reads both. Of `details`, only `reason` (the finer case
+ * under one code, as an upper-case token) and `retryAfterSeconds` are read;
+ * the rest is deliberately not surfaced.
  *
  * The envelope is parsed in two steps — outer shape first, then the payload
  * against the caller's schema — so each layer reports its own failure and the
@@ -24,6 +26,18 @@ export const apiErrorEnvelopeSchema = z.object({
   message: z.string().max(500).optional(),
   fieldErrors: z.record(z.string(), z.array(z.string())).nullish(),
   path: z.string().max(500).optional(),
+  /** Anything unexpected in here reads as absent, never as a failed parse of the error. */
+  details: z
+    .object({
+      reason: z
+        .string()
+        .regex(/^[A-Z][A-Z_]{0,63}$/)
+        .optional()
+        .catch(undefined),
+      retryAfterSeconds: z.number().int().nonnegative().max(86_400).optional().catch(undefined),
+    })
+    .nullish()
+    .catch(null),
 });
 
 export type ApiErrorEnvelope = z.infer<typeof apiErrorEnvelopeSchema>;

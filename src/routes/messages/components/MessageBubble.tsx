@@ -1,20 +1,24 @@
 import {
   AlertCircle,
   Ban,
+  BookmarkCheck,
+  BookmarkPlus,
   Check,
   CheckCheck,
   Clock,
   CornerUpLeft,
+  LoaderCircle,
   Pencil,
   Trash2,
 } from 'lucide-react';
-import { memo, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import type { Author } from '@shared/ipc-types';
 
 import { LinkPreviewCard } from '@/components/content/LinkPreviewCard';
 import { RichText } from '@/components/content/RichText';
 import { UserAvatar } from '@/components/people/UserAvatar';
 import { useMessageActions } from '@/features/messages/hooks';
+import { useStickersStore } from '@/features/stickers/store';
 import { messageAnchor, type ThreadMessage } from '@/features/messages/types';
 import { cn } from '@/lib/cn';
 import { extractLinks } from '@/lib/links';
@@ -24,6 +28,7 @@ import { displayName } from '@/lib/user-display';
 import { InviteCard } from './InviteCard';
 import { MessageAttachments } from './MessageAttachments';
 import { ReactionChips, ReactionPicker } from './MessageReactions';
+import { StickerArt } from './StickerArt';
 import { StoryReplyCard } from './StoryReplyCard';
 
 interface MessageBubbleProps {
@@ -55,6 +60,9 @@ interface MessageBubbleProps {
  *
  * An unsent line stays in place as a tombstone — the history is honest about
  * something having been there — with its text, files and reactions gone.
+ *
+ * A sticker has no bubble at all: the picture stands on the thread's own
+ * ground, as it would in any messenger.
  */
 export const MessageBubble = memo(function MessageBubble({
   message,
@@ -130,6 +138,14 @@ export const MessageBubble = memo(function MessageBubble({
                     onOpen={actions.openConversation}
                   />
                 )}
+                {message.sticker !== null && (
+                  <StickerLine
+                    sticker={message.sticker}
+                    messageId={message.id}
+                    isPending={message.delivery === 'sending'}
+                    isFailed={isFailed}
+                  />
+                )}
                 {message.attachments.length > 0 && (
                   <MessageAttachments
                     attachments={message.attachments}
@@ -160,7 +176,14 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
 
           {isSent && !isDeleted && (
-            <MessageActions message={message} isMine={isMine} canEdit={isMine && hasBody} />
+            <MessageActions
+              message={message}
+              isMine={isMine}
+              canEdit={isMine && hasBody}
+              canKeepSticker={
+                !isMine && message.sticker !== null && message.sticker.packId === null
+              }
+            />
           )}
         </div>
 
@@ -233,9 +256,11 @@ function ReplyQuote({ replyTo, sender, isOwnQuote, isMine }: ReplyQuoteProps) {
     ? 'Message deleted'
     : replyTo.body !== ''
       ? replyTo.body
-      : replyTo.hasAttachments
-        ? 'Attachment'
-        : 'Message';
+      : replyTo.hasSticker
+        ? 'Sticker'
+        : replyTo.hasAttachments
+          ? 'Attachment'
+          : 'Message';
 
   return (
     <button
@@ -266,10 +291,45 @@ function ReplyQuote({ replyTo, sender, isOwnQuote, isMine }: ReplyQuoteProps) {
   );
 }
 
+interface StickerLineProps {
+  sticker: NonNullable<ThreadMessage['sticker']>;
+  messageId: string;
+  isPending: boolean;
+  isFailed: boolean;
+}
+
+/**
+ * A sticker on a line. Its link is presigned for about an hour; when it fails
+ * to load the store is asked, once, to find a fresh one, and the new `url`
+ * re-renders this in place.
+ */
+function StickerLine({ sticker, messageId, isPending, isFailed }: StickerLineProps) {
+  const actions = useMessageActions();
+  const hasRetried = useRef(false);
+
+  return (
+    <StickerArt
+      image={sticker.image}
+      background={sticker.background}
+      size="message"
+      alt="Sticker"
+      onError={() => {
+        if (!hasRetried.current) {
+          hasRetried.current = true;
+          actions.refreshSticker(messageId);
+        }
+      }}
+      className={cn(isPending && 'opacity-70', isFailed && 'ring-error rounded-2xl ring-1')}
+    />
+  );
+}
+
 interface MessageActionsProps {
   message: ThreadMessage;
   isMine: boolean;
   canEdit: boolean;
+  /** Someone else's own-made sticker: offer to keep it. Pack ones are in the picker already. */
+  canKeepSticker: boolean;
 }
 
 /**
@@ -277,7 +337,7 @@ interface MessageActionsProps {
  * dialog: it is for everyone and cannot be taken back, but a modal over the
  * thread for a two-word question is heavier than the decision.
  */
-function MessageActions({ message, isMine, canEdit }: MessageActionsProps) {
+function MessageActions({ message, isMine, canEdit, canKeepSticker }: MessageActionsProps) {
   const actions = useMessageActions();
   const [isConfirming, setIsConfirming] = useState(false);
 
@@ -335,6 +395,13 @@ function MessageActions({ message, isMine, canEdit }: MessageActionsProps) {
       >
         <CornerUpLeft aria-hidden className="size-4" />
       </button>
+      {canKeepSticker && message.sticker !== null && (
+        <KeepStickerButton
+          messageId={message.id}
+          stickerId={message.sticker.id}
+          className={iconClass}
+        />
+      )}
       {canEdit && (
         <button
           type="button"
@@ -360,6 +427,78 @@ function MessageActions({ message, isMine, canEdit }: MessageActionsProps) {
         >
           <Trash2 aria-hidden className="size-4" />
         </button>
+      )}
+    </span>
+  );
+}
+
+interface KeepStickerButtonProps {
+  messageId: string;
+  stickerId: string;
+  className: string;
+}
+
+/** How long "Added to My stickers" stays beside the button. */
+const KEPT_NOTE_MS = 2400;
+
+/**
+ * Add to My stickers. Drawn as already kept when the library is known to hold
+ * it; otherwise offered, and the service answers "already yours" itself.
+ */
+function KeepStickerButton({ messageId, stickerId, className }: KeepStickerButtonProps) {
+  const actions = useMessageActions();
+  const isInLibrary = useStickersStore((state) => state.mine.some((item) => item.id === stickerId));
+  const [state, setState] = useState<'idle' | 'busy'>('idle');
+  const [note, setNote] = useState<{ text: string; isError: boolean } | null>(null);
+
+  useEffect(() => {
+    if (note === null) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setNote(null);
+    }, KEPT_NOTE_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [note]);
+
+  const label = isInLibrary ? 'In My stickers' : 'Add to My stickers';
+
+  return (
+    <span className="relative flex items-center">
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        disabled={isInLibrary || state === 'busy'}
+        onClick={() => {
+          setState('busy');
+          void actions.keepSticker(messageId).then((result) => {
+            setState('idle');
+            setNote({ text: result.message, isError: !result.ok });
+          });
+        }}
+        className={cn(className, 'disabled:hover:bg-transparent')}
+      >
+        {state === 'busy' ? (
+          <LoaderCircle aria-hidden className="size-4 animate-spin" />
+        ) : isInLibrary ? (
+          <BookmarkCheck aria-hidden className="text-primary size-4" />
+        ) : (
+          <BookmarkPlus aria-hidden className="size-4" />
+        )}
+      </button>
+      {note !== null && (
+        <span
+          role={note.isError ? 'alert' : 'status'}
+          className={cn(
+            'bg-surface-container-highest border-outline-strong animate-fade-in pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 rounded-full border px-2.5 py-1 text-[12px] whitespace-nowrap',
+            note.isError ? 'text-error' : 'text-on-surface',
+          )}
+        >
+          {note.text}
+        </span>
       )}
     </span>
   );

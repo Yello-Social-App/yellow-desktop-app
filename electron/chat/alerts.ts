@@ -92,6 +92,9 @@ function describe(message: ChatMessage): string {
   if (message.groupInvite !== null) {
     return `Invited you to ${message.groupInvite.title ?? 'a group'}`;
   }
+  if (message.sticker !== null) {
+    return 'Sent a sticker';
+  }
   const [first] = message.attachments;
   if (first !== undefined) {
     return ATTACHMENT_WORDING[first.kind];

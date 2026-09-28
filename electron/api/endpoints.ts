@@ -165,6 +165,19 @@ export const ENDPOINTS = {
     invites: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/invites`,
     acceptInvite: (inviteId: string) => `${chat}/invites/${seg(inviteId)}/accept`,
     declineInvite: (inviteId: string) => `${chat}/invites/${seg(inviteId)}/decline`,
+    /** POST (JSON) saves a draft into the caller's library. */
+    stickers: `${chat}/stickers`,
+    /** Multipart, one `image`: both versions of a picture, before it is saved. */
+    stickerDrafts: `${chat}/stickers/drafts`,
+    /** The caller's library, newest first, keyset-paged with `limit`/`cursor`. */
+    myStickers: `${chat}/stickers/mine`,
+    recentStickers: `${chat}/stickers/recent`,
+    stickerPacks: `${chat}/sticker-packs`,
+    /** PATCH renames, DELETE removes from the library; library stickers only. */
+    sticker: (stickerId: string) => `${chat}/stickers/${seg(stickerId)}`,
+    /** Adds the sticker a message carries to the caller's library. */
+    saveMessageSticker: (conversationId: string, messageId: string) =>
+      `${chat}/conversations/${seg(conversationId)}/messages/${seg(messageId)}/sticker/save`,
     /** The live socket, relative to the API origin (wss:// for https://). */
     socket: chat,
   },
