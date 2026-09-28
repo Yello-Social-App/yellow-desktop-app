@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-28
+
+Stickers in chat, and saving or copying any photo from the photo viewer.
+
+### Added
+
+- **Stickers.** The sticker button next to the mic opens a picker with
+  Recent, My stickers and a tab for each pack, plus search by name. Picking a
+  sticker sends it straight away, as a reply if one is open, and leaves
+  anything you've typed in the box.
+- **Make your own stickers.** Drop a picture, browse for one, or paste it
+  with Ctrl/Cmd+V, then crop it to a square. Right-click one of your stickers
+  to rename or delete it. To keep a sticker someone else made, use the hover
+  bar on their message.
+- **Save and copy photos.** The photo viewer has Save and Copy buttons, and
+  Ctrl/Cmd+S and Ctrl/Cmd+C shortcuts. Save asks where to put the file. Copy
+  puts the image on the clipboard, ready to paste into another app. This
+  works for WebP and GIF images too.
+
+### Changed
+
+- The photo viewer is dark with a blurred background in both themes, so
+  photos and their controls stand out. Before, its backdrop was near-white in
+  the dark theme.
+
 ## [0.10.0] - 2026-09-24
 
 Voice messages in chat, comments and reactions on community posts, and a
