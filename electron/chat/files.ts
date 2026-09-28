@@ -127,6 +127,12 @@ export function pastedImagePart(
   return ipcOk({ blob: new Blob([body], { type: format.type }), fileName: named });
 }
 
+/** An image's format, read from its leading bytes; undefined when it is not one of the four. */
+export function imageFormatOf(bytes: Uint8Array): { type: string; extension: string } | undefined {
+  const format = IMAGE_SIGNATURES.find((signature) => signature.test(bytes));
+  return format === undefined ? undefined : { type: format.type, extension: format.extension };
+}
+
 /** The formats the sticker maker takes: the inline images, less GIF. */
 const STICKER_SOURCE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
@@ -214,7 +220,7 @@ export function droppedFilePart(
  * reserved characters, never empty. The dialog is still the user's to change;
  * this only keeps the suggestion from pointing anywhere but the folder shown.
  */
-function safeFileName(name: string): string {
+export function safeFileName(name: string): string {
   const cleaned = path
     .basename(name)
     .replace(/[\p{Cc}\p{Cf}<>:"/\\|?*]+/gu, '_')

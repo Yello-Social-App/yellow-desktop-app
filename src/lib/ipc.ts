@@ -32,6 +32,10 @@ import {
   type ReactChatMessageRequest,
   type RenameGroupRequest,
   type SetGroupPhotoRequest,
+  imageCopiedResponseSchema,
+  imageCopyResponseSchema,
+  type CopyPngRequest,
+  type ImageExportRequest,
   savedStickerResponseSchema,
   stickerDraftResponseSchema,
   stickerListResponseSchema,
@@ -450,6 +454,12 @@ export const ipc = {
   chatSocketState: () =>
     guarded('chat.socketState', chatSocketStateSchema, (api) => api.chat.socketState()),
 
+  saveImage: (request: ImageExportRequest) =>
+    guarded('media.saveImage', savedFileResponseSchema, (api) => api.media.saveImage(request)),
+  copyImage: (request: ImageExportRequest) =>
+    guarded('media.copyImage', imageCopyResponseSchema, (api) => api.media.copyImage(request)),
+  copyPng: (request: CopyPngRequest) =>
+    guarded('media.copyPng', imageCopiedResponseSchema, (api) => api.media.copyPng(request)),
   pickStickerSource: () =>
     guarded('stickers.pickSource', stickerSourceResponseSchema, (api) => api.stickers.pickSource()),
   pasteStickerSource: () =>

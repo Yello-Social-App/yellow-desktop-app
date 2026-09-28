@@ -41,6 +41,10 @@ import type {
   RenameGroupRequest,
   SavedFileResponse,
   SetGroupPhotoRequest,
+  CopyPngRequest,
+  ImageCopiedResponse,
+  ImageCopyResponse,
+  ImageExportRequest,
   ListMyStickersRequest,
   RenameStickerRequest,
   SaveStickerRequest,
@@ -348,6 +352,14 @@ const bridge: YelloBridge = {
         ipcRenderer.removeListener(IPC_CHANNELS.CHAT_EVENT, handler);
       };
     },
+  },
+  media: {
+    saveImage: (request: ImageExportRequest) =>
+      invoke<SavedFileResponse>(IPC_CHANNELS.MEDIA_SAVE_IMAGE, request),
+    copyImage: (request: ImageExportRequest) =>
+      invoke<ImageCopyResponse>(IPC_CHANNELS.MEDIA_COPY_IMAGE, request),
+    copyPng: (request: CopyPngRequest) =>
+      invoke<ImageCopiedResponse>(IPC_CHANNELS.MEDIA_COPY_PNG, request),
   },
   stickers: {
     pickSource: () => invoke<StickerSourceResponse>(IPC_CHANNELS.STICKERS_PICK_SOURCE),

@@ -96,7 +96,13 @@ export function MessageAttachments({
         <ImageLightbox
           images={images
             .filter((image) => image.url !== null)
-            .map((image) => ({ url: image.url ?? '', alt: image.fileName }))}
+            .map((image) => ({
+              url: image.url ?? '',
+              alt: image.fileName,
+              // Saved and copied by id: a fresh link, however long the thread was open.
+              source: { kind: 'chat-attachment' as const, attachmentId: image.id },
+              fileName: image.fileName,
+            }))}
           initialIndex={viewing}
           onClose={() => {
             setViewing(null);

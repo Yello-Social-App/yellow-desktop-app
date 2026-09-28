@@ -1454,6 +1454,53 @@ export const savedStickerResponseSchema = z.object({
   alreadyMine: z.boolean(),
 });
 
+/* -- saving and copying an image -- */
+
+/** The largest image saved or copied; a chat photo is at most 10 MB, a post image 5. */
+export const IMAGE_EXPORT_MAX_BYTES = 20 * 1024 * 1024;
+/** A PNG the page made from an image the platform decoder could not read. */
+export const IMAGE_COPY_PNG_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Where an image to save or copy comes from. A chat photo is named by its
+ * attachment id, never its URL: the main process re-reads a fresh link from
+ * the service, which re-checks membership (A01), so the page cannot point it
+ * at an address. Any other image is named by URL, which the main process
+ * fetches only if it is on the app's image-host allowlist.
+ */
+export const imageExportSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('chat-attachment'), attachmentId: chatId }),
+  z.object({ kind: z.literal('url'), url: z.string().max(4096) }),
+]);
+
+export const imageExportRequestSchema = z.object({
+  source: imageExportSourceSchema,
+  /** A name to suggest in the save dialog; the extension comes from the bytes. */
+  fileName: z.string().trim().min(1).max(255).optional(),
+});
+
+/**
+ * Copied, or — for a format the platform decoder cannot read (WebP, GIF) —
+ * the image's bytes, for the page to turn into a PNG and hand back.
+ */
+export const imageCopyResponseSchema = z.discriminatedUnion('copied', [
+  z.object({ copied: z.literal(true) }),
+  z.object({
+    copied: z.literal(false),
+    bytes: z
+      .instanceof(Uint8Array)
+      .refine((bytes) => bytes.byteLength > 0 && bytes.byteLength <= IMAGE_EXPORT_MAX_BYTES),
+  }),
+]);
+
+export const copyPngRequestSchema = z.object({
+  bytes: z
+    .instanceof(Uint8Array)
+    .refine((bytes) => bytes.byteLength > 0 && bytes.byteLength <= IMAGE_COPY_PNG_MAX_BYTES),
+});
+
+export const imageCopiedResponseSchema = z.object({ copied: z.literal(true) });
+
 /* -- chat groups -- */
 
 export const renameGroupRequestSchema = z.object({
@@ -1719,6 +1766,11 @@ export type StickerResponse = z.infer<typeof stickerResponseSchema>;
 export type StickerListResponse = z.infer<typeof stickerListResponseSchema>;
 export type StickerPacksResponse = z.infer<typeof stickerPacksResponseSchema>;
 export type SavedStickerResponse = z.infer<typeof savedStickerResponseSchema>;
+export type ImageExportSource = z.infer<typeof imageExportSourceSchema>;
+export type ImageExportRequest = z.infer<typeof imageExportRequestSchema>;
+export type ImageCopyResponse = z.infer<typeof imageCopyResponseSchema>;
+export type CopyPngRequest = z.infer<typeof copyPngRequestSchema>;
+export type ImageCopiedResponse = z.infer<typeof imageCopiedResponseSchema>;
 export type GroupInvite = z.infer<typeof groupInviteSchema>;
 export type GroupInviteResult = z.infer<typeof groupInviteResultSchema>;
 export type InviteIdRequest = z.infer<typeof inviteIdRequestSchema>;
@@ -2975,6 +3027,13 @@ export interface YelloBridge {
      * parses against `chatEventSchema` before use.
      */
     onEvent(listener: (event: unknown) => void): () => void;
+  };
+  readonly media: {
+    /** Asks where, then saves the image there; `saved: false` when the dialog was cancelled. */
+    saveImage(request: ImageExportRequest): Promise<IpcResult<SavedFileResponse>>;
+    copyImage(request: ImageExportRequest): Promise<IpcResult<ImageCopyResponse>>;
+    /** The page's PNG of an image the main process could not decode, onto the clipboard. */
+    copyPng(request: CopyPngRequest): Promise<IpcResult<ImageCopiedResponse>>;
   };
   readonly stickers: {
     /** Opens the OS picker in the main process; a cancel answers `cancelled`. */

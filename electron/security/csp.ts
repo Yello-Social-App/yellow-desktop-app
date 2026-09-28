@@ -13,8 +13,7 @@
  */
 import { session } from 'electron';
 
-import { apiBaseUrlFromEnvironment, imageBaseUrlsFromEnvironment } from '../config';
-
+import { appImageOrigins } from './image-hosts';
 import { chatMediaSources } from './media-hosts';
 import { devServerUrl, isDevRuntime } from './origins';
 
@@ -29,19 +28,9 @@ import { devServerUrl, isDevRuntime } from './origins';
  * media is a third origin again, from its own allowlist.
  */
 function imageHosts(): string {
-  const origins = new Set<string>();
-
-  for (const url of [apiBaseUrlFromEnvironment(), ...imageBaseUrlsFromEnvironment()]) {
-    try {
-      origins.add(new URL(url).origin);
-    } catch {
-      // A malformed entry is dropped rather than poisoning the whole policy.
-    }
-  }
-
   // Chat attachments and group photos: presigned links on the private bucket's
-  // host, which is not the public CDN above (see media-hosts.ts).
-  return [...origins, chatMediaSources()].filter((value) => value !== '').join(' ');
+  // host, which is not the public CDN (see media-hosts.ts).
+  return [...appImageOrigins(), chatMediaSources()].filter((value) => value !== '').join(' ');
 }
 
 /**
