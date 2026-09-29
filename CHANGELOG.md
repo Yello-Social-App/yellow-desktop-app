@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-29
+
+One-to-one voice and video calls in direct chats, with screen sharing.
+
 ### Added
 
 - **Voice and video calls.** The phone and camera buttons at the top of a
@@ -14,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with or without your camera, or decline. In a call you can mute, turn your
   camera on or off, share a screen or window, and minimize the call to keep
   using the app. If Yello restarts mid-call, it offers to rejoin.
+
+### Changed
+
+- Yello can now ask for your camera and screen, not just your microphone.
+  macOS asks once the first time a call uses each, and screen sharing needs
+  Screen Recording access in System Settings.
+- Builds for a self-hosted server can set `YELLO_CALL_MEDIA_HOSTS` to the
+  LiveKit hosts calls may connect to (default `https://*.livekit.cloud`).
 
 ## [0.11.0] - 2026-09-28
 
