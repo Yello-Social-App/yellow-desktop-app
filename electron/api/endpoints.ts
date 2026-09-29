@@ -165,6 +165,10 @@ export const ENDPOINTS = {
     invites: (conversationId: string) => `${chat}/conversations/${seg(conversationId)}/invites`,
     acceptInvite: (inviteId: string) => `${chat}/invites/${seg(inviteId)}/accept`,
     declineInvite: (inviteId: string) => `${chat}/invites/${seg(inviteId)}/decline`,
+    /** POST, no body: a LiveKit join token for this call (caller: RINGING or ACTIVE; callee: ACTIVE). */
+    callToken: (callId: string) => `${chat}/calls/${seg(callId)}/token`,
+    /** The caller's RINGING or ACTIVE call, or `{ call: null }`. */
+    activeCall: `${chat}/calls/active`,
     /** POST (JSON) saves a draft into the caller's library. */
     stickers: `${chat}/stickers`,
     /** Multipart, one `image`: both versions of a picture, before it is saved. */

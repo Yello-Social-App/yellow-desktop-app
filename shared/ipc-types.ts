@@ -1597,6 +1597,96 @@ export const groupChangeSchema = z.object({
     .transform((value) => value ?? []),
 });
 
+/* -- calls -- */
+
+/**
+ * 1:1 audio and video calls (yello-chat CALLS-API.md). The chat service owns
+ * the lifecycle — who may call whom, ringing over the socket, the record —
+ * and hands out LiveKit join tokens; the audio and video themselves flow
+ * between the renderer and LiveKit, never through the service or this app's
+ * main process.
+ */
+export const CALL_MEDIA = ['audio', 'video'] as const;
+export const callMediaSchema = z.enum(CALL_MEDIA);
+
+export const CALL_STATUSES = ['RINGING', 'ACTIVE', 'ENDED'] as const;
+
+/** The reasons CALLS-API.md names; compare against these, but hold the wire value as text. */
+export const CALL_END_REASONS = [
+  'HANGUP',
+  'DECLINED',
+  'MISSED',
+  'BUSY',
+  'CANCELLED',
+  'FAILED',
+] as const;
+
+export const callSchema = z.object({
+  id: chatId,
+  conversationId: chatId,
+  /** The caller. The callee is the other participant of the (direct) conversation. */
+  initiatorId: chatId,
+  media: callMediaSchema,
+  status: z.enum(CALL_STATUSES),
+  /**
+   * Set exactly when `status` is ENDED. Text rather than an enum, so a reason
+   * added later still ends the call here instead of voiding the frame (A10).
+   */
+  endReason: z.string().max(32).nullable(),
+  createdAt: timestamp,
+  /** When it became ACTIVE: the call timer counts from here. */
+  answeredAt: z.string().max(64).nullable(),
+  endedAt: z.string().max(64).nullable(),
+});
+
+export const startCallRequestSchema = z.object({
+  conversationId: chatId,
+  media: callMediaSchema,
+});
+
+export const callIdRequestSchema = z.object({
+  callId: chatId,
+});
+
+export const callResponseSchema = z.object({
+  call: callSchema,
+});
+
+/** The viewer's RINGING or ACTIVE call, if any: what recovery after a reconnect reads. */
+export const activeCallResponseSchema = z.object({
+  call: callSchema.nullable(),
+});
+
+/**
+ * What the renderer needs to join a call's media room. `token` is a LiveKit
+ * join credential — for this one room, ten minutes, publish camera/mic/screen
+ * only — and it does cross into the renderer, because WebRTC lives there. It
+ * is held in memory for the connect and never logged or stored. `serverUrl`
+ * has already been checked against the call host allowlist (A01).
+ */
+export const callJoinSchema = z.object({
+  serverUrl: z.string().min(1).max(2048),
+  token: z.string().min(1).max(8192),
+  expiresAt: z.string().max(64),
+});
+
+/** A screen or window the user may share, as the picker draws it. */
+export const screenSourceSchema = z.object({
+  id: z.string().min(1).max(256),
+  name: z.string().max(300),
+  kind: z.enum(['screen', 'window']),
+  /** A small PNG `data:` URL made in the main process; empty when there is none. */
+  thumbnailDataUrl: z.string().max(500_000),
+});
+
+export const screenSourceListSchema = z.object({
+  sources: z.array(screenSourceSchema).max(100),
+});
+
+export const chooseScreenSourceRequestSchema = z.object({
+  sourceId: z.string().min(1).max(256),
+});
+
 /**
  * What the main process pushes to the renderer from the live socket. Each is
  * a server frame that has already been parsed there — an unknown or malformed
@@ -1692,6 +1782,21 @@ export const chatEventSchema = z.discriminatedUnion('event', [
       online: z.boolean(),
     }),
   }),
+  /** To every socket of the callee: show the incoming call. */
+  z.object({
+    event: z.literal('call.ringing'),
+    data: z.object({ call: callSchema }),
+  }),
+  /** To every socket of both users: answered (the device that answered joins; others stop ringing). */
+  z.object({
+    event: z.literal('call.accepted'),
+    data: z.object({ call: callSchema }),
+  }),
+  /** To every socket of both users (BUSY: the caller only). `reason` equals `call.endReason`. */
+  z.object({
+    event: z.literal('call.ended'),
+    data: z.object({ reason: z.string().max(32), call: callSchema }),
+  }),
   /** To every one of the owner's sockets, this device's included: dedupe on the id. */
   z.object({
     event: z.literal('sticker.added'),
@@ -1778,6 +1883,18 @@ export type GroupChange = z.infer<typeof groupChangeSchema>;
 export type ChatSocketStatus = (typeof CHAT_SOCKET_STATUSES)[number];
 export type ChatSocketState = z.infer<typeof chatSocketStateSchema>;
 export type ChatEvent = z.infer<typeof chatEventSchema>;
+export type CallMedia = z.infer<typeof callMediaSchema>;
+export type CallStatus = (typeof CALL_STATUSES)[number];
+export type CallEndReason = (typeof CALL_END_REASONS)[number];
+export type Call = z.infer<typeof callSchema>;
+export type StartCallRequest = z.infer<typeof startCallRequestSchema>;
+export type CallIdRequest = z.infer<typeof callIdRequestSchema>;
+export type CallResponse = z.infer<typeof callResponseSchema>;
+export type ActiveCallResponse = z.infer<typeof activeCallResponseSchema>;
+export type CallJoin = z.infer<typeof callJoinSchema>;
+export type ScreenSource = z.infer<typeof screenSourceSchema>;
+export type ScreenSourceList = z.infer<typeof screenSourceListSchema>;
+export type ChooseScreenSourceRequest = z.infer<typeof chooseScreenSourceRequestSchema>;
 
 /* -- link previews -- */
 
@@ -3027,6 +3144,25 @@ export interface YelloBridge {
      * parses against `chatEventSchema` before use.
      */
     onEvent(listener: (event: unknown) => void): () => void;
+  };
+  readonly calls: {
+    /** Rings the other member of a direct conversation; answers RINGING, or ENDED/BUSY. */
+    start(request: StartCallRequest): Promise<IpcResult<CallResponse>>;
+    /** Answers from this device; resolves with the call once it is ACTIVE (or ENDED). */
+    accept(request: CallIdRequest): Promise<IpcResult<CallResponse>>;
+    /** Refuses a ringing call; the outcome arrives as `call.ended`. */
+    decline(request: CallIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    /** Cancels, declines or hangs up, by state; the outcome arrives as `call.ended`. */
+    end(request: CallIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
+    /** A fresh LiveKit join for this device; also what a rejoin asks for. */
+    join(request: CallIdRequest): Promise<IpcResult<CallJoin>>;
+    active(): Promise<IpcResult<ActiveCallResponse>>;
+    /** Screens and windows the user may share, for the picker. */
+    screenSources(): Promise<IpcResult<ScreenSourceList>>;
+    /** Names the source the next screen-share request should get. */
+    chooseScreenSource(
+      request: ChooseScreenSourceRequest,
+    ): Promise<IpcResult<AcknowledgedResponse>>;
   };
   readonly media: {
     /** Asks where, then saves the image there; `saved: false` when the dialog was cancelled. */

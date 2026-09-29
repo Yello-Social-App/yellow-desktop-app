@@ -137,6 +137,12 @@ origins, one leading `*.` allowed) sets where they may load and download from;
 it defaults to `https://*.r2.cloudflarestorage.com`. Narrow it to your account's
 host (`https://<account>.r2.cloudflarestorage.com`) where you know it.
 
+Call audio and video go through LiveKit, which the renderer connects to itself.
+`YELLO_CALL_MEDIA_HOSTS` (same format) sets which LiveKit hosts a call may use:
+the CSP's `connect-src`, the packaged build's `wss:` filter, and the check on
+the `serverUrl` the service hands out all read it. It defaults to
+`https://*.livekit.cloud`.
+
 HTTPS is required unless the host is loopback. A packaged build bakes in the
 target that was set when it was built (`YELLO_API_TARGET`), defaulting to `prod`.
 

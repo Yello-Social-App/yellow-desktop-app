@@ -88,6 +88,26 @@ export function chatMediaHostsFromEnvironment(): string[] {
 }
 
 /**
+ * Where call media (LiveKit) may be reached. The call service answers every
+ * join token with a `serverUrl`; the renderer connects there over `wss:` and
+ * LiveKit Cloud also reads its region list over `https:` on the same hosts.
+ * The list bounds both — the CSP's `connect-src` and the check the main
+ * process makes before handing a `serverUrl` to the renderer (OWASP A01) — so
+ * a server response can never steer the call to a host nobody configured.
+ * Entries are written as `https://` origins; the `wss:` form is derived.
+ */
+const DEFAULT_CALL_MEDIA_HOSTS = 'https://*.livekit.cloud';
+
+export function callMediaHostsFromEnvironment(): string[] {
+  const configured = process.env.YELLO_CALL_MEDIA_HOSTS;
+  const raw = configured === undefined || configured === '' ? DEFAULT_CALL_MEDIA_HOSTS : configured;
+  return raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value !== '');
+}
+
+/**
  * Where the chat service lives. Same origin as the API unless overridden —
  * nginx fronts both in every deployment, and `artisan serve` + `nest start`
  * locally are the one case they diverge (8080 and 3000).

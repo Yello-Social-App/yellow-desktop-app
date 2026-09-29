@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Voice and video calls.** The phone and camera buttons at the top of a
+  direct chat ring the other person. An incoming call pops up on any screen,
+  with a ring and a desktop alert when Yello is in the background; answer
+  with or without your camera, or decline. In a call you can mute, turn your
+  camera on or off, share a screen or window, and minimize the call to keep
+  using the app. If Yello restarts mid-call, it offers to rejoin.
+
 ## [0.11.0] - 2026-09-28
 
 Stickers in chat, and saving or copying any photo from the photo viewer.

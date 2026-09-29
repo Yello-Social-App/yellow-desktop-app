@@ -11,7 +11,9 @@
  * `auth.ok { userId, expiresAt, onlinePeers }`; when the token's `exp` passes
  * the server closes with 4401 unless a fresh `auth` arrived first. `ref` on a
  * request is echoed on its reply and on an `error`, which is how a
- * `message.send` is matched to its `message.sent`.
+ * `message.send` is matched to its `message.sent`. A frame with no direct
+ * reply (`call.accept`) is matched to the fan-out frame that settles it
+ * instead — `requestOutcome` — while an `error` still arrives by its `ref`.
  *
  * What the renderer sees is narrower than the wire: frames are parsed here
  * against `chatEventSchema` before they are pushed, so an unknown or malformed
@@ -73,6 +75,7 @@ const errorFrameSchema = z.object({
   code: z.string().max(64),
   message: z.string().max(500),
   ref: z.string().max(64).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
 });
 
 /** A refusal from the service, or a transport failure, with a stable code. */
@@ -80,6 +83,8 @@ export class SocketFailure extends Error {
   constructor(
     public readonly code: string,
     message: string,
+    /** The service's `details` (a `reason`, a `retryAfterMs`), when it sent any. */
+    public readonly details: Readonly<Record<string, unknown>> = {},
   ) {
     super(message);
     this.name = 'SocketFailure';
@@ -87,7 +92,10 @@ export class SocketFailure extends Error {
 }
 
 interface PendingReply {
-  replyEvent: string;
+  /** The reply's event, matched by the echoed `ref`; null when an outcome frame settles it. */
+  replyEvent: string | null;
+  /** For a frame with no direct reply: which published frame is its outcome. */
+  isOutcome?: (event: ChatEvent) => boolean;
   resolve: (data: unknown) => void;
   reject: (failure: SocketFailure) => void;
   timer: NodeJS.Timeout;
@@ -197,13 +205,34 @@ class ChatSocket {
    * `ref`, or rejects with the `error` that does. Times out rather than hangs.
    */
   request(event: string, data: Record<string, unknown>, replyEvent: string): Promise<unknown> {
+    return this.track(event, data, { replyEvent });
+  }
+
+  /**
+   * For a frame the service answers only through its fan-out: resolves with
+   * the first published frame `isOutcome` accepts, or rejects with the
+   * `error` that echoes the frame's `ref`. Times out rather than hangs.
+   */
+  requestOutcome(
+    event: string,
+    data: Record<string, unknown>,
+    isOutcome: (event: ChatEvent) => boolean,
+  ): Promise<ChatEvent> {
+    return this.track(event, data, { replyEvent: null, isOutcome }) as Promise<ChatEvent>;
+  }
+
+  private track(
+    event: string,
+    data: Record<string, unknown>,
+    match: Pick<PendingReply, 'replyEvent' | 'isOutcome'>,
+  ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const ref = randomUUID();
       const timer = setTimeout(() => {
         this.pending.delete(ref);
         reject(new SocketFailure('TIMEOUT', 'The chat service did not answer in time.'));
       }, REPLY_TIMEOUT_MS);
-      this.pending.set(ref, { replyEvent, resolve, reject, timer });
+      this.pending.set(ref, { ...match, resolve, reject, timer });
 
       if (!this.send(event, { ...data, ref })) {
         clearTimeout(timer);
@@ -326,6 +355,7 @@ class ChatSocket {
         this.settle(body, event);
         return;
       case 'message.sent':
+      case 'call.started':
         this.settle(body, event);
         return;
       case 'presence':
@@ -338,6 +368,7 @@ class ChatSocket {
     // Everything else is for the renderer, once it is known to be well-formed.
     const parsed = chatEventSchema.safeParse({ event, data: body });
     if (parsed.success) {
+      this.settleOutcomes(parsed.data);
       this.publish(parsed.data);
     } else {
       log.info('frame_ignored', { event });
@@ -369,7 +400,7 @@ class ChatSocket {
     if (!parsed.success) {
       return;
     }
-    const { code, message, ref } = parsed.data;
+    const { code, message, ref, details } = parsed.data;
     log.warn('socket_error_frame', { code, correlated: ref !== undefined });
 
     if (ref !== undefined) {
@@ -377,7 +408,7 @@ class ChatSocket {
       if (waiting !== undefined) {
         clearTimeout(waiting.timer);
         this.pending.delete(ref);
-        waiting.reject(new SocketFailure(code, message));
+        waiting.reject(new SocketFailure(code, message, details));
       }
       return;
     }
@@ -412,6 +443,17 @@ class ChatSocket {
     clearTimeout(waiting.timer);
     this.pending.delete(ref);
     waiting.resolve(body);
+  }
+
+  /** Resolves every request this published frame is the outcome of. */
+  private settleOutcomes(event: ChatEvent): void {
+    for (const [ref, waiting] of this.pending) {
+      if (waiting.isOutcome?.(event) === true) {
+        clearTimeout(waiting.timer);
+        this.pending.delete(ref);
+        waiting.resolve(event);
+      }
+    }
   }
 
   private failPending(failure: SocketFailure): void {

@@ -14,6 +14,12 @@
  *   - `CHAT_MESSAGE_DELETED` — the unsend. Nothing is shown; the alert for that
  *     message is taken down if it is still up.
  *
+ * And one the notify guide does not have, because the service sends no push
+ * for it yet: an incoming call (`call.ringing`). It is up while the call
+ * rings — answered anywhere, declined, cancelled or missed takes it down —
+ * and the taskbar entry flashes with it. Clicking it only brings the window
+ * forward: the incoming-call screen is already there.
+ *
  * The rules the service applies to pushes are applied here to alerts: nothing
  * while you are looking (the service pushes only to people offline in chat;
  * the desktop analogue is a window without focus), nothing when push is off,
@@ -37,6 +43,7 @@ import { apiRequest } from '../api/http-client';
 import { notificationWatcher, toPlainText } from '../notifications/watcher';
 import {
   userSchema,
+  type Call,
   type ChatEvent,
   type ChatMessage,
   type ChatReaction,
@@ -119,6 +126,8 @@ class ChatAlerts {
   private readonly byReactedMessage = new Map<string, Notification>();
   private readonly ownMessages = new Map<string, OwnMessage>();
   private readonly names = new Map<string, string>();
+  /** The incoming call being announced, if any: at most one rings at a time. */
+  private ringing: { callId: string; toast: Notification | null } | null = null;
   private detach: (() => void) | null = null;
 
   /** Starts listening to the socket. Once per app; the listener outlives sessions. */
@@ -143,6 +152,7 @@ class ChatAlerts {
     this.byReactedMessage.clear();
     this.ownMessages.clear();
     this.names.clear();
+    this.stopRinging(null);
   }
 
   private handle(event: ChatEvent): void {
@@ -155,6 +165,13 @@ class ChatAlerts {
         return;
       case 'message.reactions':
         this.onReactions(event.data.messageId, event.data.reactions);
+        return;
+      case 'call.ringing':
+        this.onRinging(event.data.call);
+        return;
+      case 'call.accepted':
+      case 'call.ended':
+        this.stopRinging(event.data.call.id);
         return;
       case 'conversation.removed': {
         // Out of the group: an alert from it would open a thread you cannot read.
@@ -250,33 +267,77 @@ class ChatAlerts {
     });
   }
 
+  private onRinging(call: Call): void {
+    const viewerId = chatSocket.viewerId();
+    if (viewerId === null || call.initiatorId === viewerId || call.status !== 'RINGING') {
+      return;
+    }
+    this.stopRinging(null);
+    this.ringing = { callId: call.id, toast: null };
+    if (!this.shouldAlert(null)) {
+      return;
+    }
+    this.mainWindow()?.flashFrame(true);
+    void this.nameOf(call.initiatorId, 'Yello').then((name) => {
+      // Rechecked: answered, declined or focused while the name resolved.
+      if (this.ringing?.callId !== call.id || !this.shouldAlert(null)) {
+        return;
+      }
+      const kind = call.media === 'video' ? 'video' : 'voice';
+      this.ringing.toast = this.showToast(name, `Incoming ${kind} call`, () => {
+        this.focusWindow();
+      });
+    });
+  }
+
+  /** Takes the incoming-call alert down: for this call, or whichever is up (null). */
+  private stopRinging(callId: string | null): void {
+    if (this.ringing === null || (callId !== null && this.ringing.callId !== callId)) {
+      return;
+    }
+    this.ringing.toast?.close();
+    this.ringing = null;
+    this.mainWindow()?.flashFrame(false);
+  }
+
   private takeDown(conversationId: string): void {
     this.byConversation.get(conversationId)?.toast.close();
     this.byConversation.delete(conversationId);
   }
 
-  /** Push on, the type not muted, the platform able, and nobody looking. */
-  private shouldAlert(type: 'CHAT_MESSAGE' | 'CHAT_REACTION'): boolean {
+  /**
+   * Push on, the type not muted, the platform able, and nobody looking. A
+   * call has no notify type of its own to mute (null): push on is the switch.
+   */
+  private shouldAlert(type: 'CHAT_MESSAGE' | 'CHAT_REACTION' | null): boolean {
     const preferences = notificationWatcher.currentPreferences();
-    if (!preferences.pushEnabled || preferences.mutedTypes.includes(type)) {
+    if (!preferences.pushEnabled || (type !== null && preferences.mutedTypes.includes(type))) {
       return false;
     }
     if (!Notification.isSupported()) {
       return false;
     }
-    const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed());
+    const window = this.mainWindow();
     return window !== undefined && !window.isFocused();
   }
 
+  private mainWindow(): BrowserWindow | undefined {
+    return BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed());
+  }
+
   private show(title: string, body: string, conversationId: string): Notification | null {
+    return this.showToast(title, body, () => {
+      this.activate(conversationId);
+    });
+  }
+
+  private showToast(title: string, body: string, onClick: () => void): Notification | null {
     try {
       const toast = new Notification({
         title: toPlainText(title, TITLE_MAX),
         body: toPlainText(body, BODY_MAX),
       });
-      toast.on('click', () => {
-        this.activate(conversationId);
-      });
+      toast.on('click', onClick);
       toast.show();
       log.info('chat_alert_shown', {});
       return toast;
@@ -286,16 +347,21 @@ class ChatAlerts {
     }
   }
 
+  private focusWindow(): void {
+    const window = this.mainWindow();
+    if (window === undefined) {
+      return;
+    }
+    if (window.isMinimized()) {
+      window.restore();
+    }
+    window.show();
+    window.focus();
+  }
+
   /** A clicked alert: bring the window back and let the renderer open the thread. */
   private activate(conversationId: string): void {
-    const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed());
-    if (window !== undefined) {
-      if (window.isMinimized()) {
-        window.restore();
-      }
-      window.show();
-      window.focus();
-    }
+    this.focusWindow();
     this.byConversation.delete(conversationId);
     chatSocket.announce({ event: 'alert.activated', data: { conversationId } });
   }
@@ -305,7 +371,7 @@ class ChatAlerts {
    * is resolved against the API once and cached; a lookup that fails still
    * alerts, under a neutral name, rather than dropping the news (A10).
    */
-  private async nameOf(userId: string): Promise<string> {
+  private async nameOf(userId: string, fallback = 'New message'): Promise<string> {
     const known = this.names.get(userId);
     if (known !== undefined) {
       return known;
@@ -316,7 +382,7 @@ class ChatAlerts {
       schema: userSchema,
     });
     if (!result.ok) {
-      return 'New message';
+      return fallback;
     }
     const name = result.data.fullName ?? result.data.username;
     remember(this.names, userId, name, NAMES_MAX);

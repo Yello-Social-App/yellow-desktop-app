@@ -2,15 +2,17 @@
  * Default-deny policy for everything Chromium can be asked to hand out
  * (OWASP A01 / A02).
  *
- * Camera, geolocation, notifications, MIDI, USB, serial, HID and clipboard
- * reads are all denied. The allowlist below is deliberately empty: a feature
- * that needs a permission has to add itself here explicitly, and the reviewer
- * sees that in the diff.
+ * Geolocation, notifications, MIDI, USB, serial, HID and clipboard reads are
+ * all denied. The allowlist below is deliberately empty: a feature that needs
+ * a permission has to add itself here explicitly, and the reviewer sees that
+ * in the diff.
  *
- * The one exception is the microphone, for voice messages — and only the
- * microphone: a `media` request is granted when it asks for audio alone, from
- * the app's own renderer, in its main frame. A request that also wants the
- * camera, or comes from anywhere else, is denied like everything else.
+ * The exceptions are capture devices, for voice messages and calls: a `media`
+ * request for the microphone and/or the camera, and a `display-capture`
+ * request for screen sharing, are granted when they come from the app's own
+ * renderer, in its main frame. Which screen is shared is still the user's
+ * pick (screen-capture.ts); anything from anywhere else is denied like
+ * everything else.
  */
 import { app, session, shell, systemPreferences, type WebContents } from 'electron';
 
@@ -39,45 +41,78 @@ function isTrustedOrigin(url: string | undefined): boolean {
   return url !== undefined && originOf(url) === trustedRendererOrigin();
 }
 
-/** A `getUserMedia({ audio: true })` from our own page, and nothing broader. */
-function isMicrophoneRequest(
+type CaptureDevice = 'microphone' | 'camera';
+
+const DEVICE_OF_MEDIA_TYPE: Readonly<Record<string, CaptureDevice>> = {
+  audio: 'microphone',
+  video: 'camera',
+};
+
+/**
+ * The devices a `getUserMedia` from our own page's main frame asks for, or
+ * null when the request is anything else — another origin, a subframe, or a
+ * media type other than audio and video.
+ */
+function captureDevicesOf(
   permission: string,
   details: { requestingUrl?: string; isMainFrame?: boolean; mediaTypes?: string[] },
-): boolean {
+): CaptureDevice[] | null {
   const { mediaTypes = [] } = details;
+  if (
+    permission !== 'media' ||
+    details.isMainFrame !== true ||
+    !isTrustedOrigin(details.requestingUrl) ||
+    mediaTypes.length === 0
+  ) {
+    return null;
+  }
+  const devices = mediaTypes.map((type) => DEVICE_OF_MEDIA_TYPE[type]);
+  return devices.every((device) => device !== undefined) ? [...new Set(devices)] : null;
+}
+
+/** A screen-share from our own page's main frame; the source is picked elsewhere. */
+function isScreenCaptureRequest(
+  permission: string,
+  details: { requestingUrl?: string; isMainFrame?: boolean },
+): boolean {
   return (
-    permission === 'media' &&
+    permission === 'display-capture' &&
     details.isMainFrame === true &&
-    isTrustedOrigin(details.requestingUrl) &&
-    mediaTypes.length > 0 &&
-    mediaTypes.every((type) => type === 'audio')
+    isTrustedOrigin(details.requestingUrl)
   );
 }
 
 /**
- * On macOS the OS asks the user too, once, and remembers the answer. Elsewhere
- * the OS setting is outside the app's reach, and a refusal there surfaces as
- * the recorder failing to start, which the renderer explains.
+ * On macOS the OS asks the user too, once per device, and remembers the
+ * answer. Elsewhere the OS setting is outside the app's reach, and a refusal
+ * there surfaces as the recorder or the call failing to start, which the
+ * renderer explains.
  */
-async function osAllowsMicrophone(): Promise<boolean> {
+async function osAllows(devices: readonly CaptureDevice[]): Promise<boolean> {
   if (process.platform !== 'darwin') {
     return true;
   }
-  if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') {
-    return true;
+  for (const device of devices) {
+    if (systemPreferences.getMediaAccessStatus(device) === 'granted') {
+      continue;
+    }
+    if (!(await systemPreferences.askForMediaAccess(device))) {
+      return false;
+    }
   }
-  return systemPreferences.askForMediaAccess('microphone');
+  return true;
 }
 
 export function applyPermissionPolicy(): void {
   const { defaultSession } = session;
 
   defaultSession.setPermissionRequestHandler((_webContents, permission, callback, details) => {
-    if (isMicrophoneRequest(permission, details)) {
-      void osAllowsMicrophone().then(
+    const devices = captureDevicesOf(permission, details);
+    if (devices !== null) {
+      void osAllows(devices).then(
         (allowed) => {
           if (!allowed) {
-            log.info('microphone_denied_by_os', {});
+            log.info('capture_denied_by_os', { devices: devices.join(',') });
           }
           callback(allowed);
         },
@@ -85,6 +120,10 @@ export function applyPermissionPolicy(): void {
           callback(false);
         },
       );
+      return;
+    }
+    if (isScreenCaptureRequest(permission, details)) {
+      callback(true);
       return;
     }
     const granted = isGranted(permission);
@@ -98,7 +137,7 @@ export function applyPermissionPolicy(): void {
     (_webContents, permission, requestingOrigin, details) => {
       if (
         permission === 'media' &&
-        details.mediaType === 'audio' &&
+        (details.mediaType === 'audio' || details.mediaType === 'video') &&
         details.isMainFrame &&
         originOf(requestingOrigin) === trustedRendererOrigin()
       ) {

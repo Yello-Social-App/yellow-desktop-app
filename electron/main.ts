@@ -22,6 +22,7 @@ import { app, BrowserWindow, protocol } from 'electron';
 import { configureHttpClient } from './api/http-client';
 import { apiBaseUrlFromEnvironment, chatBaseUrlFromEnvironment } from './config';
 import { registerAuthHandlers } from './ipc/handlers/auth.handler';
+import { registerCallHandlers } from './ipc/handlers/calls.handler';
 import { registerChatHandlers } from './ipc/handlers/chat.handler';
 import { registerMediaHandlers } from './ipc/handlers/media.handler';
 import { registerStickerHandlers } from './ipc/handlers/stickers.handler';
@@ -41,6 +42,8 @@ import { registerShowcaseHandlers } from './ipc/handlers/showcase.handler';
 import { registerStoryHandlers } from './ipc/handlers/stories.handler';
 import { registerUpdateHandlers } from './ipc/handlers/updates.handler';
 import { registerWindowHandlers } from './ipc/handlers/window.handler';
+import { heldCall } from './calls/held-call';
+import { applyScreenCapturePolicy } from './calls/screen-capture';
 import { chatAlerts } from './chat/alerts';
 import { chatSocket } from './chat/socket';
 import { notificationWatcher } from './notifications/watcher';
@@ -272,6 +275,9 @@ function bootstrap(): void {
   });
 
   app.on('before-quit', () => {
+    // A call this device is in ends with it, or the other side is left
+    // talking to nobody and everyone else hears BUSY until the room lapses.
+    heldCall.endHeld();
     // A clean close beats the server waiting out a heartbeat.
     chatSocket.disconnect();
     notificationWatcher.stop();
@@ -294,9 +300,11 @@ function bootstrap(): void {
       // Chat alerts listen to the socket for the life of the app; each session
       // end clears what they hold.
       chatAlerts.attach();
+      heldCall.attach();
 
       applyContentSecurityPolicy();
       applyPermissionPolicy();
+      applyScreenCapturePolicy();
       registerAppProtocol();
 
       // Registered before the first load: the renderer calls these on mount.
@@ -307,6 +315,7 @@ function bootstrap(): void {
       registerReactionHandlers();
       registerFriendHandlers();
       registerChatHandlers();
+      registerCallHandlers();
       registerStickerHandlers();
       registerMediaHandlers();
       registerNotificationHandlers();
