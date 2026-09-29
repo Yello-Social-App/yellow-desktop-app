@@ -7,6 +7,13 @@
  * here, not a crash.
  */
 import {
+  activeCallResponseSchema,
+  callJoinSchema,
+  callResponseSchema,
+  screenSourceListSchema,
+  type CallIdRequest,
+  type ChooseScreenSourceRequest,
+  type StartCallRequest,
   updateEventSchema,
   updateStateSchema,
   type SetAutoCheckRequest,
@@ -469,6 +476,23 @@ export const ipc = {
   stickerDraftFromBytes: (request: StickerDraftFromBytesRequest) =>
     guarded('stickers.draftFromBytes', stickerDraftResponseSchema, (api) =>
       api.stickers.draftFromBytes(request),
+    ),
+  startCall: (request: StartCallRequest) =>
+    guarded('calls.start', callResponseSchema, (api) => api.calls.start(request)),
+  acceptCall: (request: CallIdRequest) =>
+    guarded('calls.accept', callResponseSchema, (api) => api.calls.accept(request)),
+  declineCall: (request: CallIdRequest) =>
+    guarded('calls.decline', acknowledgedResponseSchema, (api) => api.calls.decline(request)),
+  endCall: (request: CallIdRequest) =>
+    guarded('calls.end', acknowledgedResponseSchema, (api) => api.calls.end(request)),
+  joinCall: (request: CallIdRequest) =>
+    guarded('calls.join', callJoinSchema, (api) => api.calls.join(request)),
+  activeCall: () => guarded('calls.active', activeCallResponseSchema, (api) => api.calls.active()),
+  screenSources: () =>
+    guarded('calls.screenSources', screenSourceListSchema, (api) => api.calls.screenSources()),
+  chooseScreenSource: (request: ChooseScreenSourceRequest) =>
+    guarded('calls.chooseScreenSource', acknowledgedResponseSchema, (api) =>
+      api.calls.chooseScreenSource(request),
     ),
   saveSticker: (request: SaveStickerRequest) =>
     guarded('stickers.save', stickerResponseSchema, (api) => api.stickers.save(request)),

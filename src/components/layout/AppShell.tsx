@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
+import { CallLayer } from '@/components/calls/CallLayer';
+import { useCallSubscription } from '@/features/calls/hooks';
 import { useFriendsSync } from '@/features/friends/hooks';
 import { useChatSubscription } from '@/features/messages/hooks';
 import { useSafetySync } from '@/features/moderation/hooks';
@@ -27,7 +29,8 @@ import { Topbar } from './Topbar';
  * rather than through a global store, since nothing else needs it.
  *
  * Chat is subscribed here, not on the messages screen, so a message arriving
- * on any screen still moves its conversation and bumps the badge. Notifications
+ * on any screen still moves its conversation and bumps the badge. Calls are
+ * too, so one rings, and carries on, whichever screen is open. Notifications
  * are subscribed for the same reason, and for one more: a clicked OS
  * notification has to be able to navigate from wherever the user was.
  *
@@ -72,6 +75,7 @@ export function AppShell() {
   const isCanvas = pathname === '/feed' || pathname === '/';
 
   useChatSubscription();
+  useCallSubscription();
   useNotificationSubscription();
   useFriendsSync();
   useSafetySync();
@@ -109,6 +113,7 @@ export function AppShell() {
         <RightRail isCollapsed={isWide || !showActivityRail} />
       </div>
       {isStoryOpen && <StoryViewer />}
+      <CallLayer />
     </div>
   );
 }

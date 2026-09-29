@@ -44,6 +44,7 @@ import {
   startupRefreshToken,
   isSecureStorageAvailable,
 } from '../../api/account-vault';
+import { heldCall } from '../../calls/held-call';
 import { chatAlerts } from '../../chat/alerts';
 import { chatSocket } from '../../chat/socket';
 import { notificationWatcher } from '../../notifications/watcher';
@@ -173,6 +174,9 @@ async function currentSession(): Promise<IpcResult<SessionResponse>> {
  * the wrong account's credential (A07).
  */
 function endSessionScopedWork(): void {
+  // A call this device is in belongs to the account being left: hang it up
+  // while the socket that can say so is still open.
+  heldCall.endHeld();
   chatSocket.disconnect();
   notificationWatcher.stop();
   // An alert left up would name a conversation of the account just left.

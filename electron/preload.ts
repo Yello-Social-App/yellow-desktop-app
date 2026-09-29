@@ -18,6 +18,13 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from './ipc/channels';
 
 import type {
+  ActiveCallResponse,
+  CallIdRequest,
+  CallJoin,
+  CallResponse,
+  ChooseScreenSourceRequest,
+  ScreenSourceList,
+  StartCallRequest,
   SetAutoCheckRequest,
   UpdateState,
   AddGroupMembersRequest,
@@ -352,6 +359,18 @@ const bridge: YelloBridge = {
         ipcRenderer.removeListener(IPC_CHANNELS.CHAT_EVENT, handler);
       };
     },
+  },
+  calls: {
+    start: (request: StartCallRequest) => invoke<CallResponse>(IPC_CHANNELS.CALLS_START, request),
+    accept: (request: CallIdRequest) => invoke<CallResponse>(IPC_CHANNELS.CALLS_ACCEPT, request),
+    decline: (request: CallIdRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.CALLS_DECLINE, request),
+    end: (request: CallIdRequest) => invoke<AcknowledgedResponse>(IPC_CHANNELS.CALLS_END, request),
+    join: (request: CallIdRequest) => invoke<CallJoin>(IPC_CHANNELS.CALLS_JOIN, request),
+    active: () => invoke<ActiveCallResponse>(IPC_CHANNELS.CALLS_ACTIVE),
+    screenSources: () => invoke<ScreenSourceList>(IPC_CHANNELS.CALLS_SCREEN_SOURCES),
+    chooseScreenSource: (request: ChooseScreenSourceRequest) =>
+      invoke<AcknowledgedResponse>(IPC_CHANNELS.CALLS_CHOOSE_SCREEN_SOURCE, request),
   },
   media: {
     saveImage: (request: ImageExportRequest) =>
