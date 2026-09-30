@@ -6,6 +6,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-30
+
+Answer or decline a call straight from its desktop alert, and a missed-call
+alert when you don't.
+
+### Added
+
+- **Accept and Decline on the call alert** (macOS, Windows). The alert for an
+  incoming call now has Accept and Decline buttons and stays up until you act
+  on it. Accept brings Yello forward and answers; Decline refuses without
+  opening the app. On Linux, clicking the alert brings up the incoming call as
+  before.
+- **Missed call alerts.** When a call rings out or the caller hangs up before
+  you answer, a "Missed call" alert takes the ring's place while Yello is in
+  the background. Clicking it opens the chat.
+- **Calls in Notification settings.** A new Calls group lets you turn off the
+  incoming-call and missed-call alerts. It silences the alert only — an open
+  Yello still rings.
+
+### Changed
+
+- Declining a call now goes through even while Yello is reconnecting, instead
+  of leaving the caller's phone ringing.
+- If Yello reconnects while a call is still ringing for you, its alert comes
+  back.
+
 ## [0.13.0] - 2026-09-30
 
 Group voice and video calls, a Join call bar in chats with a call going on,
