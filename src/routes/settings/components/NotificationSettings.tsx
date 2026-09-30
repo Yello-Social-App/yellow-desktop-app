@@ -27,6 +27,9 @@ import { CardHeading } from './SettingsSection';
  * honours these same mutes when it does. Chat alerts never enter the inbox, so
  * the "still appears" line does not hold for them — the conversation is the
  * record — and the two groups are worded apart for exactly that reason.
+ * Calls follow the same rule, from the same socket; their mute silences the
+ * alert only, never the ring in an open window, as the service's call guide
+ * has it.
  *
  * Each toggle saves on the spot. The endpoint is a replace rather than a patch,
  * so there is no partial state to accumulate behind a Save button and get
@@ -65,6 +68,11 @@ const COLUMNS: readonly (readonly TypeGroup[])[] = [
       title: 'Chat',
       description: 'Only while Yello is in the background. The conversation keeps every message.',
       types: ['CHAT_MESSAGE', 'CHAT_REACTION'],
+    },
+    {
+      title: 'Calls',
+      description: 'Only the system notification. An open Yello still rings.',
+      types: ['CALL_INCOMING', 'CALL_MISSED'],
     },
   ],
 ];

@@ -15,7 +15,9 @@
  * so a wait that times out asks `GET /calls/active` before giving up. Decline
  * and end are sent and left: `call.end` is "leave", a no-op for someone not
  * in the call, and the renderer closes its call UI on the user's word, not on
- * the echo.
+ * the echo. Decline alone has an HTTP form too (`POST /calls/{id}/decline`),
+ * used when the socket is down — as mark-read falls back — so a refused ring
+ * is not lost to a reconnect and left ringing the caller.
  *
  * Who may do what (who may ring whom, blocks, the group size, one call per
  * user) is the service's call. Nothing here names the actor — the socket's
@@ -30,6 +32,7 @@ import { z } from 'zod';
 
 import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
+import { noContentSchema } from '../../api/envelope';
 import { apiRequest } from '../../api/http-client';
 import { heldCall } from '../../calls/held-call';
 import {
@@ -212,9 +215,21 @@ export function registerCallHandlers(): void {
   registerIpcHandler(
     IPC_CHANNELS.CALLS_DECLINE,
     callIdRequestSchema,
-    ({ callId }): IpcResult<AcknowledgedResponse> => {
-      const sent = chatSocket.send('call.decline', { callId });
-      return ipcOk(acknowledgedResponseSchema.parse({ acknowledged: sent }));
+    async ({ callId }): Promise<IpcResult<AcknowledgedResponse>> => {
+      if (chatSocket.send('call.decline', { callId })) {
+        return ipcOk(acknowledgedResponseSchema.parse({ acknowledged: true }));
+      }
+      // The socket is down: the HTTP route does the same, and says how it went.
+      const result = await apiRequest({
+        method: 'post',
+        url: ENDPOINTS.chat.declineCall(callId),
+        schema: noContentSchema,
+        service: 'chat',
+      });
+      // 409 (no longer ringing you) and 404 (not yours) leave nothing to decline.
+      const settled = result.ok || result.error.code === 'API';
+      log.info('call_decline_posted', { settled });
+      return ipcOk(acknowledgedResponseSchema.parse({ acknowledged: settled }));
     },
   );
 

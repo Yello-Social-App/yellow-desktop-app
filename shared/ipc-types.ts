@@ -1765,6 +1765,11 @@ export const chatEventSchema = z.discriminatedUnion('event', [
     event: z.literal('alert.activated'),
     data: z.object({ conversationId: chatId }),
   }),
+  /** An Accept or Decline pressed on the incoming-call alert, for the renderer's call to act on. */
+  z.object({
+    event: z.literal('alert.call'),
+    data: z.object({ callId: chatId, action: z.enum(['accept', 'decline']) }),
+  }),
   z.object({
     event: z.literal('message.new'),
     data: z.object({ message: chatMessageSchema }),
@@ -2078,6 +2083,9 @@ export const NOTIFICATION_TYPES = [
   /** Push-only: chat alerts never land in the inbox. */
   'CHAT_MESSAGE',
   'CHAT_REACTION',
+  /** Push-only, like chat. `CALL_RING_STOPPED` is deliberately absent: it is not a mute to offer. */
+  'CALL_INCOMING',
+  'CALL_MISSED',
 ] as const;
 
 export const notificationTypeSchema = z.string().min(1).max(64);
