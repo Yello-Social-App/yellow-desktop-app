@@ -13,8 +13,10 @@
  * yet answer. A crash sends nothing, which is what lets the restarted app
  * offer to rejoin.
  *
- * Shape: one field, cleared by the socket's `call.ended` — an Observer
- * subscription, as the chat alerts use.
+ * Shape: one field, cleared by the socket's `call.ended`, or by a
+ * `call.updated` that shows the viewer out of the call (left from another
+ * device, or removed from the group) — an Observer subscription, as the chat
+ * alerts use.
  */
 import { createLogger } from '../../shared/logger';
 import { chatSocket } from '../chat/socket';
@@ -31,7 +33,16 @@ class HeldCall {
       return;
     }
     this.detach = chatSocket.subscribe((event) => {
-      if (event.event === 'call.ended' && event.data.call.id === this.callId) {
+      if (event.event !== 'call.ended' && event.event !== 'call.updated') {
+        return;
+      }
+      const { call } = event.data;
+      if (call.id !== this.callId) {
+        return;
+      }
+      const viewerId = chatSocket.viewerId();
+      const own = call.participants.find((participant) => participant.userId === viewerId);
+      if (event.event === 'call.ended' || (own !== undefined && own.state !== 'JOINED')) {
         this.callId = null;
       }
     });

@@ -3,14 +3,21 @@
  * sees a handful of methods and one plain snapshot instead of LiveKit's room,
  * participants, publications and event names.
  *
- * The room holds at most two people — this device and the other side — so
- * the snapshot names "the peer's camera" and "the peer's screen" rather than
- * a participant list. It is recomputed from the room on every event that
- * could change it, which keeps it honest without bookkeeping of its own.
+ * The room holds two people in a direct call and up to the group limit (16)
+ * in a group one, so the snapshot lists every remote member with their
+ * camera, screen, mic and whether they are speaking. It is recomputed from
+ * the room on every event that could change it, which keeps it honest
+ * without bookkeeping of its own.
  *
- * Remote audio plays through `<audio>` elements this class owns: nothing on
- * screen needs to know about them. What the service's token allows — camera,
- * microphone, screen share without audio, no data channel — is all this uses.
+ * Remote audio — microphones and shared-screen sound alike — plays through
+ * `<audio>` elements this class owns: nothing on screen needs to know about
+ * them. What the service's token allows — camera, microphone, screen share
+ * and its audio, no data channel — is all this uses.
+ *
+ * A shared screen is captured and sent for motion at 1080p60: VP9 in three
+ * spatial and three temporal layers (1080p/540p/270p × 60/30/15 fps) so each
+ * viewer gets the best their link carries, with VP8 as a backup for anyone
+ * who cannot decode VP9. The yello-chat group-calls note sets these numbers.
  *
  * The join token passes through `connect` and is not kept (A04).
  */
@@ -23,19 +30,63 @@ import {
   type RemoteParticipant,
   type RemoteTrack,
   type RemoteVideoTrack,
+  type ScreenShareCaptureOptions,
+  type TrackPublishOptions,
 } from 'livekit-client';
 
 import { createLogger } from '@/lib/logger';
 
-import { captureErrorMessage, type CallMediaState, type RoomLoss } from './media-state';
+import {
+  captureErrorMessage,
+  type CallMediaState,
+  type RemoteMember,
+  type RoomLoss,
+} from './media-state';
 
 const log = createLogger('calls.room');
+
+/** How a shared screen is captured: full HD, 60 fps, tuned for motion. */
+const SCREEN_CAPTURE: ScreenShareCaptureOptions = {
+  resolution: { width: 1920, height: 1080, frameRate: 60 },
+  contentHint: 'motion',
+  systemAudio: 'include',
+  surfaceSwitching: 'include',
+  selfBrowserSurface: 'exclude',
+};
+
+/** How it is sent: about 5 Mbps up, keeping the frame rate over the resolution. */
+const SCREEN_PUBLISH: TrackPublishOptions = {
+  videoCodec: 'vp9',
+  scalabilityMode: 'L3T3_KEY',
+  backupCodec: { codec: 'vp8' },
+  screenShareEncoding: { maxBitrate: 5_000_000, maxFramerate: 60, priority: 'high' },
+  degradationPreference: 'maintain-framerate',
+};
 
 const REMOVED_REASONS: ReadonlySet<DisconnectReason> = new Set([
   DisconnectReason.ROOM_DELETED,
   DisconnectReason.PARTICIPANT_REMOVED,
   DisconnectReason.DUPLICATE_IDENTITY,
 ]);
+
+function memberOf(participant: RemoteParticipant): RemoteMember {
+  const video = (source: Track.Source): RemoteVideoTrack | null => {
+    const publication = participant.getTrackPublication(source);
+    if (publication === undefined || publication.isMuted || !publication.isSubscribed) {
+      return null;
+    }
+    return (publication.videoTrack as RemoteVideoTrack | undefined) ?? null;
+  };
+  const mic = participant.getTrackPublication(Track.Source.Microphone);
+  return {
+    identity: participant.identity,
+    name: participant.name === undefined || participant.name === '' ? null : participant.name,
+    camera: video(Track.Source.Camera),
+    screen: video(Track.Source.ScreenShare),
+    micOn: mic !== undefined && !mic.isMuted,
+    isSpeaking: participant.isSpeaking,
+  };
+}
 
 export class CallRoom {
   private readonly room = new Room({ adaptiveStream: true, dynacast: true });
@@ -65,6 +116,7 @@ export class CallRoom {
       .on(RoomEvent.LocalTrackUnpublished, changed)
       .on(RoomEvent.ParticipantConnected, changed)
       .on(RoomEvent.ParticipantDisconnected, changed)
+      .on(RoomEvent.ActiveSpeakersChanged, changed)
       .on(RoomEvent.Reconnecting, () => {
         this.isReconnecting = true;
         changed();
@@ -132,10 +184,22 @@ export class CallRoom {
     }
   }
 
-  /** The source was already picked in the main process; this only asks for it. */
-  async setScreenShare(on: boolean): Promise<void> {
+  /**
+   * The source was already picked in the main process; this only asks for it.
+   * `withAudio` asks for the computer's sound too, which the main process
+   * grants only where it can capture it and the user turned it on.
+   */
+  async setScreenShare(on: boolean, withAudio = false): Promise<void> {
     try {
-      await this.room.localParticipant.setScreenShareEnabled(on, { audio: false });
+      if (on) {
+        await this.room.localParticipant.setScreenShareEnabled(
+          true,
+          { ...SCREEN_CAPTURE, audio: withAudio },
+          SCREEN_PUBLISH,
+        );
+      } else {
+        await this.room.localParticipant.setScreenShareEnabled(false);
+      }
     } finally {
       this.onChange(this.snapshot());
     }
@@ -152,32 +216,16 @@ export class CallRoom {
     }
   }
 
-  private peer(): RemoteParticipant | undefined {
-    return this.room.remoteParticipants.values().next().value;
-  }
-
   private snapshot(): CallMediaState {
     const local = this.room.localParticipant;
     const camera = local.getTrackPublication(Track.Source.Camera);
-    const peer = this.peer();
-    const remoteVideo = (source: Track.Source): RemoteVideoTrack | null => {
-      const publication = peer?.getTrackPublication(source);
-      if (publication === undefined || publication.isMuted || !publication.isSubscribed) {
-        return null;
-      }
-      return (publication.videoTrack as RemoteVideoTrack | undefined) ?? null;
-    };
-    const peerMic = peer?.getTrackPublication(Track.Source.Microphone);
     return {
       isConnected: this.room.state !== ConnectionState.Disconnected,
       micOn: local.isMicrophoneEnabled,
       cameraOn: local.isCameraEnabled,
       screenOn: local.isScreenShareEnabled,
       localCamera: camera !== undefined && !camera.isMuted ? (camera.videoTrack ?? null) : null,
-      remoteCamera: remoteVideo(Track.Source.Camera),
-      remoteScreen: remoteVideo(Track.Source.ScreenShare),
-      peerJoined: peer !== undefined,
-      peerMicOn: peerMic !== undefined && !peerMic.isMuted,
+      remotes: [...this.room.remoteParticipants.values()].map(memberOf),
       reconnecting: this.isReconnecting,
     };
   }

@@ -5,6 +5,18 @@
  */
 import type { LocalVideoTrack, RemoteVideoTrack } from 'livekit-client';
 
+/** Someone else connected to the call's media right now, as a tile draws them. */
+export interface RemoteMember {
+  /** The LiveKit identity, which is the member's user id. */
+  identity: string;
+  /** The name in their join token, for someone the app cannot resolve. */
+  name: string | null;
+  camera: RemoteVideoTrack | null;
+  screen: RemoteVideoTrack | null;
+  micOn: boolean;
+  isSpeaking: boolean;
+}
+
 export interface CallMediaState {
   /** In the room: its devices can be toggled. */
   isConnected: boolean;
@@ -13,11 +25,8 @@ export interface CallMediaState {
   screenOn: boolean;
   /** This device's camera, for the self view. */
   localCamera: LocalVideoTrack | null;
-  remoteCamera: RemoteVideoTrack | null;
-  remoteScreen: RemoteVideoTrack | null;
-  /** The other side is in the room. */
-  peerJoined: boolean;
-  peerMicOn: boolean;
+  /** Everyone else in the room, in the order they joined it. */
+  remotes: readonly RemoteMember[];
   /** LiveKit is re-establishing the connection on its own. */
   reconnecting: boolean;
 }
@@ -28,16 +37,26 @@ export const IDLE_MEDIA: CallMediaState = {
   cameraOn: false,
   screenOn: false,
   localCamera: null,
-  remoteCamera: null,
-  remoteScreen: null,
-  peerJoined: false,
-  peerMicOn: false,
+  remotes: [],
   reconnecting: false,
 };
 
+/** The one screen drawn large: the first member sharing, while anyone is. */
+export function sharedScreenOf(
+  remotes: readonly RemoteMember[],
+): { member: RemoteMember; track: RemoteVideoTrack } | null {
+  for (const member of remotes) {
+    if (member.screen !== null) {
+      return { member, track: member.screen };
+    }
+  }
+  return null;
+}
+
 /**
  * Why the room closed without being asked to: `removed` — the server closed
- * it (the call ended, or this identity joined elsewhere), nothing to rejoin;
+ * it (the call ended, this identity joined elsewhere, or it was taken out of
+ * the group), nothing to rejoin;
  * `lost` — the connection gave up, and a fresh token may bring it back.
  */
 export type RoomLoss = 'removed' | 'lost';

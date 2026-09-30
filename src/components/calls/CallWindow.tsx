@@ -6,16 +6,22 @@ import {
   MonitorUp,
   MonitorX,
   PhoneOff,
+  Users,
   Video,
   VideoOff,
   X,
 } from 'lucide-react';
+import type { Author, User } from '@shared/ipc-types';
+import type { LocalVideoTrack, RemoteVideoTrack } from 'livekit-client';
 import type { ReactNode } from 'react';
 
 import { UserAvatar } from '@/components/people/UserAvatar';
-import { useCallElapsed, useCallPeer } from '@/features/calls/hooks';
+import { useCurrentUser } from '@/features/auth/hooks';
+import { useCallElapsed, useCallPeer, useCallTitle, useIsGroupCall } from '@/features/calls/hooks';
+import { sharedScreenOf } from '@/features/calls/media-state';
 import { useCallsStore } from '@/features/calls/store';
-import { formatCallDuration } from '@/features/calls/types';
+import { formatCallDuration, ringingCount } from '@/features/calls/types';
+import { useUsers } from '@/features/users/hooks';
 import { cn } from '@/lib/cn';
 import { displayName } from '@/lib/user-display';
 
@@ -63,14 +69,15 @@ function Control({
   );
 }
 
-/** "Calling…", "Connecting…", the timer, or what the connection is doing. */
+/** "Calling…", "Connecting…", who is in it, the timer, or what the connection is doing. */
 function useStatusLine(): string {
   const phase = useCallsStore((state) => state.phase);
   const call = useCallsStore((state) => state.call);
   const media = useCallsStore((state) => state.media);
   const peer = useCallPeer();
+  const isGroup = useIsGroupCall();
   const elapsed = useCallElapsed(call?.status === 'ACTIVE' ? call.answeredAt : null);
-  const name = peer === undefined ? 'them' : displayName(peer);
+  const time = elapsed === null ? null : formatCallDuration(elapsed);
 
   if (phase === 'outgoing') {
     return call === null ? 'Calling…' : 'Ringing…';
@@ -81,10 +88,20 @@ function useStatusLine(): string {
   if (media.reconnecting) {
     return 'Reconnecting…';
   }
-  if (!media.peerJoined) {
-    return `Waiting for ${name}…`;
+  if (isGroup) {
+    if (media.remotes.length === 0) {
+      return 'Waiting for others to join…';
+    }
+    const inCall = `${String(media.remotes.length + 1)} in call`;
+    const ringing = call === null ? 0 : ringingCount(call);
+    return [inCall, ringing > 0 ? `${String(ringing)} ringing` : null, time]
+      .filter((part) => part !== null)
+      .join(' · ');
   }
-  return elapsed === null ? 'Connected' : formatCallDuration(elapsed);
+  if (media.remotes.length === 0) {
+    return `Waiting for ${peer === undefined ? 'them' : displayName(peer)}…`;
+  }
+  return time ?? 'Connected';
 }
 
 function CallControls({ size = 'md' }: { size?: 'md' | 'sm' }) {
@@ -95,6 +112,7 @@ function CallControls({ size = 'md' }: { size?: 'md' | 'sm' }) {
   const openScreenPicker = useCallsStore((state) => state.openScreenPicker);
   const stopScreenShare = useCallsStore((state) => state.stopScreenShare);
   const hangUp = useCallsStore((state) => state.hangUp);
+  const isGroup = useIsGroupCall();
   const iconSize = size === 'md' ? 'size-5' : 'size-4';
   // Devices are the room's: before it is joined there is nothing to toggle.
   const inRoom = media.isConnected;
@@ -147,7 +165,7 @@ function CallControls({ size = 'md' }: { size?: 'md' | 'sm' }) {
       )}
       <Control
         size={size}
-        label={phase === 'outgoing' ? 'Cancel call' : 'Hang up'}
+        label={phase === 'outgoing' ? 'Cancel call' : isGroup ? 'Leave call' : 'Hang up'}
         isDanger
         icon={<PhoneOff className={iconSize} />}
         onClick={hangUp}
@@ -156,52 +174,195 @@ function CallControls({ size = 'md' }: { size?: 'md' | 'sm' }) {
   );
 }
 
+/** Someone in a group call, as a tile: their camera, or their face while it is off. */
+function MemberTile({
+  person,
+  fallbackName,
+  track,
+  micOn,
+  isSpeaking,
+  isSelf = false,
+}: {
+  person: Author | User | undefined;
+  fallbackName: string;
+  track: LocalVideoTrack | RemoteVideoTrack | null;
+  micOn: boolean;
+  isSpeaking: boolean;
+  isSelf?: boolean;
+}) {
+  const name = isSelf ? 'You' : person === undefined ? fallbackName : displayName(person);
+  return (
+    <div
+      className={cn(
+        'relative grid aspect-video min-h-0 w-full place-items-center overflow-hidden rounded-2xl bg-neutral-900 ring-1 ring-white/10 transition-shadow',
+        isSpeaking && 'ring-2 ring-emerald-400',
+      )}
+    >
+      {track !== null ? (
+        <CallVideo track={track} isMirrored={isSelf} className="absolute inset-0" />
+      ) : (
+        person !== undefined && <UserAvatar user={person} size="lg" />
+      )}
+      <span className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[12px] font-medium">
+        {!micOn && <MicOff className="size-3 shrink-0" aria-label="Muted" />}
+        <span className="truncate">{name}</span>
+      </span>
+    </div>
+  );
+}
+
+/** Grid columns for this many tiles, so they stay as large as the stage allows. */
+function columnsFor(count: number): string {
+  if (count <= 1) {
+    return 'grid-cols-1';
+  }
+  if (count <= 4) {
+    return 'grid-cols-2';
+  }
+  if (count <= 9) {
+    return 'grid-cols-3';
+  }
+  return 'grid-cols-4';
+}
+
 /**
- * The call, full size: the other side's screen or camera filling the stage
- * (their avatar while there is neither), the self view in a corner, and the
- * controls along the bottom. Sits below the title bar so the window can still
- * be moved and closed.
+ * A group call's stage: everyone as tiles, this device first. While someone
+ * shares a screen it fills the stage and the tiles move to a strip beside it.
+ */
+function GroupStage() {
+  const media = useCallsStore((state) => state.media);
+  const viewer = useCurrentUser();
+  const people = useUsers(media.remotes.map((member) => member.identity));
+  const shared = sharedScreenOf(media.remotes);
+
+  const tiles = [
+    <MemberTile
+      key="self"
+      person={viewer ?? undefined}
+      fallbackName="You"
+      track={media.localCamera}
+      micOn={media.micOn}
+      isSpeaking={false}
+      isSelf
+    />,
+    ...media.remotes.map((member) => (
+      <MemberTile
+        key={member.identity}
+        person={people[member.identity]}
+        fallbackName={member.name ?? 'Guest'}
+        track={member.camera}
+        micOn={member.micOn}
+        isSpeaking={member.isSpeaking}
+      />
+    )),
+  ];
+
+  if (shared !== null) {
+    const sharer = people[shared.member.identity];
+    const sharerName =
+      sharer === undefined ? (shared.member.name ?? 'Someone') : displayName(sharer);
+    return (
+      <div className="absolute inset-0 flex gap-3 px-5 pt-20 pb-5">
+        <div className="relative min-w-0 flex-1 overflow-hidden rounded-2xl bg-black">
+          <CallVideo track={shared.track} fit="contain" className="absolute inset-0" />
+          <span className="absolute top-3 left-3 rounded-full bg-black/60 px-3 py-1 text-[12px] font-medium">
+            {`${sharerName} is sharing`}
+          </span>
+        </div>
+        <div className="flex w-56 shrink-0 flex-col gap-3 overflow-y-auto">{tiles}</div>
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        'absolute inset-0 grid content-center gap-3 overflow-y-auto px-5 pt-20 pb-5',
+        columnsFor(tiles.length),
+      )}
+    >
+      {tiles}
+    </div>
+  );
+}
+
+/**
+ * A direct call's stage: the other side's screen or camera filling it (their
+ * avatar while there is neither), their camera in a corner while they share,
+ * and the self view in the other corner.
+ */
+function DirectStage({ status }: { status: string }) {
+  const media = useCallsStore((state) => state.media);
+  const peer = useCallPeer();
+  const title = useCallTitle();
+  const [other] = media.remotes;
+  const screen = other?.screen ?? null;
+  const main = screen ?? other?.camera ?? null;
+  // With a screen on the stage, their camera moves to a corner tile.
+  const cornerCamera = screen !== null ? (other?.camera ?? null) : null;
+
+  return (
+    <>
+      {main !== null ? (
+        <CallVideo
+          track={main}
+          fit={screen !== null ? 'contain' : 'cover'}
+          className="absolute inset-0"
+        />
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+          {peer !== undefined && <UserAvatar user={peer} size="xl" />}
+          <p className="text-[22px] font-bold">{title}</p>
+          <p className="text-[14px] text-white/70" aria-live="polite">
+            {status}
+          </p>
+        </div>
+      )}
+
+      {cornerCamera !== null && (
+        <div className="absolute top-20 left-5 aspect-video w-48 overflow-hidden rounded-2xl shadow-lg ring-1 ring-white/10">
+          <CallVideo track={cornerCamera} />
+        </div>
+      )}
+
+      {media.localCamera !== null && (
+        <div className="absolute right-5 bottom-5 aspect-video w-56 overflow-hidden rounded-2xl bg-neutral-900 shadow-lg ring-1 ring-white/10">
+          <CallVideo track={media.localCamera} isMirrored />
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * The call, full size: the stage — one other person, or a group's tiles —
+ * with the controls along the bottom. Sits below the title bar so the window
+ * can still be moved and closed.
  */
 export function CallWindow() {
   const media = useCallsStore((state) => state.media);
   const problem = useCallsStore((state) => state.problem);
   const dismissProblem = useCallsStore((state) => state.dismissProblem);
   const setMinimized = useCallsStore((state) => state.setMinimized);
-  const peer = useCallPeer();
+  const isGroup = useIsGroupCall();
+  const title = useCallTitle();
   const status = useStatusLine();
-  const name = peer === undefined ? 'Call' : displayName(peer);
-  const main = media.remoteScreen ?? media.remoteCamera;
-  // With a screen on the stage, their camera moves to a corner tile.
-  const cornerCamera = media.remoteScreen !== null ? media.remoteCamera : null;
+  const [other] = media.remotes;
+  const isOtherMuted = !isGroup && other !== undefined && !other.micOn;
 
   return (
     <div
       role="dialog"
-      aria-label={`Call with ${name}`}
+      aria-label={isGroup ? `Call in ${title}` : `Call with ${title}`}
       className="animate-fade-in fixed inset-x-0 top-[var(--spacing-topbar)] bottom-0 z-[60] flex flex-col overflow-hidden bg-neutral-950 text-white"
     >
       <div className="relative min-h-0 flex-1">
-        {main !== null ? (
-          <CallVideo
-            track={main}
-            fit={media.remoteScreen !== null ? 'contain' : 'cover'}
-            className="absolute inset-0"
-          />
-        ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-            {peer !== undefined && <UserAvatar user={peer} size="xl" />}
-            <p className="text-[22px] font-bold">{name}</p>
-            <p className="text-[14px] text-white/70" aria-live="polite">
-              {status}
-            </p>
-          </div>
-        )}
+        {isGroup ? <GroupStage /> : <DirectStage status={status} />}
 
         <div className="absolute inset-x-0 top-0 flex items-center gap-3 bg-gradient-to-b from-black/60 to-transparent px-5 pt-4 pb-8">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-bold">{name}</p>
-            <p className="text-[12px] text-white/70 tabular-nums">
-              {!media.peerMicOn && media.peerJoined ? `${status} · Muted` : status}
+            <p className="truncate text-[15px] font-bold">{title}</p>
+            <p className="text-[12px] text-white/70 tabular-nums" aria-live="polite">
+              {isOtherMuted ? `${status} · Muted` : status}
             </p>
           </div>
           <Control
@@ -214,22 +375,10 @@ export function CallWindow() {
           />
         </div>
 
-        {cornerCamera !== null && (
-          <div className="absolute top-20 left-5 aspect-video w-48 overflow-hidden rounded-2xl shadow-lg ring-1 ring-white/10">
-            <CallVideo track={cornerCamera} />
-          </div>
-        )}
-
-        {media.localCamera !== null && (
-          <div className="absolute right-5 bottom-5 aspect-video w-56 overflow-hidden rounded-2xl bg-neutral-900 shadow-lg ring-1 ring-white/10">
-            <CallVideo track={media.localCamera} isMirrored />
-          </div>
-        )}
-
         {problem !== null && (
           <div
             role="alert"
-            className="absolute top-20 left-1/2 flex max-w-md -translate-x-1/2 items-center gap-2 rounded-full bg-red-600/90 py-1.5 pr-1.5 pl-4 text-[13px] shadow-lg"
+            className="absolute top-20 left-1/2 z-10 flex max-w-md -translate-x-1/2 items-center gap-2 rounded-full bg-red-600/90 py-1.5 pr-1.5 pl-4 text-[13px] shadow-lg"
           >
             <span className="min-w-0 flex-1">{problem}</span>
             <button
@@ -255,13 +404,14 @@ export function CallWindow() {
 export function CallPill() {
   const setMinimized = useCallsStore((state) => state.setMinimized);
   const peer = useCallPeer();
+  const isGroup = useIsGroupCall();
+  const title = useCallTitle();
   const status = useStatusLine();
-  const name = peer === undefined ? 'Call' : displayName(peer);
 
   return (
     <div
       role="region"
-      aria-label={`Call with ${name}`}
+      aria-label={isGroup ? `Call in ${title}` : `Call with ${title}`}
       className="animate-voice-toast shadow-floating fixed right-4 bottom-4 z-[60] flex items-center gap-3 rounded-full bg-neutral-900 py-2 pr-2 pl-2 text-white ring-1 ring-white/10"
     >
       <button
@@ -273,10 +423,18 @@ export function CallPill() {
         title="Open call"
         className="flex min-w-0 items-center gap-2.5 rounded-full pr-1 text-left"
       >
-        {peer !== undefined && <UserAvatar user={peer} size="sm" />}
+        {isGroup ? (
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white/10">
+            <Users className="size-4" />
+          </span>
+        ) : (
+          peer !== undefined && <UserAvatar user={peer} size="sm" />
+        )}
         <span className="min-w-0">
-          <span className="block max-w-36 truncate text-[13px] font-bold">{name}</span>
-          <span className="block text-[11px] text-white/70 tabular-nums">{status}</span>
+          <span className="block max-w-36 truncate text-[13px] font-bold">{title}</span>
+          <span className="block max-w-44 truncate text-[11px] text-white/70 tabular-nums">
+            {status}
+          </span>
         </span>
         <Maximize2 className="size-4 text-white/70" />
       </button>

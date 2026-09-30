@@ -368,6 +368,8 @@ const bridge: YelloBridge = {
     end: (request: CallIdRequest) => invoke<AcknowledgedResponse>(IPC_CHANNELS.CALLS_END, request),
     join: (request: CallIdRequest) => invoke<CallJoin>(IPC_CHANNELS.CALLS_JOIN, request),
     active: () => invoke<ActiveCallResponse>(IPC_CHANNELS.CALLS_ACTIVE),
+    conversation: (request: ConversationIdRequest) =>
+      invoke<ActiveCallResponse>(IPC_CHANNELS.CALLS_CONVERSATION, request),
     screenSources: () => invoke<ScreenSourceList>(IPC_CHANNELS.CALLS_SCREEN_SOURCES),
     chooseScreenSource: (request: ChooseScreenSourceRequest) =>
       invoke<AcknowledgedResponse>(IPC_CHANNELS.CALLS_CHOOSE_SCREEN_SOURCE, request),
