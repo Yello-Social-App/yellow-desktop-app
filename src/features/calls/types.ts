@@ -2,14 +2,14 @@
  * Call vocabulary for the renderer: the phases the call UI moves through, and
  * the words it uses for how a call ended or why it could not start.
  */
-import type { Call, CallEndReason, IpcError } from '@shared/ipc-types';
+import type { Call, CallEndReason, CallParticipantState, IpcError } from '@shared/ipc-types';
 
 /**
  * Where this device is in a call.
  *
  * - `outgoing` — this device rings someone ("Calling…");
  * - `incoming` — someone rings this device;
- * - `connecting` — answered here, joining the media room;
+ * - `connecting` — answered or joining here, getting into the media room;
  * - `active` — in the room;
  * - `rejoin` — the service says a call is live that this device is not in
  *   (after a restart or a reconnect): rejoin or end it.
@@ -29,22 +29,52 @@ export function isCaller(call: Call, viewerId: string | null): boolean {
 }
 
 /**
+ * The viewer's own entry in the roster, which decides every frame about the
+ * call: INVITED keeps ringing, JOINED stays in, anything else closes. Null
+ * when the viewer is not listed — or the call has no roster (a service from
+ * before group calls), where the status alone has to say.
+ */
+export function ownState(call: Call, viewerId: string | null): CallParticipantState | null {
+  return call.participants.find((participant) => participant.userId === viewerId)?.state ?? null;
+}
+
+/** How many people the service counts as in the call. */
+export function joinedCount(call: Call): number {
+  return call.participants.filter((participant) => participant.state === 'JOINED').length;
+}
+
+/** How many are still being rung. */
+export function ringingCount(call: Call): number {
+  return call.participants.filter((participant) => participant.state === 'INVITED').length;
+}
+
+/**
  * How a call ended, in the words CALLS-API.md suggests — from this side's
  * point of view, since "cancelled" is the caller's word for the callee's
- * "missed call". An unknown reason still reads as an ending.
+ * "missed call". `name` is the other person in a direct call, and whoever
+ * started a group call. An unknown reason still reads as an ending.
  */
-export function endedCopy(reason: string, asCaller: boolean, peerName: string): string {
+export function endedCopy(
+  reason: string,
+  asCaller: boolean,
+  name: string,
+  isGroup: boolean,
+): string {
+  const missed = isGroup ? `Missed group call from ${name}` : `Missed call from ${name}`;
   switch (reason as CallEndReason) {
     case 'HANGUP':
       return 'Call ended';
     case 'DECLINED':
-      return asCaller ? `${peerName} declined` : 'Declined';
+      if (!asCaller) {
+        return 'Declined';
+      }
+      return isGroup ? 'Everyone declined' : `${name} declined`;
     case 'CANCELLED':
-      return asCaller ? 'Cancelled' : `Missed call from ${peerName}`;
+      return asCaller ? 'Cancelled' : missed;
     case 'MISSED':
-      return asCaller ? 'No answer' : `Missed call from ${peerName}`;
+      return asCaller ? 'No answer' : missed;
     case 'BUSY':
-      return `${peerName} is on another call`;
+      return isGroup ? 'Nobody else is free right now' : `${name} is on another call`;
     case 'FAILED':
       return 'Call failed — try again';
     default:
@@ -59,15 +89,22 @@ export function callErrorMessage(error: IpcError): string {
   }
   switch (error.apiCode) {
     case 'VALIDATION_ERROR':
-      return error.apiReason === 'GROUP_CALL_UNSUPPORTED'
-        ? 'Group calls are not available yet.'
-        : 'That call could not be placed.';
+      return 'That call could not be placed.';
     case 'FORBIDDEN':
-      return 'You cannot call this person.';
+      return 'You cannot place or join this call.';
     case 'NOT_FOUND':
       return 'This call is no longer available.';
     case 'CONFLICT':
-      return 'This call has already ended.';
+      switch (error.apiReason) {
+        case 'CALL_FULL':
+          return 'This call is full.';
+        case 'ALREADY_IN_CALL':
+          return 'You are in another call. Leave it first.';
+        case 'CALL_IN_PROGRESS':
+          return 'A call is already going on here. Join it instead.';
+        default:
+          return 'This call has already ended.';
+      }
     case 'RATE_LIMITED':
       return error.retryAfterSeconds === undefined
         ? 'Too many calls — wait a moment and try again.'

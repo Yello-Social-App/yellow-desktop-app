@@ -488,6 +488,10 @@ export const ipc = {
   joinCall: (request: CallIdRequest) =>
     guarded('calls.join', callJoinSchema, (api) => api.calls.join(request)),
   activeCall: () => guarded('calls.active', activeCallResponseSchema, (api) => api.calls.active()),
+  conversationCall: (request: ConversationIdRequest) =>
+    guarded('calls.conversation', activeCallResponseSchema, (api) =>
+      api.calls.conversation(request),
+    ),
   screenSources: () =>
     guarded('calls.screenSources', screenSourceListSchema, (api) => api.calls.screenSources()),
   chooseScreenSource: (request: ChooseScreenSourceRequest) =>

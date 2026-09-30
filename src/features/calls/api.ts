@@ -19,7 +19,11 @@ export async function startCall(
   return result.ok ? ok(result.data.call) : fail(result.error);
 }
 
-/** Resolves once the service has answered: the call ACTIVE, or ENDED (FAILED, or gone). */
+/**
+ * Answers a ringing call, or joins a group call already going on. Resolves
+ * once the service has the viewer JOINED — or with the call ENDED (FAILED, or
+ * gone). Only then may this device ask for a join token.
+ */
 export async function acceptCall(callId: string): Promise<Result<Call, CallsError>> {
   const result = await ipc.acceptCall({ callId });
   return result.ok ? ok(result.data.call) : fail(result.error);
@@ -30,7 +34,7 @@ export function declineCall(callId: string): void {
   void ipc.declineCall({ callId });
 }
 
-/** Fire and forget: cancels, declines or hangs up by state; ending an ended call is a no-op. */
+/** Fire and forget: leaves (declines, while rung); the call ends when fewer than two are left. */
 export function endCall(callId: string): void {
   void ipc.endCall({ callId });
 }
@@ -45,12 +49,25 @@ export async function fetchActiveCall(): Promise<Result<Call | null, CallsError>
   return result.ok ? ok(result.data.call) : fail(result.error);
 }
 
-export async function fetchScreenSources(): Promise<Result<ScreenSource[], CallsError>> {
-  const result = await ipc.screenSources();
-  return result.ok ? ok(result.data.sources) : fail(result.error);
+/** The conversation's RINGING or ACTIVE call, or null. */
+export async function fetchConversationCall(
+  conversationId: string,
+): Promise<Result<Call | null, CallsError>> {
+  const result = await ipc.conversationCall({ conversationId });
+  return result.ok ? ok(result.data.call) : fail(result.error);
 }
 
-export async function chooseScreenSource(sourceId: string): Promise<Result<true, CallsError>> {
-  const result = await ipc.chooseScreenSource({ sourceId });
+export async function fetchScreenSources(): Promise<
+  Result<{ sources: ScreenSource[]; canShareAudio: boolean }, CallsError>
+> {
+  const result = await ipc.screenSources();
+  return result.ok ? ok(result.data) : fail(result.error);
+}
+
+export async function chooseScreenSource(
+  sourceId: string,
+  withAudio: boolean,
+): Promise<Result<true, CallsError>> {
+  const result = await ipc.chooseScreenSource({ sourceId, withAudio });
   return result.ok ? ok(true) : fail(result.error);
 }

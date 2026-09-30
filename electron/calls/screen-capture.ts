@@ -9,10 +9,14 @@
  * The handler hands out a source only when the user just picked it — a choice
  * is spent on first use and lapses after `CHOICE_TTL_MS` — and only to our
  * own page's main frame; the renderer can name only an id this process
- * offered (OWASP A01). Screen audio is never captured: the call's LiveKit
- * token does not grant it, and asking would only fail later.
+ * offered (OWASP A01).
  *
- * Shape: module state behind three functions. One choice at a time and no
+ * The computer's sound goes with the screen only when the user turned it on
+ * for this pick, and only where Electron can capture it: system loopback is
+ * Windows-only in Electron 44 (`audio: 'loopback'`). Elsewhere the page is
+ * told `canShareAudio: false` and never asks.
+ *
+ * Shape: module state behind a few functions. One choice at a time and no
  * variants, so nothing more.
  */
 import { desktopCapturer, session, type DesktopCapturerSource } from 'electron';
@@ -31,7 +35,12 @@ const NAME_MAX = 300;
 
 /** The ids the last listing offered; a choice must be one of them. */
 let offered: ReadonlySet<string> = new Set();
-let choice: { sourceId: string; expiresAt: number } | null = null;
+let choice: { sourceId: string; withAudio: boolean; expiresAt: number } | null = null;
+
+/** Whether this platform can capture the computer's sound along with a screen. */
+export function canShareScreenAudio(): boolean {
+  return process.platform === 'win32';
+}
 
 function kindOf(source: DesktopCapturerSource): ScreenSource['kind'] {
   return source.id.startsWith('screen:') ? 'screen' : 'window';
@@ -64,32 +73,36 @@ export async function listScreenSources(): Promise<ScreenSource[]> {
 }
 
 /** Records the user's pick for the next request. False for an id never offered. */
-export function chooseScreenSource(sourceId: string): boolean {
+export function chooseScreenSource(sourceId: string, withAudio: boolean): boolean {
   if (!offered.has(sourceId)) {
     return false;
   }
-  choice = { sourceId, expiresAt: Date.now() + CHOICE_TTL_MS };
+  choice = {
+    sourceId,
+    withAudio: withAudio && canShareScreenAudio(),
+    expiresAt: Date.now() + CHOICE_TTL_MS,
+  };
   return true;
 }
 
-function takeChoice(): string | null {
+function takeChoice(): { sourceId: string; withAudio: boolean } | null {
   const taken = choice;
   choice = null;
   if (taken === null || taken.expiresAt < Date.now()) {
     return null;
   }
-  return taken.sourceId;
+  return { sourceId: taken.sourceId, withAudio: taken.withAudio };
 }
 
 export function applyScreenCapturePolicy(): void {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    const sourceId = takeChoice();
+    const picked = takeChoice();
     const fromOurPage =
       request.frame !== null &&
       request.frame.parent === null &&
       originOf(request.frame.url) === trustedRendererOrigin();
-    if (!fromOurPage || sourceId === null || !request.videoRequested) {
-      log.warn('screen_capture_refused', { fromOurPage, chosen: sourceId !== null });
+    if (!fromOurPage || picked === null || !request.videoRequested) {
+      log.warn('screen_capture_refused', { fromOurPage, chosen: picked !== null });
       // No stream named: the page's getDisplayMedia rejects.
       callback({});
       return;
@@ -97,15 +110,16 @@ export function applyScreenCapturePolicy(): void {
 
     void desktopCapturer.getSources({ types: ['screen', 'window'] }).then(
       (sources) => {
-        const source = sources.find((candidate) => candidate.id === sourceId);
+        const source = sources.find((candidate) => candidate.id === picked.sourceId);
         if (source === undefined) {
           // Closed between the pick and now.
           log.info('screen_capture_source_gone', {});
           callback({});
           return;
         }
-        log.info('screen_capture_granted', { kind: kindOf(source) });
-        callback({ video: source });
+        const withAudio = picked.withAudio && request.audioRequested;
+        log.info('screen_capture_granted', { kind: kindOf(source), withAudio });
+        callback(withAudio ? { video: source, audio: 'loopback' } : { video: source });
       },
       (error: unknown) => {
         log.error('screen_capture_list_failed', { error });

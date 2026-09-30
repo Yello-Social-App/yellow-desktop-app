@@ -8,14 +8,18 @@
  * `call.accepted`, `call.ended`) reach the renderer as ordinary chat events.
  *
  * `call.start` has a direct reply (`call.started`, by `ref`). `call.accept`
- * has none — its outcome is the fan-out — so it is matched to the
- * `call.accepted` or `call.ended` that names its call. Decline and end are
- * sent and left: ending an ended call is a no-op upstream, and the renderer
- * closes its call UI on the user's word, not on the echo.
+ * has none — its outcome is the fan-out — so it is matched to the frame that
+ * names its call and shows the viewer JOINED: `call.accepted` for the first
+ * answer, `call.updated` for a later join to a group call, or `call.ended`.
+ * Accepting a call the viewer is already JOINED in sends nothing back at all,
+ * so a wait that times out asks `GET /calls/active` before giving up. Decline
+ * and end are sent and left: `call.end` is "leave", a no-op for someone not
+ * in the call, and the renderer closes its call UI on the user's word, not on
+ * the echo.
  *
- * Who may do what (only the callee answers, blocks, one live call per user)
- * is the service's call. Nothing here names the actor — the socket's own
- * authenticated user is always the one acting (A01).
+ * Who may do what (who may ring whom, blocks, the group size, one call per
+ * user) is the service's call. Nothing here names the actor — the socket's
+ * own authenticated user is always the one acting (A01).
  *
  * The join token is the one credential that crosses into the renderer: WebRTC
  * runs there, so LiveKit must be connected from there. It is scoped to one
@@ -28,7 +32,11 @@ import { createLogger } from '../../../shared/logger';
 import { ENDPOINTS } from '../../api/endpoints';
 import { apiRequest } from '../../api/http-client';
 import { heldCall } from '../../calls/held-call';
-import { chooseScreenSource, listScreenSources } from '../../calls/screen-capture';
+import {
+  canShareScreenAudio,
+  chooseScreenSource,
+  listScreenSources,
+} from '../../calls/screen-capture';
 import { chatSocket, SocketFailure } from '../../chat/socket';
 import { isCallServerUrl } from '../../security/call-hosts';
 import { IPC_CHANNELS } from '../channels';
@@ -42,6 +50,7 @@ import {
   callResponseSchema,
   callSchema,
   chooseScreenSourceRequestSchema,
+  conversationIdRequestSchema,
   emptyRequestSchema,
   ipcFail,
   ipcOk,
@@ -49,6 +58,7 @@ import {
   startCallRequestSchema,
   type AcknowledgedResponse,
   type ActiveCallResponse,
+  type Call,
   type CallJoin,
   type CallResponse,
   type IpcResult,
@@ -72,6 +82,37 @@ const callTokenSchema = z.object({
   token: z.string().min(1).max(8192),
   expiresAt: z.string().max(64),
 });
+
+/**
+ * The viewer is in this call. A roster-less call (a service from before group
+ * calls) has only one frame that can mean it: the first answer.
+ */
+function viewerJoined(call: Call, viewerId: string | null, isFirstAnswer: boolean): boolean {
+  if (call.participants.length === 0) {
+    return isFirstAnswer;
+  }
+  return call.participants.some(
+    (participant) => participant.userId === viewerId && participant.state === 'JOINED',
+  );
+}
+
+/**
+ * After an accept got no frame back: the viewer may already have been JOINED
+ * (from another device), which the service answers with silence.
+ */
+async function joinedAlready(callId: string): Promise<Call | null> {
+  const active = await apiRequest({
+    method: 'get',
+    url: ENDPOINTS.chat.activeCall,
+    schema: activeCallResponseSchema,
+    service: 'chat',
+  });
+  if (!active.ok || active.data.call?.id !== callId) {
+    return null;
+  }
+  const { call } = active.data;
+  return viewerJoined(call, chatSocket.viewerId(), call.status === 'ACTIVE') ? call : null;
+}
 
 /** A socket refusal as an IPC failure, keeping the service's code and reason. */
 function socketFailure(failure: unknown): IpcResult<never> {
@@ -130,20 +171,39 @@ export function registerCallHandlers(): void {
       if (!chatSocket.isConnected()) {
         return SOCKET_DOWN;
       }
+      const viewerId = chatSocket.viewerId();
       try {
-        const outcome = await chatSocket.requestOutcome(
-          'call.accept',
-          { callId },
-          (event) =>
-            (event.event === 'call.accepted' || event.event === 'call.ended') &&
-            event.data.call.id === callId,
-        );
-        if (outcome.event !== 'call.accepted' && outcome.event !== 'call.ended') {
+        const outcome = await chatSocket.requestOutcome('call.accept', { callId }, (event) => {
+          switch (event.event) {
+            case 'call.ended':
+              return event.data.call.id === callId;
+            case 'call.accepted':
+            case 'call.updated':
+              return (
+                event.data.call.id === callId &&
+                viewerJoined(event.data.call, viewerId, event.event === 'call.accepted')
+              );
+            default:
+              return false;
+          }
+        });
+        if (
+          outcome.event !== 'call.accepted' &&
+          outcome.event !== 'call.updated' &&
+          outcome.event !== 'call.ended'
+        ) {
           return ipcFail('UNKNOWN', 'The call could not be answered.');
         }
-        log.info('call_accepted', { status: outcome.data.call.status });
+        log.info('call_accepted', { status: outcome.data.call.status, frame: outcome.event });
         return ipcOk(callResponseSchema.parse({ call: outcome.data.call }));
       } catch (failure: unknown) {
+        if (failure instanceof SocketFailure && failure.code === 'TIMEOUT') {
+          const call = await joinedAlready(callId);
+          if (call !== null) {
+            log.info('call_accept_already_joined', {});
+            return ipcOk(callResponseSchema.parse({ call }));
+          }
+        }
         return socketFailure(failure);
       }
     },
@@ -209,11 +269,28 @@ export function registerCallHandlers(): void {
   );
 
   registerIpcHandler(
+    IPC_CHANNELS.CALLS_CONVERSATION,
+    conversationIdRequestSchema,
+    async ({ conversationId }): Promise<IpcResult<ActiveCallResponse>> =>
+      apiRequest({
+        method: 'get',
+        url: ENDPOINTS.chat.conversationCall(conversationId),
+        schema: activeCallResponseSchema,
+        service: 'chat',
+      }),
+  );
+
+  registerIpcHandler(
     IPC_CHANNELS.CALLS_SCREEN_SOURCES,
     emptyRequestSchema,
     async (): Promise<IpcResult<ScreenSourceList>> => {
       try {
-        return ipcOk(screenSourceListSchema.parse({ sources: await listScreenSources() }));
+        return ipcOk(
+          screenSourceListSchema.parse({
+            sources: await listScreenSources(),
+            canShareAudio: canShareScreenAudio(),
+          }),
+        );
       } catch (error: unknown) {
         // macOS without Screen Recording permission, or no capturer at all.
         log.warn('screen_sources_failed', { error });
@@ -225,8 +302,8 @@ export function registerCallHandlers(): void {
   registerIpcHandler(
     IPC_CHANNELS.CALLS_CHOOSE_SCREEN_SOURCE,
     chooseScreenSourceRequestSchema,
-    ({ sourceId }): IpcResult<AcknowledgedResponse> =>
-      chooseScreenSource(sourceId)
+    ({ sourceId, withAudio }): IpcResult<AcknowledgedResponse> =>
+      chooseScreenSource(sourceId, withAudio)
         ? ipcOk(acknowledgedResponseSchema.parse({ acknowledged: true }))
         : ipcFail('INVALID_PAYLOAD', 'That screen is no longer available.'),
   );

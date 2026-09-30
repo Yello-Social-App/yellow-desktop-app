@@ -2,7 +2,7 @@ import { Phone, PhoneOff, Video } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { UserAvatar } from '@/components/people/UserAvatar';
-import { useCallPeer } from '@/features/calls/hooks';
+import { useCallPeer, useCallTitle, useIsGroupCall } from '@/features/calls/hooks';
 import { useCallsStore } from '@/features/calls/store';
 import { cn } from '@/lib/cn';
 import { displayName } from '@/lib/user-display';
@@ -47,21 +47,26 @@ function CardShell({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-/** Someone is calling: who, audio or video, and answer or decline. */
+/** Someone is calling — in a group, into the group — audio or video, answer or decline. */
 export function IncomingCall() {
   const call = useCallsStore((state) => state.call);
   const accept = useCallsStore((state) => state.accept);
   const decline = useCallsStore((state) => state.decline);
   const peer = useCallPeer();
+  const title = useCallTitle();
+  const isGroup = useIsGroupCall();
   if (call === null) {
     return null;
   }
   const name = peer === undefined ? 'Someone' : displayName(peer);
   const isVideo = call.media === 'video';
   const kind = isVideo ? 'video' : 'voice';
+  const line = isGroup ? `Group ${kind} call · ${title}` : `Incoming ${kind} call…`;
 
   return (
-    <CardShell label={`Incoming ${kind} call from ${name}`}>
+    <CardShell
+      label={isGroup ? `${name} is calling ${title}` : `Incoming ${kind} call from ${name}`}
+    >
       <div className="relative grid place-items-center">
         <span
           aria-hidden
@@ -75,8 +80,8 @@ export function IncomingCall() {
       </div>
       <div className="text-center">
         <p className="text-on-surface truncate text-[16px] font-bold">{name}</p>
-        <p className="text-on-surface-variant text-[13px]" aria-live="polite">
-          {`Incoming ${kind} call…`}
+        <p className="text-on-surface-variant line-clamp-2 text-[13px]" aria-live="polite">
+          {line}
         </p>
       </div>
       <div className="flex items-start justify-center gap-6">
@@ -114,18 +119,22 @@ export function RejoinCall() {
   const rejoin = useCallsStore((state) => state.rejoin);
   const hangUp = useCallsStore((state) => state.hangUp);
   const peer = useCallPeer();
-  const name = peer === undefined ? 'your contact' : displayName(peer);
+  const title = useCallTitle();
+  const isGroup = useIsGroupCall();
+  const line = isGroup
+    ? `Your call in ${title} is still going.`
+    : `Your call with ${peer === undefined ? 'your contact' : displayName(peer)} is still going.`;
 
   return (
-    <CardShell label={`Call with ${name} is still going`}>
-      {peer !== undefined && <UserAvatar user={peer} size="lg" />}
+    <CardShell label={line}>
+      {!isGroup && peer !== undefined && <UserAvatar user={peer} size="lg" />}
       <div className="text-center">
         <p className="text-on-surface text-[16px] font-bold">Call in progress</p>
-        <p className="text-on-surface-variant text-[13px]">{`Your call with ${name} is still going.`}</p>
+        <p className="text-on-surface-variant text-[13px]">{line}</p>
       </div>
       <div className="flex items-start justify-center gap-6">
         <RoundAction
-          label="End"
+          label={isGroup ? 'Leave' : 'End'}
           tone="decline"
           icon={<PhoneOff className="size-5" />}
           onClick={hangUp}

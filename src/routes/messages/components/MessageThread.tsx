@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { CallButtons } from '@/components/calls/CallButtons';
+import { JoinCallBar } from '@/components/calls/JoinCallBar';
 import { UserAvatar } from '@/components/people/UserAvatar';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
@@ -216,6 +217,7 @@ export function MessageThread({ row }: MessageThreadProps) {
             </p>
           )}
         </div>
+        {isGroup && <CallButtons conversation={row.conversation} peer={null} />}
         {!isGroup && peer !== undefined && block === null && (
           <CallButtons conversation={row.conversation} peer={peer} />
         )}
@@ -230,6 +232,7 @@ export function MessageThread({ row }: MessageThreadProps) {
           />
         )}
       </header>
+      {block === null && <JoinCallBar conversationId={row.conversation.id} />}
 
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div ref={scrollRef} className="px-lg py-md flex min-h-0 flex-1 flex-col overflow-y-auto">

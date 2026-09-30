@@ -87,6 +87,7 @@ export const IPC_CHANNELS = {
   CALLS_END: 'calls:end',
   CALLS_JOIN: 'calls:join',
   CALLS_ACTIVE: 'calls:active',
+  CALLS_CONVERSATION: 'calls:conversation',
   CALLS_SCREEN_SOURCES: 'calls:screen-sources',
   CALLS_CHOOSE_SCREEN_SOURCE: 'calls:choose-screen-source',
   MEDIA_SAVE_IMAGE: 'media:save-image',

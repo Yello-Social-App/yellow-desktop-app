@@ -6,6 +6,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Group calls.** The phone and camera buttons now work in group chats too:
+  everyone else who is free gets rung, and the call goes on as long as two or
+  more people are in it — whether or not whoever started it stays. Up to 16
+  people can be in one call, each in a tile of their own, with a ring around
+  whoever is talking. Hanging up in a group means leaving; you can come back
+  while the call is still going.
+- **Join call.** Opening a chat with a call going on shows a bar with who is
+  in it and a Join button — for when you declined, missed the ring, left, or
+  were added to the group after the call started. If you are in the call on
+  another device, Join here moves it over.
+- **Share sound with your screen** (Windows). The screen picker has a Share
+  sound switch that sends your computer's sound along with the screen. It is
+  off until you turn it on.
+
+### Changed
+
+- Shared screens are sent at up to 1080p and 60 fps, tuned for motion, and
+  each viewer gets the best quality their connection can carry.
+- A shared screen in a group call fills the stage, with everyone's tiles in a
+  strip beside it.
+
 ## [0.12.0] - 2026-09-29
 
 One-to-one voice and video calls in direct chats, with screen sharing.

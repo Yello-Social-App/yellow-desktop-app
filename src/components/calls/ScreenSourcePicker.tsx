@@ -6,12 +6,14 @@ import { Button } from '@/components/ui/Button';
 import { InlineAlert } from '@/components/ui/InlineAlert';
 import { Modal } from '@/components/ui/Modal';
 import { Spinner } from '@/components/ui/Spinner';
+import { Switch } from '@/components/ui/Switch';
 import { fetchScreenSources } from '@/features/calls/api';
+import { useIsGroupCall } from '@/features/calls/hooks';
 import { useCallsStore } from '@/features/calls/store';
 
 type Load =
   | { kind: 'loading' }
-  | { kind: 'ready'; sources: ScreenSource[] }
+  | { kind: 'ready'; sources: ScreenSource[]; canShareAudio: boolean }
   | { kind: 'failed'; message: string };
 
 function SourceTile({ source, onPick }: { source: ScreenSource; onPick: () => void }) {
@@ -38,13 +40,17 @@ function SourceTile({ source, onPick }: { source: ScreenSource; onPick: () => vo
 }
 
 /**
- * Which screen or window to share. The list comes from the main process,
- * which will hand the call only the one picked here.
+ * Which screen or window to share, and whether its sound goes with it. The
+ * list comes from the main process, which will hand the call only the one
+ * picked here. Sound is off until turned on — a computer's sound carries
+ * other apps' alerts too — and offered only where it can be captured.
  */
 export function ScreenSourcePicker() {
   const close = useCallsStore((state) => state.closeScreenPicker);
   const shareScreen = useCallsStore((state) => state.shareScreen);
+  const isGroup = useIsGroupCall();
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  const [withAudio, setWithAudio] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -52,7 +58,7 @@ export function ScreenSourcePicker() {
       if (isCurrent) {
         setLoad(
           result.ok
-            ? { kind: 'ready', sources: result.data }
+            ? { kind: 'ready', ...result.data }
             : { kind: 'failed', message: result.error.message },
         );
       }
@@ -64,20 +70,36 @@ export function ScreenSourcePicker() {
 
   const screens = load.kind === 'ready' ? load.sources.filter((s) => s.kind === 'screen') : [];
   const windows = load.kind === 'ready' ? load.sources.filter((s) => s.kind === 'window') : [];
+  const canShareAudio = load.kind === 'ready' && load.canShareAudio;
   const pick = (source: ScreenSource) => () => {
-    void shareScreen(source.id);
+    void shareScreen(source.id, canShareAudio && withAudio);
   };
+  const audience = isGroup ? 'Everyone in the call' : 'The other person';
+  const sound = canShareAudio ? '' : ' Sound is not shared.';
 
   return (
     <Modal
       isOpen
       onClose={close}
       title="Share your screen"
-      description="The other person will see what you pick. Sound is not shared."
+      description={`${audience} will see what you pick.${sound}`}
       footer={
-        <Button variant="ghost" onClick={close}>
-          Cancel
-        </Button>
+        <>
+          {canShareAudio && (
+            <label className="text-on-surface mr-auto flex items-center gap-2 text-[13px]">
+              <Switch
+                size="sm"
+                checked={withAudio}
+                onChange={setWithAudio}
+                label="Share your computer's sound"
+              />
+              Share sound
+            </label>
+          )}
+          <Button variant="ghost" onClick={close}>
+            Cancel
+          </Button>
+        </>
       }
     >
       {load.kind === 'loading' && (

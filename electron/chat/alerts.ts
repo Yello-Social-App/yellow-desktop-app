@@ -16,8 +16,9 @@
  *
  * And one the notify guide does not have, because the service sends no push
  * for it yet: an incoming call (`call.ringing`). It is up while the call
- * rings — answered anywhere, declined, cancelled or missed takes it down —
- * and the taskbar entry flashes with it. Clicking it only brings the window
+ * rings for you — your own answer anywhere, a decline, a cancel or a miss
+ * takes it down; in a group, someone else answering does not — and the
+ * taskbar entry flashes with it. Clicking it only brings the window
  * forward: the incoming-call screen is already there.
  *
  * The rules the service applies to pushes are applied here to alerts: nothing
@@ -119,6 +120,15 @@ function reactorsOf(reactions: readonly ChatReaction[]): Map<string, string> {
   return byUser;
 }
 
+/**
+ * Whether the viewer is still being rung for this call. A roster-less call (a
+ * service from before group calls) reads as not: its answer ends the ring.
+ */
+function isStillRung(call: Call, viewerId: string | null): boolean {
+  const own = call.participants.find((participant) => participant.userId === viewerId);
+  return own?.state === 'INVITED';
+}
+
 class ChatAlerts {
   /** `chat:<conversationId>` — the one alert up per conversation. */
   private readonly byConversation = new Map<string, ShownAlert>();
@@ -170,6 +180,12 @@ class ChatAlerts {
         this.onRinging(event.data.call);
         return;
       case 'call.accepted':
+      case 'call.updated':
+        // In a group, someone else answering does not stop your ring.
+        if (!isStillRung(event.data.call, chatSocket.viewerId())) {
+          this.stopRinging(event.data.call.id);
+        }
+        return;
       case 'call.ended':
         this.stopRinging(event.data.call.id);
         return;
@@ -284,7 +300,8 @@ class ChatAlerts {
         return;
       }
       const kind = call.media === 'video' ? 'video' : 'voice';
-      this.ringing.toast = this.showToast(name, `Incoming ${kind} call`, () => {
+      const what = call.kind === 'GROUP' ? `Incoming group ${kind} call` : `Incoming ${kind} call`;
+      this.ringing.toast = this.showToast(name, what, () => {
         this.focusWindow();
       });
     });

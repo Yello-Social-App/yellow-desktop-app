@@ -1600,16 +1600,53 @@ export const groupChangeSchema = z.object({
 /* -- calls -- */
 
 /**
- * 1:1 audio and video calls (yello-chat CALLS-API.md). The chat service owns
- * the lifecycle — who may call whom, ringing over the socket, the record —
- * and hands out LiveKit join tokens; the audio and video themselves flow
- * between the renderer and LiveKit, never through the service or this app's
- * main process.
+ * Audio and video calls, one-to-one and in groups (yello-chat CALLS-API.md).
+ * The chat service owns the lifecycle — who may call whom, ringing over the
+ * socket, who is in the call, the record — and hands out LiveKit join tokens;
+ * the audio and video themselves flow between the renderer and LiveKit, never
+ * through the service or this app's main process.
  */
 export const CALL_MEDIA = ['audio', 'video'] as const;
 export const callMediaSchema = z.enum(CALL_MEDIA);
 
 export const CALL_STATUSES = ['RINGING', 'ACTIVE', 'ENDED'] as const;
+
+export const CALL_KINDS = ['DIRECT', 'GROUP'] as const;
+
+/**
+ * Where one member stands in a call. `JOINED` is the only state that is "in";
+ * every other one may join a live group call with `call.accept`.
+ */
+export const CALL_PARTICIPANT_STATES = [
+  'INVITED',
+  'JOINED',
+  'DECLINED',
+  'MISSED',
+  'LEFT',
+  'BUSY',
+] as const;
+
+export const callParticipantSchema = z.object({
+  userId: chatId,
+  /**
+   * Text on the wire; one this app does not know reads as LEFT — not in the
+   * call and not ringing — so it can never keep a ring or a call screen up (A10).
+   */
+  state: z
+    .string()
+    .max(16)
+    .transform((value): CallParticipantState =>
+      (CALL_PARTICIPANT_STATES as readonly string[]).includes(value)
+        ? (value as CallParticipantState)
+        : 'LEFT',
+    ),
+  /** The latest join; null if they never joined. */
+  joinedAt: z
+    .string()
+    .max(64)
+    .nullish()
+    .transform((value) => value ?? null),
+});
 
 /** The reasons CALLS-API.md names; compare against these, but hold the wire value as text. */
 export const CALL_END_REASONS = [
@@ -1624,7 +1661,13 @@ export const CALL_END_REASONS = [
 export const callSchema = z.object({
   id: chatId,
   conversationId: chatId,
-  /** The caller. The callee is the other participant of the (direct) conversation. */
+  /** Unknown or absent reads as DIRECT, the kind with a fixed pair of people. */
+  kind: z
+    .string()
+    .max(16)
+    .nullish()
+    .transform((value): CallKind => (value === 'GROUP' ? 'GROUP' : 'DIRECT')),
+  /** Who started it. */
   initiatorId: chatId,
   media: callMediaSchema,
   status: z.enum(CALL_STATUSES),
@@ -1634,9 +1677,19 @@ export const callSchema = z.object({
    */
   endReason: z.string().max(32).nullable(),
   createdAt: timestamp,
-  /** When it became ACTIVE: the call timer counts from here. */
+  /** The first answer, when it became ACTIVE: the call timer counts from here. */
   answeredAt: z.string().max(64).nullable(),
   endedAt: z.string().max(64).nullable(),
+  /**
+   * The roster, initiator first. What the server knows — who is connected to
+   * the media right now is the LiveKit room's to say. A member added to a
+   * group after the call started is not listed until they join.
+   */
+  participants: z
+    .array(callParticipantSchema)
+    .max(600)
+    .nullish()
+    .transform((value) => value ?? []),
 });
 
 export const startCallRequestSchema = z.object({
@@ -1652,15 +1705,20 @@ export const callResponseSchema = z.object({
   call: callSchema,
 });
 
-/** The viewer's RINGING or ACTIVE call, if any: what recovery after a reconnect reads. */
+/**
+ * A live call or none. `GET /calls/active` answers the call the viewer is
+ * JOINED in, else one ringing them — what recovery after a reconnect reads.
+ * `GET /conversations/{id}/call` answers the conversation's RINGING or ACTIVE
+ * call — what the "Join call" bar reads when a chat opens.
+ */
 export const activeCallResponseSchema = z.object({
   call: callSchema.nullable(),
 });
 
 /**
  * What the renderer needs to join a call's media room. `token` is a LiveKit
- * join credential — for this one room, ten minutes, publish camera/mic/screen
- * only — and it does cross into the renderer, because WebRTC lives there. It
+ * join credential — for this one room, ten minutes, publish camera, mic,
+ * screen and screen audio only — and it does cross into the renderer, because WebRTC lives there. It
  * is held in memory for the connect and never logged or stored. `serverUrl`
  * has already been checked against the call host allowlist (A01).
  */
@@ -1681,10 +1739,14 @@ export const screenSourceSchema = z.object({
 
 export const screenSourceListSchema = z.object({
   sources: z.array(screenSourceSchema).max(100),
+  /** This platform can share the computer's sound with a screen (Windows only, in Electron 44). */
+  canShareAudio: z.boolean(),
 });
 
 export const chooseScreenSourceRequestSchema = z.object({
   sourceId: z.string().min(1).max(256),
+  /** Share the computer's sound too; ignored where `canShareAudio` is false. */
+  withAudio: z.boolean(),
 });
 
 /**
@@ -1782,17 +1844,29 @@ export const chatEventSchema = z.discriminatedUnion('event', [
       online: z.boolean(),
     }),
   }),
-  /** To every socket of the callee: show the incoming call. */
+  /** To every socket of each member being rung (INVITED): show the incoming call. */
   z.object({
     event: z.literal('call.ringing'),
     data: z.object({ call: callSchema }),
   }),
-  /** To every socket of both users: answered (the device that answered joins; others stop ringing). */
+  /**
+   * To every member: the first answer, ACTIVE. Keep ringing only while your
+   * own state is still INVITED; a device that did not answer, JOINED, stops.
+   */
   z.object({
     event: z.literal('call.accepted'),
     data: z.object({ call: callSchema }),
   }),
-  /** To every socket of both users (BUSY: the caller only). `reason` equals `call.endReason`. */
+  /**
+   * To every member (and anyone just removed from the group): the roster
+   * changed but the status did not — a join, a leave, a decline, a ring that
+   * ran out. Your own entry says whether to keep ringing, stay, or close.
+   */
+  z.object({
+    event: z.literal('call.updated'),
+    data: z.object({ call: callSchema }),
+  }),
+  /** To every member (BUSY: the caller only). `reason` equals `call.endReason`. */
   z.object({
     event: z.literal('call.ended'),
     data: z.object({ reason: z.string().max(32), call: callSchema }),
@@ -1885,6 +1959,9 @@ export type ChatSocketState = z.infer<typeof chatSocketStateSchema>;
 export type ChatEvent = z.infer<typeof chatEventSchema>;
 export type CallMedia = z.infer<typeof callMediaSchema>;
 export type CallStatus = (typeof CALL_STATUSES)[number];
+export type CallKind = (typeof CALL_KINDS)[number];
+export type CallParticipantState = (typeof CALL_PARTICIPANT_STATES)[number];
+export type CallParticipant = z.infer<typeof callParticipantSchema>;
 export type CallEndReason = (typeof CALL_END_REASONS)[number];
 export type Call = z.infer<typeof callSchema>;
 export type StartCallRequest = z.infer<typeof startCallRequestSchema>;
@@ -3146,17 +3223,25 @@ export interface YelloBridge {
     onEvent(listener: (event: unknown) => void): () => void;
   };
   readonly calls: {
-    /** Rings the other member of a direct conversation; answers RINGING, or ENDED/BUSY. */
+    /**
+     * Rings every other free member of a conversation; answers RINGING, or
+     * ENDED/BUSY. A group with a live call refuses: CONFLICT, CALL_IN_PROGRESS.
+     */
     start(request: StartCallRequest): Promise<IpcResult<CallResponse>>;
-    /** Answers from this device; resolves with the call once it is ACTIVE (or ENDED). */
+    /**
+     * Answers a ringing call, or joins a group call already going on, from
+     * this device; resolves with the call once the viewer is JOINED (or ENDED).
+     */
     accept(request: CallIdRequest): Promise<IpcResult<CallResponse>>;
-    /** Refuses a ringing call; the outcome arrives as `call.ended`. */
+    /** Refuses a ringing call; the outcome arrives as `call.updated` or `call.ended`. */
     decline(request: CallIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
-    /** Cancels, declines or hangs up, by state; the outcome arrives as `call.ended`. */
+    /** Leaves (or, while rung, declines); the call ends once fewer than two are left. */
     end(request: CallIdRequest): Promise<IpcResult<AcknowledgedResponse>>;
-    /** A fresh LiveKit join for this device; also what a rejoin asks for. */
+    /** A fresh LiveKit join for this device; only once the viewer is JOINED. */
     join(request: CallIdRequest): Promise<IpcResult<CallJoin>>;
     active(): Promise<IpcResult<ActiveCallResponse>>;
+    /** The conversation's live call, if any: what the "Join call" bar reads. */
+    conversation(request: ConversationIdRequest): Promise<IpcResult<ActiveCallResponse>>;
     /** Screens and windows the user may share, for the picker. */
     screenSources(): Promise<IpcResult<ScreenSourceList>>;
     /** Names the source the next screen-share request should get. */
