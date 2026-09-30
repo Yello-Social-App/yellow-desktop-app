@@ -3,7 +3,7 @@
  * live calls of the conversations it has looked at, for the "Join call" bar.
  *
  * Three inputs move it: what the user presses (call, answer, join, decline,
- * leave), what the service pushes over the chat socket (`call.ringing`,
+ * leave — in the app, or on the desktop alert's buttons), what the service pushes over the chat socket (`call.ringing`,
  * `call.accepted`, `call.updated`, `call.ended`), and what the service says
  * when asked (`GET /ws/calls/active` after every (re)connect, and
  * `GET /ws/conversations/{id}/call` when a chat opens). The service is the
@@ -452,6 +452,19 @@ export const useCallsStore = create<CallsState>((set, get) => {
           onUpdated(event.data.call);
         }
         return;
+      case 'alert.call': {
+        // Accept or Decline pressed on the desktop alert, for the call ringing here.
+        const { call, phase } = get();
+        if (phase !== 'incoming' || call?.id !== event.data.callId) {
+          return;
+        }
+        if (event.data.action === 'decline') {
+          get().decline();
+          return;
+        }
+        void get().accept(call.media === 'video');
+        return;
+      }
       case 'call.ended': {
         track(event.data.call);
         const { call } = get();

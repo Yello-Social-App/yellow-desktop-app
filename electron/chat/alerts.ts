@@ -14,12 +14,18 @@
  *   - `CHAT_MESSAGE_DELETED` — the unsend. Nothing is shown; the alert for that
  *     message is taken down if it is still up.
  *
- * And one the notify guide does not have, because the service sends no push
- * for it yet: an incoming call (`call.ringing`). It is up while the call
- * rings for you — your own answer anywhere, a decline, a cancel or a miss
- * takes it down; in a group, someone else answering does not — and the
- * taskbar entry flashes with it. Clicking it only brings the window
- * forward: the incoming-call screen is already there.
+ * And the call pushes a phone gets (`CALL_INCOMING`, `CALL_MISSED`), which a
+ * desktop is not sent: the call guide has it ring from `call.ringing`
+ * instead. The incoming-call alert is up while the call rings for you — your
+ * own answer anywhere, a decline, a cancel or a miss takes it down; in a
+ * group, someone else answering does not — and the taskbar entry flashes with
+ * it. It carries Accept and Decline where the OS draws alert buttons (macOS,
+ * Windows); pressing one is handed to the renderer, which owns the call.
+ * Clicking the alert itself only brings the window forward: the
+ * incoming-call screen is already there. A ring that ends unanswered — timed
+ * out, or the caller gave up — leaves a "Missed call" alert in its place,
+ * which opens the conversation. After a reconnect, `GET /calls/active` says
+ * whether a call still rings for you, and the alert comes back if so.
  *
  * The rules the service applies to pushes are applied here to alerts: nothing
  * while you are looking (the service pushes only to people offline in chat;
@@ -43,6 +49,7 @@ import { ENDPOINTS } from '../api/endpoints';
 import { apiRequest } from '../api/http-client';
 import { notificationWatcher, toPlainText } from '../notifications/watcher';
 import {
+  activeCallResponseSchema,
   userSchema,
   type Call,
   type ChatEvent,
@@ -60,6 +67,8 @@ const BODY_MAX = 240;
 const OWN_MESSAGES_MAX = 300;
 /** Names resolved for alert titles. */
 const NAMES_MAX = 200;
+/** Missed-call alerts kept up, one per conversation. */
+const MISSED_MAX = 20;
 
 interface ShownAlert {
   messageId: string;
@@ -120,13 +129,42 @@ function reactorsOf(reactions: readonly ChatReaction[]): Map<string, string> {
   return byUser;
 }
 
+function ownState(call: Call, viewerId: string | null): string | undefined {
+  return call.participants.find((participant) => participant.userId === viewerId)?.state;
+}
+
 /**
  * Whether the viewer is still being rung for this call. A roster-less call (a
  * service from before group calls) reads as not: its answer ends the ring.
  */
 function isStillRung(call: Call, viewerId: string | null): boolean {
-  const own = call.participants.find((participant) => participant.userId === viewerId);
-  return own?.state === 'INVITED';
+  return ownState(call, viewerId) === 'INVITED';
+}
+
+/**
+ * An ended call that rang here went unanswered: timed out, or the caller gave
+ * up while it rang (still INVITED at the end). Declined is not missed; a
+ * roster-less call has only the reason to say so.
+ */
+function endedUnanswered(call: Call, viewerId: string | null, reason: string): boolean {
+  const own = ownState(call, viewerId);
+  if (own === undefined) {
+    return reason !== 'DECLINED';
+  }
+  return own === 'MISSED' || own === 'INVITED';
+}
+
+function callWording(call: Call, what: 'Incoming' | 'Missed'): string {
+  const kind = call.media === 'video' ? 'video' : 'voice';
+  return call.kind === 'GROUP' ? `${what} group ${kind} call` : `${what} ${kind} call`;
+}
+
+interface ToastExtras {
+  /** Button labels; drawn on macOS and Windows, ignored elsewhere. */
+  actions?: readonly string[];
+  onAction?: (index: number) => void;
+  /** Stays until dismissed rather than timing out (Linux, Windows). */
+  persistent?: boolean;
 }
 
 class ChatAlerts {
@@ -136,8 +174,14 @@ class ChatAlerts {
   private readonly byReactedMessage = new Map<string, Notification>();
   private readonly ownMessages = new Map<string, OwnMessage>();
   private readonly names = new Map<string, string>();
-  /** The incoming call being announced, if any: at most one rings at a time. */
+  /**
+   * The incoming call ringing here, if any: at most one rings at a time. Kept
+   * whether or not an alert could be shown, since it is also what makes a
+   * later end a "missed" call.
+   */
   private ringing: { callId: string; toast: Notification | null } | null = null;
+  /** `call:<conversationId>` — the one missed-call alert up per conversation. */
+  private readonly missedByConversation = new Map<string, Notification>();
   private detach: (() => void) | null = null;
 
   /** Starts listening to the socket. Once per app; the listener outlives sessions. */
@@ -158,8 +202,12 @@ class ChatAlerts {
     for (const toast of this.byReactedMessage.values()) {
       toast.close();
     }
+    for (const toast of this.missedByConversation.values()) {
+      toast.close();
+    }
     this.byConversation.clear();
     this.byReactedMessage.clear();
+    this.missedByConversation.clear();
     this.ownMessages.clear();
     this.names.clear();
     this.stopRinging(null);
@@ -176,19 +224,34 @@ class ChatAlerts {
       case 'message.reactions':
         this.onReactions(event.data.messageId, event.data.reactions);
         return;
+      case 'socket':
+        if (event.data.status === 'connected') {
+          void this.recoverRing();
+        }
+        return;
       case 'call.ringing':
         this.onRinging(event.data.call);
         return;
       case 'call.accepted':
-      case 'call.updated':
-        // In a group, someone else answering does not stop your ring.
-        if (!isStillRung(event.data.call, chatSocket.viewerId())) {
-          this.stopRinging(event.data.call.id);
+      case 'call.updated': {
+        // In a group, someone else answering does not stop your ring; the call
+        // going on without you after your ring timed out does.
+        const { call } = event.data;
+        const viewerId = chatSocket.viewerId();
+        if (!isStillRung(call, viewerId) && this.stopRinging(call.id)) {
+          if (ownState(call, viewerId) === 'MISSED') {
+            this.onMissed(call);
+          }
         }
         return;
-      case 'call.ended':
-        this.stopRinging(event.data.call.id);
+      }
+      case 'call.ended': {
+        const { call, reason } = event.data;
+        if (this.stopRinging(call.id) && endedUnanswered(call, chatSocket.viewerId(), reason)) {
+          this.onMissed(call);
+        }
         return;
+      }
       case 'conversation.removed': {
         // Out of the group: an alert from it would open a thread you cannot read.
         const shown = this.byConversation.get(event.data.conversationId);
@@ -285,36 +348,114 @@ class ChatAlerts {
 
   private onRinging(call: Call): void {
     const viewerId = chatSocket.viewerId();
-    if (viewerId === null || call.initiatorId === viewerId || call.status !== 'RINGING') {
+    if (
+      viewerId === null ||
+      call.initiatorId === viewerId ||
+      call.status !== 'RINGING' ||
+      this.ringing?.callId === call.id
+    ) {
       return;
     }
     this.stopRinging(null);
     this.ringing = { callId: call.id, toast: null };
-    if (!this.shouldAlert(null)) {
+    if (!this.shouldAlert('CALL_INCOMING')) {
       return;
     }
     this.mainWindow()?.flashFrame(true);
     void this.nameOf(call.initiatorId, 'Yello').then((name) => {
       // Rechecked: answered, declined or focused while the name resolved.
-      if (this.ringing?.callId !== call.id || !this.shouldAlert(null)) {
+      if (this.ringing?.callId !== call.id || !this.shouldAlert('CALL_INCOMING')) {
         return;
       }
-      const kind = call.media === 'video' ? 'video' : 'voice';
-      const what = call.kind === 'GROUP' ? `Incoming group ${kind} call` : `Incoming ${kind} call`;
-      this.ringing.toast = this.showToast(name, what, () => {
-        this.focusWindow();
-      });
+      this.ringing.toast = this.showToast(
+        name,
+        callWording(call, 'Incoming'),
+        () => {
+          this.focusWindow();
+        },
+        {
+          actions: ['Accept', 'Decline'],
+          onAction: (index) => {
+            this.answer(call.id, index === 0 ? 'accept' : 'decline');
+          },
+          persistent: true,
+        },
+      );
     });
   }
 
-  /** Takes the incoming-call alert down: for this call, or whichever is up (null). */
-  private stopRinging(callId: string | null): void {
-    if (this.ringing === null || (callId !== null && this.ringing.callId !== callId)) {
+  /**
+   * Accept or Decline pressed on the alert. The renderer holds the call — the
+   * answer, the media room, the call screen — so it is told, not bypassed;
+   * the window comes forward only for an answer.
+   */
+  private answer(callId: string, action: 'accept' | 'decline'): void {
+    this.stopRinging(callId);
+    if (action === 'accept') {
+      this.focusWindow();
+    }
+    log.info('call_alert_action', { action });
+    chatSocket.announce({ event: 'alert.call', data: { callId, action } });
+  }
+
+  /** The ring ended unanswered: a "Missed call" alert takes its place. */
+  private onMissed(call: Call): void {
+    if (!this.shouldAlert('CALL_MISSED')) {
       return;
+    }
+    void this.nameOf(call.initiatorId, 'Yello').then((name) => {
+      if (!this.shouldAlert('CALL_MISSED')) {
+        return;
+      }
+      const toast = this.showToast(name, callWording(call, 'Missed'), () => {
+        this.missedByConversation.delete(call.conversationId);
+        this.activate(call.conversationId);
+      });
+      if (toast === null) {
+        return;
+      }
+      this.missedByConversation.get(call.conversationId)?.close();
+      remember(this.missedByConversation, call.conversationId, toast, MISSED_MAX);
+    });
+  }
+
+  /**
+   * After a (re)connect: a call that rang while the socket was down, and
+   * still rings for you, is announced again; a ring shown here that ended
+   * meanwhile is taken down (whether it was missed is not known, so no alert).
+   */
+  private async recoverRing(): Promise<void> {
+    const result = await apiRequest({
+      method: 'get',
+      url: ENDPOINTS.chat.activeCall,
+      schema: activeCallResponseSchema,
+      service: 'chat',
+    });
+    if (!result.ok) {
+      return;
+    }
+    const { call } = result.data;
+    if (call !== null && isStillRung(call, chatSocket.viewerId())) {
+      this.onRinging(call);
+      return;
+    }
+    if (this.ringing !== null && this.ringing.callId !== call?.id) {
+      this.stopRinging(null);
+    }
+  }
+
+  /**
+   * Takes the incoming-call alert down: for this call, or whichever is up
+   * (null). True when a ring was up here and is now down.
+   */
+  private stopRinging(callId: string | null): boolean {
+    if (this.ringing === null || (callId !== null && this.ringing.callId !== callId)) {
+      return false;
     }
     this.ringing.toast?.close();
     this.ringing = null;
     this.mainWindow()?.flashFrame(false);
+    return true;
   }
 
   private takeDown(conversationId: string): void {
@@ -324,11 +465,13 @@ class ChatAlerts {
 
   /**
    * Push on, the type not muted, the platform able, and nobody looking. A
-   * call has no notify type of its own to mute (null): push on is the switch.
+   * muted call type silences the alert only: the open app still rings.
    */
-  private shouldAlert(type: 'CHAT_MESSAGE' | 'CHAT_REACTION' | null): boolean {
+  private shouldAlert(
+    type: 'CHAT_MESSAGE' | 'CHAT_REACTION' | 'CALL_INCOMING' | 'CALL_MISSED',
+  ): boolean {
     const preferences = notificationWatcher.currentPreferences();
-    if (!preferences.pushEnabled || (type !== null && preferences.mutedTypes.includes(type))) {
+    if (!preferences.pushEnabled || preferences.mutedTypes.includes(type)) {
       return false;
     }
     if (!Notification.isSupported()) {
@@ -348,13 +491,26 @@ class ChatAlerts {
     });
   }
 
-  private showToast(title: string, body: string, onClick: () => void): Notification | null {
+  private showToast(
+    title: string,
+    body: string,
+    onClick: () => void,
+    extras: ToastExtras = {},
+  ): Notification | null {
+    const { actions = [], onAction, persistent = false } = extras;
     try {
       const toast = new Notification({
         title: toPlainText(title, TITLE_MAX),
         body: toPlainText(body, BODY_MAX),
+        actions: actions.map((text) => ({ type: 'button', text })),
+        ...(persistent ? { timeoutType: 'never' } : {}),
       });
       toast.on('click', onClick);
+      if (onAction !== undefined) {
+        toast.on('action', (details) => {
+          onAction(details.actionIndex);
+        });
+      }
       toast.show();
       log.info('chat_alert_shown', {});
       return toast;

@@ -167,6 +167,8 @@ export const ENDPOINTS = {
     declineInvite: (inviteId: string) => `${chat}/invites/${seg(inviteId)}/decline`,
     /** POST, no body: a LiveKit join token for this call; only for someone JOINED in it (409 otherwise). */
     callToken: (callId: string) => `${chat}/calls/${seg(callId)}/token`,
+    /** POST, no body: refuse a ring without the socket; 204, or 409/404 once it no longer rings you. */
+    declineCall: (callId: string) => `${chat}/calls/${seg(callId)}/decline`,
     /** The call the caller is JOINED in, else one ringing them, else `{ call: null }`. */
     activeCall: `${chat}/calls/active`,
     /** The conversation's RINGING or ACTIVE call, or `{ call: null }`; 404 for a non-member. */

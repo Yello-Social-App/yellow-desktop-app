@@ -85,7 +85,9 @@ export function routeFor(notification: Notification): string | null {
       return '/settings/privacy';
 
     case 'CHAT_MESSAGE':
-    case 'CHAT_REACTION': {
+    case 'CHAT_REACTION':
+    case 'CALL_INCOMING':
+    case 'CALL_MISSED': {
       // Push-only upstream, so these should never arrive from the inbox — they
       // are handled anyway, so a row of either type still leads somewhere.
       const conversation = idOf(data, 'conversationId');
@@ -111,6 +113,8 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   FRIEND_REQUEST_ACCEPTED: 'Accepted friend requests',
   CHAT_MESSAGE: 'Chat messages',
   CHAT_REACTION: 'Reactions to your chat messages',
+  CALL_INCOMING: 'Incoming calls',
+  CALL_MISSED: 'Missed calls',
 };
 
 export function labelForType(type: string): string {
